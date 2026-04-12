@@ -9,27 +9,31 @@ Este repo contiene **dos herramientas** distintas:
 
 ## 🚀 Novedades en la Versión Actual
 
-- ✅ **Interfaz mejorada** con selección de carpetas vía dialogos
-- ✅ **Instalación automática de FFmpeg** 
+- ✅ **Dialogos nativos** para seleccionar carpetas (escribe rutas manualmente)
+- ✅ **Instalación automática de FFmpeg** desde la app
+- ✅ **Soporte multiplataforma** (macOS y Windows)
 - ✅ **Progreso en tiempo real** para todos los procesos
-- ✅ **Soporte para Electron** (app de escritorio)
+- ✅ **App de escritorio** compilable como ejecutable
 - ✅ **Tests automatizados**
 - ✅ **Mejoras UX** y advertencias contextuales
 
 ## 🎮 Empezar Rápido
 
 ```bash
-# 1. Instalar FFmpeg (opcional pero recomendado)
-./install_ffmpeg.sh
+# Instalar dependencias
+npm install
 
-# 2. Iniciar dashboard web
-npm run dashboard
-
-# 3. O usar app de escritorio
+# Opción 1: App de escritorio (recomendado)
 npm run electron
+
+# Opción 2: Dashboard web
+npm run dashboard
 ```
 
-**Abre `http://localhost:3030` para la interfaz web.**
+**Con la app de escritorio:**
+- Selecciona carpetas con dialogos nativos
+- FFmpeg se instala automáticamente si no lo tienes
+- Ejecutable compilable: `npm run build`
 
 Para documentación completa, características y detalles de instalación, consulta [README_improved.md](./README_improved.md).
 

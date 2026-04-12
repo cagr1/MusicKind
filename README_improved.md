@@ -4,33 +4,32 @@ Una herramienta completa para DJs que clasifica música por género y crea sets 
 
 ## 🚀 Características
 
-### ✨ Mejoras Nuevas
+### ✨ Version Actual
 
-1. **📁 Selección de Carpetas con Dialogos**
-   - Interfaz gráfica para seleccionar carpetas en lugar de escribir rutas manualmente
-   - Compatible con Electron para una experiencia de escritorio nativa
+1. **📁 Selección de Carpetas con Dialogos Nativos**
+   - Dialogos nativos del sistema operativo (no más escribir rutas manualmente)
+   - Selecciona carpetas con un clic usando "Examinar"
+   - Funciona en la app de escritorio (Electron) y web
 
 2. **🎬 Instalación Automática de FFmpeg**
-   - Script de instalación automática para macOS, Linux, y Windows
-   - Verificación automática de FFmpeg antes de procesos
-   - Manejo de errores amigables
+   - Verificación automática al iniciar la aplicación
+   - Instalación automática con un clic dentro de la app
+   - **macOS**: Usa Homebrew automáticamente
+   - **Windows**: Usa Winget o Chocolatey (fallback)
+   - Script de instalación manual también disponible
 
 3. **⚡ Streaming de Progreso en Tiempo Real**
    - Barra de progreso para todos los procesos (clasificación, creación de sets, conversión)
    - Actualizaciones en tiempo real del estado del proceso
    - Feedback visual durante operaciones largas
 
-4. **⚠️ Advertencias Contextuales**
-   - Advertencia de tiempo de procesamiento movida al creador de sets
-   - Mensajes claros sobre el tiempo requerido para carpetas grandes
-   - Sugerencias para acelerar el proceso
+4. **🖥️ Aplicación de Escritorio (Electron)**
+   - App nativa para macOS y Windows
+   - Dialogos nativos de selección de archivos
+   - Instalación automática de FFmpeg desde la app
+   - Construcción de ejecutables (.app/.exe)
 
-5. **🖥️ Soporte para Electron**
-   - Aplicación de escritorio nativa
-   - Integración con sistema de archivos del sistema
-   - Menú nativo y notificaciones del sistema
-
-6. **🧪 Infraestructura de Tests**
+5. **🧪 Infraestructura de Tests**
    - Tests automatizados para funcionalidad básica
    - Verificación de dependencias
    - Script de ejecución de tests completo
@@ -45,7 +44,18 @@ Una herramienta completa para DJs que clasifica música por género y crea sets 
 
 ### Instalación de FFmpeg
 
-Ejecuta el script de instalación automática:
+#### Opción 1: Instalación Automática (desde la app)
+
+La forma más fácil es ejecutar la aplicación de escritorio:
+
+```bash
+# Inicia la app de escritorio
+npm run electron
+```
+
+La app verificará automáticamente si FFmpeg está instalado. Si no lo está, te preguntará si deseas instalarlo automáticamente.
+
+#### Opción 2: Script de instalación manual
 
 ```bash
 ./install_ffmpeg.sh
@@ -53,10 +63,10 @@ Ejecuta el script de instalación automática:
 
 El script detecta tu sistema operativo e instala FFmpeg automáticamente:
 
-- **macOS**: Usa Homebrew
-- **Debian/Ubuntu**: Usa apt
-- **RedHat/CentOS**: Usa yum/dnf
-- **Windows**: Instrucciones manuales
+- **macOS**: Usa Homebrew (`brew install ffmpeg`)
+- **Linux (Debian/Ubuntu)**: Usa apt
+- **Linux (RedHat/CentOS)**: Usa yum/dnf
+- **Windows**: Usa Winget o Chocolatey (la app lo hace automáticamente)
 
 ### Instalación de MusicKind
 
@@ -87,11 +97,32 @@ http://localhost:3030
 ### Modo Escritorio (Electron)
 
 ```bash
-# Inicia la aplicación de escritorio
+# Inicia la aplicación de escritorio (desarrollo)
 npm run electron
 
 # Modo desarrollo (con DevTools)
 npm run electron-dev
+```
+
+#### Construir ejecutable
+
+```bash
+# Construir para tu plataforma actual
+npm run build
+
+# El ejecutable se creará en:
+# - macOS: dist/mac/MusicKind.app
+# - Windows: dist/win-unpacked/MusicKind.exe
+```
+
+#### Ejecutar la app compilada
+
+```bash
+# macOS
+open dist/mac/MusicKind.app
+
+# Windows
+dist/win-unpacked/MusicKind.exe
 ```
 
 ### Interfaz Mejorada
@@ -145,8 +176,8 @@ MusicKind/
 │   ├── app.js             # Lógica de la UI
 │   └── styles.css         # Estilos
 ├── electron/              # Aplicación de escritorio
-│   ├── main.js           # Proceso principal de Electron
-│   └── preload.js        # Script de precarga
+│   ├── main.cjs          # Proceso principal de Electron
+│   └── preload.cjs       # Script de precarga
 ├── config/               # Archivos de configuración
 ├── tests/                # Tests automatizados
 ├── install_ffmpeg.sh     # Instalador de FFmpeg
@@ -203,23 +234,41 @@ export LASTFM_API_KEY=your_lastfm_key
 
 ### FFmpeg no encontrado
 
-1. Ejecuta el instalador: `./install_ffmpeg.sh`
-2. Verifica instalación: `ffmpeg -version`
-3. Revisa tu PATH: `echo $PATH`
+1. **Desde la app de escritorio** (recomendado):
+   - Ejecuta `npm run electron`
+   - La app detectará que FFmpeg no está instalado
+   - Haz clic en "Instalar" cuando se te pregunte
+
+2. **Desde script**:
+   ```bash
+   ./install_ffmpeg.sh
+   ```
+
+3. **Verificación manual**:
+   - Verifica instalación: `ffmpeg -version`
+   - Revisa tu PATH: `echo $PATH`
 
 ### Problemas con Electron
 
 1. Asegúrate de tener Node.js 18+
 2. Reinstala dependencias: `npm install`
 3. Ejecuta en modo desarrollo: `npm run electron-dev`
+4. Verifica que los archivos `electron/main.cjs` y `electron/preload.cjs` existan
 
-### Tests fallando
+### La selección de carpetas no funciona
 
-1. Verifica dependencias: `./run_tests.sh`
-2. Instala FFmpeg: `./install_ffmpeg.sh`
-3. Revisa logs de error específicos
+- Asegúrate de ejecutar `npm run electron` (no `npm run dashboard`)
+- Si usas el dashboard web, los dialogos nativos no están disponibles
+- Usa la app de escritorio para dialogos nativos de selección
 
 ## 📝 Changelog
+
+### v1.2.0 - App de Escritorio Completa
+- ✅ Dialogos nativos de selección de carpetas
+- ✅ Instalación automática de FFmpeg desde la app
+- ✅ Soporte multiplataforma (macOS/Windows)
+- ✅ Construcción de ejecutables (.app/.exe)
+- ✅ Verificación de FFmpeg al iniciar la app
 
 ### v1.1.0 - Mejora UX
 - ✅ Añadida selección de carpetas con dialogos
