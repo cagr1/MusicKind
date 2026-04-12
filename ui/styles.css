@@ -476,3 +476,89 @@ body {
     padding: 24px;
   }
 }
+
+/* Settings Panel Styles */
+.settings-section {
+  background: rgba(28, 34, 48, 0.6);
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.settings-section h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.settings-desc {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.settings-links {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+
+.settings-links li {
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.settings-links a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.settings-links a:hover {
+  text-decoration: underline;
+}
+
+.ffmpeg-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.ffmpeg-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ffmpeg-label {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.ffmpeg-value {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.ffmpeg-value.ok {
+  color: var(--accent-2);
+}
+
+.ffmpeg-value.error {
+  color: var(--accent);
+}
+
+.about-info {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.about-info strong {
+  color: var(--text);
+}
+
+.field input[type="password"] {
+  font-family: monospace;
+}

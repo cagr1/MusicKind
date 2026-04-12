@@ -92,7 +92,8 @@ const navButtons = document.querySelectorAll(".nav-btn");
 const panels = {
   classifier: document.getElementById("tab-classifier"),
   sets: document.getElementById("tab-sets"),
-  converter: document.getElementById("tab-converter")
+  converter: document.getElementById("tab-converter"),
+  settings: document.getElementById("tab-settings")
 };
 
 navButtons.forEach((btn) => {
@@ -441,5 +442,191 @@ convRun.addEventListener("click", async () => {
   }
 });
 
+// ==================== SETTINGS FUNCTIONALITY ====================
+
+// Load settings on startup
+async function loadSettings() {
+  try {
+    const res = await fetch("/api/settings");
+    const data = await res.json();
+    if (data.ok) {
+      const settings = data.settings;
+      document.getElementById("cfg-spotify-id").value = settings.spotifyClientId || "";
+      document.getElementById("cfg-spotify-secret").value = settings.spotifyClientSecret || "";
+      document.getElementById("cfg-lastfm-key").value = settings.lastfmApiKey || "";
+      document.getElementById("cfg-language").value = settings.language || "es";
+    }
+  } catch (error) {
+    console.error("Error loading settings:", error);
+  }
+}
+
+// Save settings
+const cfgSave = document.getElementById("cfg-save");
+cfgSave.addEventListener("click", async () => {
+  const status = document.getElementById("cfg-status");
+  const settings = {
+    spotifyClientId: document.getElementById("cfg-spotify-id").value.trim(),
+    spotifyClientSecret: document.getElementById("cfg-spotify-secret").value.trim(),
+    lastfmApiKey: document.getElementById("cfg-lastfm-key").value.trim(),
+    language: document.getElementById("cfg-language").value
+  };
+  
+  status.textContent = "Guardando...";
+  
+  try {
+    const res = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings)
+    });
+    const data = await res.json();
+    
+    if (data.ok) {
+      status.textContent = "Configuracion guardada correctamente.";
+      status.style.color = "var(--accent-2)";
+      
+      // Apply language change
+      applyLanguage(settings.language);
+    } else {
+      status.textContent = `Error: ${data.error}`;
+      status.style.color = "var(--accent)";
+    }
+  } catch (error) {
+    status.textContent = `Error: ${error.message}`;
+    status.style.color = "var(--accent)";
+  }
+});
+
+// FFmpeg check button
+const ffmpegCheck = document.getElementById("ffmpeg-check");
+ffmpegCheck.addEventListener("click", async () => {
+  const statusText = document.getElementById("ffmpeg-status-text");
+  statusText.textContent = "Verificando...";
+  
+  let isInstalled = false;
+  
+  // Try Electron API first
+  if (window.electronAPI && window.electronAPI.checkFFmpeg) {
+    isInstalled = await window.electronAPI.checkFFmpeg();
+  } else {
+    // Fallback to server API
+    try {
+      const res = await fetch("/api/ffmpeg-status");
+      const data = await res.json();
+      isInstalled = data.installed;
+    } catch (e) {
+      console.error("Error checking FFmpeg:", e);
+    }
+  }
+  
+  if (isInstalled) {
+    statusText.textContent = "Instalado";
+    statusText.className = "ffmpeg-value ok";
+  } else {
+    statusText.textContent = "No instalado";
+    statusText.className = "ffmpeg-value error";
+  }
+});
+
+// FFmpeg install button
+const ffmpegInstall = document.getElementById("ffmpeg-install");
+ffmpegInstall.addEventListener("click", async () => {
+  const statusText = document.getElementById("ffmpeg-status-text");
+  statusText.textContent = "Instalando...";
+  statusText.className = "ffmpeg-value";
+  
+  if (window.electronAPI && window.electronAPI.installFFmpeg) {
+    // Use Electron API for installation
+    const result = await window.electronAPI.installFFmpeg();
+    statusText.textContent = result.message;
+    statusText.className = result.success ? "ffmpeg-value ok" : "ffmpeg-value error";
+  } else {
+    statusText.textContent = "Instalacion solo disponible en app de escritorio";
+    statusText.className = "ffmpeg-value error";
+  }
+});
+
+// Language translations
+const translations = {
+  es: {
+    panelTitle: "Panel de Control",
+    panelSubtitle: "Clasifica por genero, crea sets y convierte audio sin escribir comandos.",
+    classifier: "Clasificador",
+    sets: "Creador de Sets",
+    converter: "Convertidor",
+    settings: "Configuracion",
+    sidebarNote: "Panel de control para DJs"
+  },
+  en: {
+    panelTitle: "Dashboard",
+    panelSubtitle: "Classify by genre, create sets and convert audio without writing commands.",
+    classifier: "Classifier",
+    sets: "Set Creator",
+    converter: "Converter",
+    settings: "Settings",
+    sidebarNote: "Control panel for DJs"
+  }
+};
+
+function applyLanguage(lang) {
+  const t = translations[lang] || translations.es;
+  
+  // Update navigation
+  const navBtns = document.querySelectorAll(".nav-btn");
+  if (navBtns[0]) navBtns[0].textContent = t.classifier;
+  if (navBtns[1]) navBtns[1].textContent = t.sets;
+  if (navBtns[2]) navBtns[2].textContent = t.converter;
+  if (navBtns[3]) navBtns[3].textContent = t.settings;
+  
+  // Update hero
+  document.querySelector(".hero h1").textContent = t.panelTitle;
+  document.querySelector(".hero p").textContent = t.panelSubtitle;
+  
+  // Update sidebar note
+  document.querySelector(".sidebar-note").textContent = t.sidebarNote;
+  
+  // Save language preference
+  localStorage.setItem("musickind-lang", lang);
+}
+
+// Initialize
 loadGenres();
-checkFFmpegStatus();
+loadSettings();
+
+// Check and display FFmpeg status on load
+async function initFFmpegStatus() {
+  const statusText = document.getElementById("ffmpeg-status-text");
+  if (!statusText) return;
+  
+  let isInstalled = false;
+  
+  if (window.electronAPI && window.electronAPI.checkFFmpeg) {
+    isInstalled = await window.electronAPI.checkFFmpeg();
+  } else {
+    try {
+      const res = await fetch("/api/ffmpeg-status");
+      const data = await res.json();
+      isInstalled = data.installed;
+    } catch (e) {
+      // Ignore
+    }
+  }
+  
+  if (isInstalled) {
+    statusText.textContent = "Instalado";
+    statusText.className = "ffmpeg-value ok";
+  } else {
+    statusText.textContent = "No instalado";
+    statusText.className = "ffmpeg-value error";
+  }
+}
+
+// Apply saved language
+const savedLang = localStorage.getItem("musickind-lang");
+if (savedLang) {
+  document.getElementById("cfg-language").value = savedLang;
+  applyLanguage(savedLang);
+}
+
+initFFmpegStatus();

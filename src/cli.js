@@ -29,9 +29,11 @@ const reportPath = args.report ? path.resolve(args.report) : path.join(inputDir,
 const logPath = args.log ? path.resolve(args.log) : path.join(inputDir, "unmatched.log");
 let audioFeaturesEnabled = true;
 
-const spotifyClientId = process.env.SPOTIFY_CLIENT_ID;
-const spotifyClientSecret = process.env.SPOTIFY_CLIENT_SECRET;
-const lastfmApiKey = process.env.LASTFM_API_KEY;
+// Load settings from config file (fallback if env vars not set)
+const settings = loadSettings();
+const spotifyClientId = process.env.SPOTIFY_CLIENT_ID || settings.spotifyClientId;
+const spotifyClientSecret = process.env.SPOTIFY_CLIENT_SECRET || settings.spotifyClientSecret;
+const lastfmApiKey = process.env.LASTFM_API_KEY || settings.lastfmApiKey;
 
 if (!skipSpotify && (!spotifyClientId || !spotifyClientSecret)) {
   console.error("Missing API keys. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET or use --no-spotify.");
@@ -346,6 +348,22 @@ function loadAllowedGenres() {
     return new Set(cleaned);
   } catch {
     return new Set(defaultGenres);
+  }
+}
+
+function loadSettings() {
+  const settingsPath = path.resolve("config/settings.json");
+  const defaultSettings = {
+    spotifyClientId: "",
+    spotifyClientSecret: "",
+    lastfmApiKey: ""
+  };
+  if (!fs.existsSync(settingsPath)) return defaultSettings;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    return { ...defaultSettings, ...parsed };
+  } catch {
+    return defaultSettings;
   }
 }
 

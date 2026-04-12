@@ -9,6 +9,7 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
 const uiRoot = path.join(projectRoot, "ui");
 const genresPath = path.join(projectRoot, "config", "genres.json");
+const settingsPath = path.join(projectRoot, "config", "settings.json");
 
 const AUDIO_EXTS = new Set([".aiff", ".aif", ".wav", ".mp3", ".flac"]);
 
@@ -153,6 +154,30 @@ async function handleApi(req, res, url) {
     return sendJson(res, result.ok ? { ok: true, output: result.output, ffmpegAvailable } : result, result.ok ? 200 : 500);
   }
 
+  // Settings API
+  if (req.method === "GET" && url.pathname === "/api/settings") {
+    const settings = loadSettings();
+    return sendJson(res, { ok: true, settings });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/settings") {
+    const body = await readJsonBody(req);
+    const settings = {
+      spotifyClientId: body.spotifyClientId ? String(body.spotifyClientId).trim() : "",
+      spotifyClientSecret: body.spotifyClientSecret ? String(body.spotifyClientSecret).trim() : "",
+      lastfmApiKey: body.lastfmApiKey ? String(body.lastfmApiKey).trim() : "",
+      language: body.language ? String(body.language).trim() : "es"
+    };
+    saveSettings(settings);
+    return sendJson(res, { ok: true, message: "Configuracion guardada" });
+  }
+
+  // FFmpeg status API
+  if (req.method === "GET" && url.pathname === "/api/ffmpeg-status") {
+    const installed = await checkFFmpeg();
+    return sendJson(res, { ok: true, installed });
+  }
+
   res.writeHead(404);
   res.end("Not found");
 }
@@ -180,6 +205,26 @@ function readGenres() {
   } catch {
     return defaultGenres;
   }
+}
+
+function loadSettings() {
+  const defaultSettings = {
+    spotifyClientId: "",
+    spotifyClientSecret: "",
+    lastfmApiKey: "",
+    language: "es"
+  };
+  if (!fs.existsSync(settingsPath)) return defaultSettings;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
+    return { ...defaultSettings, ...parsed };
+  } catch {
+    return defaultSettings;
+  }
+}
+
+function saveSettings(settings) {
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
 }
 
 async function countAudioFiles(dirPath) {
