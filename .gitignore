@@ -1,0 +1,39 @@
+# Environment variables
+.env
+.env.local
+.env.*
+!.env.example
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Cache
+.cache/
+*.cache
+
+# OS files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Build outputs
+output/
+dist/
+build/
+
+# Audio files
+*.mp3
+*.wav
+*.aiff
+*.flac
+*.ogg
+data/dj_tracks/
+
+# Test outputs
+tests/output/
+*.log

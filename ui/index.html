@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MusicKind Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-glow"></div>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="logo">MK</div>
+          <div>
+            <div class="brand-title">MusicKind</div>
+            <div class="brand-sub">Dashboard</div>
+          </div>
+        </div>
+        <nav class="nav">
+          <button class="nav-btn active" data-tab="classifier">Clasificador</button>
+          <button class="nav-btn" data-tab="sets">Creador de Sets</button>
+          <button class="nav-btn" data-tab="converter">Convertidor</button>
+        </nav>
+        <div class="sidebar-note">
+          Panel de control para DJs
+        </div>
+      </aside>
+
+      <main class="content">
+        <header class="hero">
+          <h1>Panel de Control</h1>
+          <p>Clasifica por genero, crea sets y convierte audio sin escribir comandos.</p>
+        </header>
+
+        <section class="panel" id="tab-classifier">
+          <div class="panel-header">
+            <h2>Clasificador por Genero</h2>
+            <span class="pill">Node.js</span>
+          </div>
+          <div class="panel-body">
+            <div class="form-grid">
+              <label class="field">
+                <span>Ruta de la carpeta a clasificar</span>
+                <div class="input-group">
+                  <input id="cls-input" type="text" placeholder="/ruta/a/tu/carpeta" readonly />
+                  <button id="cls-browse" class="btn browse-btn">Examinar</button>
+                </div>
+              </label>
+
+              <label class="field switch">
+                <input id="cls-dry" type="checkbox" />
+                <span class="switch-ui"></span>
+                <div>
+                  <div class="switch-title">Simulacion (no mueve archivos)</div>
+                  <div class="switch-sub">Equivale a --dry-run</div>
+                </div>
+              </label>
+            </div>
+
+            <div class="genres">
+              <div class="genres-header">
+                <h3>Generos activos</h3>
+                <button id="genres-save" class="btn ghost">Guardar cambios</button>
+              </div>
+              <div id="genres-list" class="chip-list"></div>
+              <div class="genres-add">
+                <input id="genres-input" type="text" placeholder="Agregar genero" />
+                <button id="genres-add" class="btn">Agregar</button>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button id="cls-run" class="btn primary">Clasificar ahora</button>
+            </div>
+
+            <div class="status" id="cls-status"></div>
+            <pre class="log" id="cls-log"></pre>
+          </div>
+        </section>
+
+        <section class="panel hidden" id="tab-sets">
+          <div class="panel-header">
+            <h2>Creador de Sets</h2>
+            <span class="pill">Python</span>
+          </div>
+          <div class="panel-body">
+            <div class="form-grid">
+              <label class="field">
+                <span>Ruta base con warmup/peak/closing</span>
+                <div class="input-group">
+                  <input id="set-base" type="text" placeholder="/ruta/data/dj_tracks" readonly />
+                  <button id="set-base-browse" class="btn browse-btn">Examinar</button>
+                </div>
+              </label>
+              <label class="field">
+                <span>Ruta del pack nuevo</span>
+                <div class="input-group">
+                  <input id="set-pack" type="text" placeholder="/ruta/data/new_pack" readonly />
+                  <button id="set-pack-browse" class="btn browse-btn">Examinar</button>
+                </div>
+              </label>
+              <label class="field">
+                <span>Ruta de salida</span>
+                <div class="input-group">
+                  <input id="set-output" type="text" placeholder="/ruta/output" value="output" readonly />
+                  <button id="set-output-browse" class="btn browse-btn">Examinar</button>
+                </div>
+              </label>
+            </div>
+
+            <div class="range-card">
+              <div class="range-title">Cantidad de tracks base</div>
+              <div class="range-body">
+                <div class="range-status" id="set-counts">Sin revisar</div>
+                <button id="set-count-check" class="btn ghost">Revisar cantidad</button>
+              </div>
+              <div class="range-hint">Recomendado: entre 15 y 25 tracks para mayor precision.</div>
+            </div>
+
+            <div class="analysis">
+              <div class="analysis-title">Analisis de audio</div>
+              <div class="analysis-options">
+                <label class="option">
+                  <input type="radio" name="analysis-mode" value="full" checked />
+                  <span>Toda la cancion</span>
+                </label>
+                <label class="option">
+                  <input type="radio" name="analysis-mode" value="seconds" />
+                  <span>Solo primeros segundos</span>
+                </label>
+                <div class="slider-wrap">
+                  <input id="analysis-seconds" type="range" min="60" max="120" value="90" />
+                  <div id="analysis-value">90s</div>
+                </div>
+              </div>
+              <div class="analysis-note">Menos segundos = mas rapido, pero puede perder precision.</div>
+            </div>
+
+            <div class="analysis">
+              <div class="analysis-title">Conversion temporal para acelerar</div>
+              <div class="analysis-options">
+                <label class="option">
+                  <input id="temp-convert" type="checkbox" />
+                  <span>Convertir temporalmente para analizar</span>
+                </label>
+                <select id="temp-format">
+                  <option value="">Formato</option>
+                  <option value="mp3">MP3</option>
+                  <option value="wav">WAV</option>
+                  <option value="aiff">AIFF</option>
+                </select>
+                <select id="temp-bitrate">
+                  <option value="">Bitrate MP3</option>
+                  <option value="128">128 kbps</option>
+                  <option value="256">256 kbps</option>
+                  <option value="320">320 kbps</option>
+                </select>
+              </div>
+              <div class="analysis-note">Los archivos convertidos se eliminan al terminar el analisis.</div>
+            </div>
+
+            <div class="analysis warning">
+              <div class="analysis-title">⚠️ Tiempo de procesamiento</div>
+              <div class="analysis-options">
+                <p>Si analizas carpetas muy pesadas, el proceso puede tardar varios minutos. Para acelerar, activa la conversión temporal.</p>
+              </div>
+              <div class="analysis-note">FFmpeg es requerido para la conversión temporal.</div>
+            </div>
+
+            <div class="actions">
+              <button id="set-run" class="btn primary">Crear sets</button>
+              <div class="spinner" id="set-spinner">
+                <div class="disc"></div>
+                <div>Analizando audio…</div>
+              </div>
+            </div>
+
+            <div class="status" id="set-status"></div>
+            <pre class="log" id="set-log"></pre>
+          </div>
+        </section>
+
+        <section class="panel hidden" id="tab-converter">
+          <div class="panel-header">
+            <h2>Convertidor de Audio</h2>
+            <span class="pill">FFmpeg</span>
+          </div>
+          <div class="panel-body">
+            <div class="form-grid">
+              <label class="field">
+                <span>Carpeta de entrada</span>
+                <div class="input-group">
+                  <input id="conv-input" type="text" placeholder="/ruta/audios" readonly />
+                  <button id="conv-input-browse" class="btn browse-btn">Examinar</button>
+                </div>
+              </label>
+              <label class="field">
+                <span>Carpeta de salida</span>
+                <div class="input-group">
+                  <input id="conv-output" type="text" placeholder="/ruta/convertidos" readonly />
+                  <button id="conv-output-browse" class="btn browse-btn">Examinar</button>
+                </div>
+              </label>
+              <label class="field">
+                <span>Formato</span>
+                <select id="conv-format">
+                  <option value="">Elegir formato</option>
+                  <option value="mp3">MP3</option>
+                  <option value="wav">WAV</option>
+                  <option value="aiff">AIFF</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Calidad MP3</span>
+                <select id="conv-bitrate">
+                  <option value="">Opcional</option>
+                  <option value="128">128 kbps</option>
+                  <option value="256">256 kbps</option>
+                  <option value="320">320 kbps</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="actions">
+              <button id="conv-run" class="btn primary">Convertir</button>
+            </div>
+
+            <div class="status" id="conv-status"></div>
+            <pre class="log" id="conv-log"></pre>
+            <div class="analysis-note">Requiere FFmpeg instalado en el sistema.</div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

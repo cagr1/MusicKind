@@ -1,0 +1,4 @@
+data/dj_tracks/Ordonez - Bien Loco .mp3
+data/dj_tracks/Gabriel Rojas - The Six (Edit).mp3
+data/dj_tracks/Sem Jacobs, Tagmann - Blue Berries (MK ITA Afro Remix) - 2024.aiff
+data/dj_tracks/Pawsa - TOO COOL TO BE CARELESS (Extended Mix) .mp3

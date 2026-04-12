@@ -1,0 +1,58 @@
+{
+  "name": "musickind",
+  "version": "1.0.0",
+  "description": "DJ tool for music classification and set creation with desktop app support",
+  "type": "module",
+  "main": "electron/main.js",
+  "bin": {
+    "musickind": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "dashboard": "node src/server.js",
+    "electron": "electron .",
+    "electron-dev": "NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "test": "jest"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "music-metadata": "^11.12.3"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.musickind.app",
+    "productName": "MusicKind",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "ui/**/*",
+      "src/**/*",
+      "config/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.music",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  }
+}
