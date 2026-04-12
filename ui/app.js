@@ -1,18 +1,47 @@
 // File dialog functionality
 async function selectDirectory(title) {
   try {
-    // For Electron environment
-    if (window.electronAPI) {
+    // For Electron environment - use native dialog
+    if (window.electronAPI && window.electronAPI.openDirectory) {
       const result = await window.electronAPI.openDirectory(title);
       return result;
     }
     
-    // For web environment - fallback to prompt
-    const input = prompt(`Por selecciona la ruta para: ${title}\n(Escribe la ruta manualmente)`);
+    // For web environment (development server) - show manual input prompt
+    alert('Para seleccionar carpetas, ejecuta la aplicación como app de escritorio: npm run electron');
+    const input = prompt(`Ingresa la ruta manualmente para: ${title}`);
     return input;
   } catch (error) {
     console.error('Error selecting directory:', error);
     return null;
+  }
+}
+
+// Check FFmpeg status on startup
+async function checkFFmpegStatus() {
+  if (!window.electronAPI || !window.electronAPI.checkFFmpeg) {
+    return; // Not running in Electron
+  }
+  
+  try {
+    const isInstalled = await window.electronAPI.checkFFmpeg();
+    
+    if (!isInstalled) {
+      const statusEl = document.getElementById('cls-status') || document.getElementById('set-status') || document.getElementById('conv-status');
+      if (statusEl) {
+        const install = confirm('FFmpeg no está instalado. ¿Deseas instalarlo ahora?\n\nFFmpeg es necesario para el análisis y conversión de audio.');
+        if (install) {
+          statusEl.textContent = 'Instalando FFmpeg...';
+          const result = await window.electronAPI.installFFmpeg();
+          statusEl.textContent = result.message;
+          if (result.success) {
+            alert('FFmpeg instalado correctamente. La aplicación está lista para usar.');
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error checking FFmpeg:', error);
   }
 }
 
@@ -413,3 +442,4 @@ convRun.addEventListener("click", async () => {
 });
 
 loadGenres();
+checkFFmpegStatus();

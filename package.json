@@ -2,8 +2,9 @@
   "name": "musickind",
   "version": "1.0.0",
   "description": "DJ tool for music classification and set creation with desktop app support",
+  "author": "MusicKind Team",
   "type": "module",
-  "main": "electron/main.js",
+  "main": "electron/main.cjs",
   "bin": {
     "musickind": "./src/cli.js"
   },
