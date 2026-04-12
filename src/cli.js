@@ -66,10 +66,19 @@ if (files.length === 0) {
   process.exit(0);
 }
 
+// Show total count for progress tracking
+console.log(`[PROGRESS:0/${files.length}] Starting classification of ${files.length} files...`);
+
 const reportRows = [];
+let processedCount = 0;
 
 for (const filePath of files) {
   const relative = path.relative(inputDir, filePath);
+  processedCount++;
+  
+  // Show current file being processed
+  console.log(`[PROGRESS:${processedCount}/${files.length}] Processing: ${relative}`);
+  
   try {
     const metadata = await parseFile(filePath);
     const rawArtist = metadata.common.artist || metadata.common.albumartist || "";

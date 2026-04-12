@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
+import { readMetadata, listAudioFiles, renameFile, writeMetadata, generateFilename } from "./metadata_editor.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +13,9 @@ const genresPath = path.join(projectRoot, "config", "genres.json");
 const settingsPath = path.join(projectRoot, "config", "settings.json");
 
 const AUDIO_EXTS = new Set([".aiff", ".aif", ".wav", ".mp3", ".flac"]);
+
+// Registry for running processes (for cancellation)
+const runningProcesses = new Map();
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -66,6 +70,8 @@ async function handleApi(req, res, url) {
     const body = await readJsonBody(req);
     const inputPath = body.inputPath ? String(body.inputPath) : "";
     const dryRun = Boolean(body.dryRun);
+    const processId = body.processId || `cls-${Date.now()}`;
+    
     if (!inputPath) {
       return sendJson(res, { ok: false, error: "inputPath requerido" }, 400);
     }
@@ -75,7 +81,7 @@ async function handleApi(req, res, url) {
     
     const args = [path.join(projectRoot, "src", "cli.js"), "--input", inputPath];
     if (dryRun) args.push("--dry-run");
-    const result = await runProcessWithProgress(process.execPath, args, res);
+    const result = await runProcessWithProgress(process.execPath, args, res, processId);
     return sendJson(res, result.ok ? { ok: true, output: result.output, ffmpegAvailable } : result, result.ok ? 200 : 500);
   }
 
@@ -99,6 +105,7 @@ async function handleApi(req, res, url) {
     const analysisSeconds = body.analysisSeconds ? Number(body.analysisSeconds) : null;
     const tempFormat = body.tempFormat ? String(body.tempFormat) : "";
     const tempBitrate = body.tempBitrate ? Number(body.tempBitrate) : null;
+    const processId = body.processId || `set-${Date.now()}`;
 
     if (!baseDj || !newPack) {
       return sendJson(res, { ok: false, error: "baseDj y newPack requeridos" }, 400);
@@ -118,7 +125,7 @@ async function handleApi(req, res, url) {
     if (tempFormat) args.push("--temp-format", tempFormat);
     if (tempBitrate) args.push("--temp-bitrate", String(tempBitrate));
 
-    const result = await runProcessWithProgress("python3", args, res);
+    const result = await runProcessWithProgress("python3", args, res, processId);
     return sendJson(res, result.ok ? { ok: true, output: result.output, ffmpegAvailable } : result, result.ok ? 200 : 500);
   }
 
@@ -128,6 +135,7 @@ async function handleApi(req, res, url) {
     const outputPath = body.outputPath ? String(body.outputPath) : "";
     const format = body.format ? String(body.format) : "";
     const bitrate = body.bitrate ? Number(body.bitrate) : null;
+    const processId = body.processId || `conv-${Date.now()}`;
 
     if (!inputPath || !outputPath || !format) {
       return sendJson(res, { ok: false, error: "inputPath, outputPath y format requeridos" }, 400);
@@ -150,7 +158,7 @@ async function handleApi(req, res, url) {
     ];
     if (bitrate) args.push("--bitrate", String(bitrate));
 
-    const result = await runProcessWithProgress("python3", args, res);
+    const result = await runProcessWithProgress("python3", args, res, processId);
     return sendJson(res, result.ok ? { ok: true, output: result.output, ffmpegAvailable } : result, result.ok ? 200 : 500);
   }
 
@@ -176,6 +184,126 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/ffmpeg-status") {
     const installed = await checkFFmpeg();
     return sendJson(res, { ok: true, installed });
+  }
+
+  // Cancel process API
+  if (req.method === "POST" && url.pathname === "/api/cancel") {
+    const body = await readJsonBody(req);
+    const processId = body.processId ? String(body.processId) : "";
+    if (!processId) {
+      return sendJson(res, { ok: false, error: "processId requerido" }, 400);
+    }
+    const cancelled = cancelProcess(processId);
+    return sendJson(res, { ok: true, cancelled });
+  }
+
+  // ==================== METADATA EDITOR API ====================
+  
+  // Get metadata for a single file
+  if (req.method === "GET" && url.pathname === "/api/metadata") {
+    const filePath = url.searchParams.get("file");
+    if (!filePath) {
+      return sendJson(res, { ok: false, error: "file parameter required" }, 400);
+    }
+    try {
+      const result = await readMetadata(filePath);
+      return sendJson(res, result);
+    } catch (error) {
+      return sendJson(res, { ok: false, error: error.message }, 400);
+    }
+  }
+
+  // List audio files in a directory
+  if (req.method === "GET" && url.pathname === "/api/metadata/list") {
+    const dirPath = url.searchParams.get("dir");
+    const recursive = url.searchParams.get("recursive") === "true";
+    if (!dirPath) {
+      return sendJson(res, { ok: false, error: "dir parameter required" }, 400);
+    }
+    try {
+      const files = listAudioFiles(dirPath, recursive);
+      return sendJson(res, { ok: true, files });
+    } catch (error) {
+      return sendJson(res, { ok: false, error: error.message }, 400);
+    }
+  }
+
+  // Rename file
+  if (req.method === "POST" && url.pathname === "/api/metadata/rename") {
+    const body = await readJsonBody(req);
+    const filePath = body.filePath ? String(body.filePath) : "";
+    const newName = body.newName ? String(body.newName) : "";
+    if (!filePath || !newName) {
+      return sendJson(res, { ok: false, error: "filePath and newName required" }, 400);
+    }
+    try {
+      const newPath = renameFile(filePath, newName);
+      return sendJson(res, { ok: true, newPath });
+    } catch (error) {
+      return sendJson(res, { ok: false, error: error.message }, 400);
+    }
+  }
+
+  // Write metadata to file
+  if (req.method === "POST" && url.pathname === "/api/metadata/write") {
+    const body = await readJsonBody(req);
+    const filePath = body.filePath ? String(body.filePath) : "";
+    const metadata = body.metadata || {};
+    if (!filePath) {
+      return sendJson(res, { ok: false, error: "filePath required" }, 400);
+    }
+    try {
+      // Check FFmpeg availability
+      const ffmpegAvailable = await checkFFmpeg();
+      if (!ffmpegAvailable) {
+        return sendJson(res, { ok: false, error: "FFmpeg not available for writing metadata" }, 400);
+      }
+      await writeMetadata(filePath, metadata);
+      return sendJson(res, { ok: true });
+    } catch (error) {
+      return sendJson(res, { ok: false, error: error.message }, 400);
+    }
+  }
+
+  // Generate filename from metadata
+  if (req.method === "POST" && url.pathname === "/api/metadata/generate-filename") {
+    const body = await readJsonBody(req);
+    const metadata = body.metadata || {};
+    const format = body.format || "{artist} - {title}";
+    const filename = generateFilename(metadata, format);
+    return sendJson(res, { ok: true, filename });
+  }
+
+  // ==================== BPM ANALYZER API ====================
+  
+  // Analyze BPM for multiple files
+  if (req.method === "POST" && url.pathname === "/api/bpm/analyze") {
+    const body = await readJsonBody(req);
+    const files = Array.isArray(body.files) ? body.files : [];
+    const analysisSeconds = body.analysisSeconds ? Number(body.analysisSeconds) : null;
+    const processId = body.processId || `bpm-${Date.now()}`;
+    
+    if (files.length === 0) {
+      return sendJson(res, { ok: false, error: "files required" }, 400);
+    }
+    
+    // Check FFmpeg availability
+    const ffmpegAvailable = await checkFFmpeg();
+    if (!ffmpegAvailable) {
+      return sendJson(res, { ok: false, error: "FFmpeg not available for BPM analysis" }, 400);
+    }
+    
+    const args = [
+      path.join(projectRoot, "src", "bpm_analyzer.py"),
+      "--files",
+      ...files
+    ];
+    if (analysisSeconds) {
+      args.push("--analysis-seconds", String(analysisSeconds));
+    }
+    
+    const result = await runProcessWithProgress("python3", args, res, processId);
+    return sendJson(res, result.ok ? { ok: true, output: result.output, ffmpegAvailable } : result, result.ok ? 200 : 500);
   }
 
   res.writeHead(404);
@@ -285,34 +413,69 @@ function serveFile(res, filePath) {
 }
 
 async function checkFFmpeg() {
-  try {
-    await spawn("ffmpeg", ["-version"], { 
+  return new Promise((resolve) => {
+    const child = spawn("ffmpeg", ["-version"], { 
       cwd: projectRoot,
       stdio: ['pipe', 'pipe', 'pipe']
     });
-    return true;
-  } catch {
-    return false;
-  }
+    
+    child.on('error', () => {
+      resolve(false);
+    });
+    
+    child.on('close', (code) => {
+      resolve(code === 0);
+    });
+  });
 }
 
-function runProcessWithProgress(cmd, args, res) {
+function runProcessWithProgress(cmd, args, res, processId) {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { cwd: projectRoot });
     let output = "";
-    let progress = "";
+    let currentFile = "";
+    let totalFiles = 0;
+    let processedFiles = 0;
+    let isKilled = false;
+    
+    // Register process for cancellation
+    if (processId) {
+      runningProcesses.set(processId, child);
+    }
     
     child.stdout.on("data", (data) => {
       output += data.toString();
-      // Try to extract progress information
-      const lines = data.toString().split('\n');
-      lines.forEach(line => {
-        if (line.includes('[') && line.includes(']')) {
-          progress = line.trim();
-          // Send progress update
-          res.write(`data: ${JSON.stringify({ type: 'progress', message: progress })}\n\n`);
-        }
-      });
+      const text = data.toString();
+      
+      // Extract progress information from [PROGRESS:X/Y] format
+      const progressRegex = /\[PROGRESS:(\d+)\/(\d+)\]\s*Processing:\s*(.+)/;
+      const match = text.match(progressRegex);
+      
+      if (match) {
+        processedFiles = parseInt(match[1]);
+        totalFiles = parseInt(match[2]);
+        currentFile = match[3].trim();
+        
+        const percentage = totalFiles > 0 ? Math.round((processedFiles / totalFiles) * 100) : 0;
+        
+        // Send progress update
+        res.write(`data: ${JSON.stringify({ 
+          type: 'progress', 
+          current: currentFile,
+          processed: processedFiles,
+          total: totalFiles,
+          percentage: percentage,
+          message: `(${processedFiles}/${totalFiles}) ${currentFile}`
+        })}\n\n`);
+      } else if (text.includes('[PROGRESS:') && text.includes(']')) {
+        // Fallback for other progress formats
+        const lines = text.split('\n');
+        lines.forEach(line => {
+          if (line.includes('[') && line.includes(']')) {
+            res.write(`data: ${JSON.stringify({ type: 'progress', message: line.trim() })}\n\n`);
+          }
+        });
+      }
     });
     
     child.stderr.on("data", (data) => {
@@ -320,9 +483,16 @@ function runProcessWithProgress(cmd, args, res) {
     });
     
     child.on("close", (code) => {
+      // Remove from registry
+      if (processId) {
+        runningProcesses.delete(processId);
+      }
+      
       // Send completion signal
-      res.write(`data: ${JSON.stringify({ type: 'complete', success: code === 0 })}\n\n`);
-      res.end();
+      if (!isKilled) {
+        res.write(`data: ${JSON.stringify({ type: 'complete', success: code === 0, processed: processedFiles, total: totalFiles, cancelled: isKilled })}\n\n`);
+        res.end();
+      }
       
       if (code === 0) {
         resolve({ ok: true, output });
@@ -331,6 +501,17 @@ function runProcessWithProgress(cmd, args, res) {
       }
     });
   });
+}
+
+// Cancel a running process
+function cancelProcess(processId) {
+  const child = runningProcesses.get(processId);
+  if (child) {
+    child.kill('SIGTERM');
+    runningProcesses.delete(processId);
+    return true;
+  }
+  return false;
 }
 
 function runProcess(cmd, args) {

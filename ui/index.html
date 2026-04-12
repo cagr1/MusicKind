@@ -21,6 +21,8 @@
           <button class="nav-btn active" data-tab="classifier">Clasificador</button>
           <button class="nav-btn" data-tab="sets">Creador de Sets</button>
           <button class="nav-btn" data-tab="converter">Convertidor</button>
+          <button class="nav-btn" data-tab="metadata">Editor de Metadata</button>
+          <button class="nav-btn" data-tab="bpm">Editor de BPM</button>
           <button class="nav-btn" data-tab="settings">Configuracion</button>
         </nav>
         <div class="sidebar-note">
@@ -38,6 +40,10 @@
           <div class="panel-header">
             <h2>Clasificador por Genero</h2>
             <span class="pill">Node.js</span>
+          </div>
+          <div id="cls-ffmpeg-warning" class="ffmpeg-warning hidden">
+            <span>⚠️ FFmpeg no está instalado. Algunas funciones no estarán disponibles.</span>
+            <button id="cls-goto-settings" class="btn btn-small">Ir a Configuración</button>
           </div>
           <div class="panel-body">
             <div class="form-grid">
@@ -73,6 +79,19 @@
 
             <div class="actions">
               <button id="cls-run" class="btn primary">Clasificar ahora</button>
+              <button id="cls-cancel" class="btn danger hidden">Cancelar</button>
+            </div>
+
+            <!-- Progress bar for classifier -->
+            <div class="progress-container hidden" id="cls-progress-container">
+              <div class="progress-info">
+                <span id="cls-progress-text">Preparando...</span>
+                <span id="cls-progress-percent">0%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="cls-progress-fill"></div>
+              </div>
+              <div class="progress-file" id="cls-current-file"></div>
             </div>
 
             <div class="status" id="cls-status"></div>
@@ -84,6 +103,10 @@
           <div class="panel-header">
             <h2>Creador de Sets</h2>
             <span class="pill">Python</span>
+          </div>
+          <div id="set-ffmpeg-warning" class="ffmpeg-warning hidden">
+            <span>⚠️ FFmpeg no está instalado. Para conversión temporal, instala FFmpeg.</span>
+            <button id="set-goto-settings" class="btn btn-small">Ir a Configuración</button>
           </div>
           <div class="panel-body">
             <div class="form-grid">
@@ -171,10 +194,23 @@
 
             <div class="actions">
               <button id="set-run" class="btn primary">Crear sets</button>
+              <button id="set-cancel" class="btn danger hidden">Cancelar</button>
               <div class="spinner" id="set-spinner">
                 <div class="disc"></div>
                 <div>Analizando audio…</div>
               </div>
+            </div>
+
+            <!-- Progress bar for set creator -->
+            <div class="progress-container hidden" id="set-progress-container">
+              <div class="progress-info">
+                <span id="set-progress-text">Analizando audio...</span>
+                <span id="set-progress-percent">0%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="set-progress-fill"></div>
+              </div>
+              <div class="progress-file" id="set-current-file"></div>
             </div>
 
             <div class="status" id="set-status"></div>
@@ -186,6 +222,10 @@
           <div class="panel-header">
             <h2>Convertidor de Audio</h2>
             <span class="pill">FFmpeg</span>
+          </div>
+          <div id="conv-ffmpeg-warning" class="ffmpeg-warning hidden">
+            <span>⚠️ FFmpeg no está instalado. Instálalo para usar el convertidor.</span>
+            <button id="conv-goto-settings" class="btn btn-small">Ir a Configuración</button>
           </div>
           <div class="panel-body">
             <div class="form-grid">
@@ -225,11 +265,85 @@
 
             <div class="actions">
               <button id="conv-run" class="btn primary">Convertir</button>
+              <button id="conv-cancel" class="btn danger hidden">Cancelar</button>
+            </div>
+
+            <!-- Progress bar for converter -->
+            <div class="progress-container hidden" id="conv-progress-container">
+              <div class="progress-info">
+                <span id="conv-progress-text">Preparando...</span>
+                <span id="conv-progress-percent">0%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="conv-progress-fill"></div>
+              </div>
+              <div class="progress-file" id="conv-current-file"></div>
             </div>
 
             <div class="status" id="conv-status"></div>
             <pre class="log" id="conv-log"></pre>
             <div class="analysis-note">Requiere FFmpeg instalado en el sistema.</div>
+          </div>
+        </section>
+
+        <section class="panel hidden" id="tab-bpm">
+          <div class="panel-header">
+            <h2>Editor de BPM</h2>
+            <span class="pill">Análisis</span>
+          </div>
+          <div class="panel-body">
+            <div class="form-grid">
+              <label class="field">
+                <span>Carpeta con archivos</span>
+                <div class="input-group">
+                  <input id="bpm-input" type="text" placeholder="/ruta/audios" readonly />
+                  <button id="bpm-browse" class="btn browse-btn">Examinar</button>
+                </div>
+              </label>
+              <label class="field">
+                <span>Segundos a analizar</span>
+                <div class="slider-wrap">
+                  <input id="bpm-seconds" type="range" min="30" max="120" value="60" />
+                  <div id="bpm-seconds-value">60s</div>
+                </div>
+              </label>
+            </div>
+
+            <div class="actions">
+              <button id="bpm-analyze" class="btn primary">Analizar BPM</button>
+              <button id="bpm-cancel" class="btn danger hidden">Cancelar</button>
+            </div>
+
+            <div id="bpm-progress" class="progress-container hidden">
+              <div class="progress-info">
+                <span id="bpm-progress-text">Preparando...</span>
+                <span id="bpm-progress-percent">0%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="bpm-progress-fill"></div>
+              </div>
+              <div class="progress-file" id="bpm-current-file"></div>
+            </div>
+
+            <div id="bpm-results" class="bpm-results">
+              <table class="bpm-table">
+                <thead>
+                  <tr>
+                    <th>Pista</th>
+                    <th>BPM</th>
+                    <th>Key</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="bpm-table-body">
+                  <tr>
+                    <td colspan="4" class="empty-row">Selecciona una carpeta y presiona analizar</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="status" id="bpm-status"></div>
           </div>
         </section>
 
@@ -304,9 +418,75 @@
             <div class="status" id="cfg-status"></div>
           </div>
         </section>
-      </main>
-    </div>
 
-    <script src="./app.js"></script>
-  </body>
-</html>
+        <section class="panel hidden" id="tab-metadata">
+          <div class="panel-header">
+            <h2>Editor de Metadata</h2>
+            <span class="pill">Audio</span>
+          </div>
+          <div class="panel-body">
+            <div class="form-grid">
+              <label class="field">
+                <span>Carpeta con archivos</span>
+                <div class="input-group">
+                  <input id="meta-input" type="text" placeholder="/ruta/audios" readonly />
+                  <button id="meta-browse" class="btn browse-btn">Examinar</button>
+                </div>
+              </label>
+            </div>
+
+            <div class="actions">
+              <button id="meta-load" class="btn">Cargar archivos</button>
+            </div>
+
+            <div id="meta-file-list" class="file-list">
+              <div class="empty-state">Selecciona una carpeta para ver los archivos</div>
+            </div>
+
+            <div id="meta-editor" class="metadata-editor hidden">
+              <h3>Editar: <span id="meta-filename"></span></h3>
+              <div class="form-grid meta-grid">
+                <label class="field">
+                  <span>Nombre del archivo</span>
+                  <input id="meta-new-filename" type="text" placeholder="Nuevo nombre sin extensión" />
+                </label>
+                <label class="field">
+                  <span>Título</span>
+                  <input id="meta-title" type="text" placeholder="Título de la canción" />
+                </label>
+                <label class="field">
+                  <span>Artista</span>
+                  <input id="meta-artist" type="text" placeholder="Nombre del artista" />
+                </label>
+                <label class="field">
+                  <span>Álbum</span>
+                  <input id="meta-album" type="text" placeholder="Nombre del álbum" />
+                </label>
+                <label class="field">
+                  <span>Año</span>
+                  <input id="meta-year" type="number" placeholder="2024" min="1900" max="2099" />
+                </label>
+                <label class="field">
+                  <span>Género</span>
+                  <input id="meta-genre" type="text" placeholder="Género musical" />
+                </label>
+                <label class="field">
+                  <span>Pista #</span>
+                  <input id="meta-track" type="number" placeholder="1" min="1" />
+                </label>
+              </div>
+              <div class="meta-preview">
+                <span>Vista previa:</span>
+                <code id="meta-preview-name">---</code>
+              </div>
+              <div class="actions">
+                <button id="meta-save" class="btn primary">Guardar cambios</button>
+                <button id="meta-cancel-edit" class="btn ghost">Cancelar</button>
+              </div>
+            </div>
+
+            <div class="status" id="meta-status"></div>
+          </div>
+        </section>
+
+        <section class="panel hidden" id="tab-settings">

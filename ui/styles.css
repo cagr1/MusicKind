@@ -339,6 +339,200 @@ body {
   font-weight: 600;
 }
 
+.btn.danger {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+.btn.danger:hover {
+  background: rgba(242, 92, 84, 0.15);
+}
+
+.btn.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.ffmpeg-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(242, 92, 84, 0.15);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.ffmpeg-warning span {
+  color: var(--accent);
+}
+
+/* Metadata Editor Styles */
+.file-list {
+  background: rgba(28, 34, 48, 0.6);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.file-list .empty-state {
+  text-align: center;
+  color: var(--muted);
+  padding: 24px;
+  font-size: 14px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+  gap: 12px;
+}
+
+.file-item:hover {
+  background: var(--panel-2);
+}
+
+.file-item.selected {
+  background: rgba(242, 92, 84, 0.15);
+  border: 1px solid var(--accent);
+}
+
+.file-item-name {
+  flex: 1;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-item-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.file-item-edit {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.file-item:hover .file-item-edit {
+  opacity: 1;
+}
+
+.metadata-editor {
+  background: rgba(28, 34, 48, 0.6);
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.metadata-editor h3 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.metadata-editor h3 span {
+  color: var(--accent);
+}
+
+.meta-grid {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.meta-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--panel-2);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.meta-preview code {
+  background: #0c0f15;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--accent-2);
+  font-family: monospace;
+}
+
+/* BPM Editor Styles */
+.bpm-results {
+  margin-top: 16px;
+  overflow-x: auto;
+}
+
+.bpm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.bpm-table th {
+  text-align: left;
+  padding: 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--stroke);
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.bpm-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--stroke);
+}
+
+.bpm-table tr:hover td {
+  background: rgba(28, 34, 48, 0.5);
+}
+
+.bpm-table .empty-row {
+  text-align: center;
+  color: var(--muted);
+  padding: 24px;
+}
+
+.bpm-cell {
+  font-family: monospace;
+  font-weight: 500;
+}
+
+.bpm-cell.high { color: var(--accent-2); }
+.bpm-cell.medium { color: var(--accent-3); }
+.bpm-cell.low { color: var(--muted); }
+
+.key-cell {
+  background: var(--panel-2);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.edit-bpm-input {
+  width: 70px;
+  background: var(--panel-2);
+  border: 1px solid var(--stroke);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--text);
+  font-size: 14px;
+}
+
 .btn.ghost {
   background: transparent;
   border: 1px solid var(--stroke);
@@ -561,4 +755,54 @@ body {
 
 .field input[type="password"] {
   font-family: monospace;
+}
+
+/* Progress Bar Styles */
+.progress-container {
+  background: rgba(28, 34, 48, 0.6);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 8px;
+}
+
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.progress-info span:first-child {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.progress-info span:last-child {
+  color: var(--accent-3);
+  font-weight: 600;
+}
+
+.progress-bar {
+  height: 8px;
+  background: var(--panel-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-3));
+  border-radius: 999px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+.progress-file {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
