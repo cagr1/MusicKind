@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MusicKind Dashboard</title>
     <link rel="stylesheet" href="./styles.css" />
+    <!-- Iconify for icons -->
+    <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
   </head>
   <body>
     <div class="bg-glow"></div>
@@ -17,8 +19,8 @@
             <div class="brand-title">MusicKind</div>
             <div class="brand-sub">
               <span id="brand-subtitle">Dashboard</span>
-              <button id="lang-toggle" class="lang-toggle" title="Cambiar idioma">
-                <span id="lang-icon">🌐</span>
+              <button id="lang-toggle" class="lang-toggle" title="Cambiar idioma / Switch language">
+                <span class="iconify" data-icon="mdi:translate" data-width="18"></span>
               </button>
             </div>
           </div>
@@ -120,8 +122,8 @@
           </div>
           <div class="panel-body">
             <div class="sets-instructions">
-              <p>El creador de sets analiza tus pistas y organiza sets automáticos. Debe recibir carpetas con archivos de audio (MP3, WAV, AIFF).</p>
-              <p class="sets-formats"><strong>Formatos aceptados:</strong> MP3, WAV, AIFF, FLAC, M4A</p>
+              <p>El creador de sets analiza tus pistas y organiza sets automáticos. Selecciona las carpetas necesarias a continuación.</p>
+              <p class="sets-formats"><strong>Formatos aceptados:</strong> MP3, WAV, AIFF, AIF, FLAC, M4A</p>
             </div>
             
             <div class="form-grid">
@@ -130,7 +132,9 @@
                 <div class="input-hint">Carpeta con subcarpetas: warmup/, peak/, closing/</div>
                 <div class="input-group">
                   <input id="set-base" type="text" placeholder="/ruta/data/dj_tracks" readonly />
-                  <button id="set-base-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">📁</button>
+                  <button id="set-base-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                    <span class="iconify" data-icon="mdi:folder-open-outline"></span>
+                  </button>
                 </div>
               </label>
               <label class="field">
@@ -138,7 +142,9 @@
                 <div class="input-hint">Carpeta con pistas sin clasificar</div>
                 <div class="input-group">
                   <input id="set-pack" type="text" placeholder="/ruta/data/new_pack" readonly />
-                  <button id="set-pack-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">📁</button>
+                  <button id="set-pack-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                    <span class="iconify" data-icon="mdi:folder-open-outline"></span>
+                  </button>
                 </div>
               </label>
               <label class="field">
@@ -146,7 +152,9 @@
                 <div class="input-hint">Donde se guardarán los sets generados</div>
                 <div class="input-group">
                   <input id="set-output" type="text" placeholder="/ruta/output" value="output" readonly />
-                  <button id="set-output-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">📁</button>
+                  <button id="set-output-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                    <span class="iconify" data-icon="mdi:folder-open-outline"></span>
+                  </button>
                 </div>
               </label>
             </div>
@@ -246,23 +254,30 @@
             <button id="conv-goto-settings" class="btn btn-small">Ir a Configuración</button>
           </div>
           <div class="panel-body">
+            <div class="conv-instructions">
+              <p>Convierte archivos de audio entre diferentes formatos.</p>
+              <p class="sets-formats"><strong>Formatos de entrada:</strong> MP3, WAV, AIFF, AIF, FLAC, M4A</p>
+            </div>
+
             <div class="conv-drop-zone" id="conv-input-drop">
               <div class="conv-drop-content">
-                <span class="conv-drop-icon">📁</span>
-                <span class="conv-drop-text">Arrastra archivos o carpeta aquí</span>
-                <span class="conv-drop-hint">o haz clic para seleccionar</span>
+                <span class="iconify conv-drop-icon" data-icon="mdi:file-music-outline"></span>
+                <span class="conv-drop-text">Carpeta con archivos de audio</span>
+                <span class="conv-drop-hint">Arrastra la carpeta o haz clic para seleccionar</span>
               </div>
               <input id="conv-input" type="text" class="conv-path-input hidden" readonly />
             </div>
 
             <div class="form-grid">
               <label class="field">
-                <span>Formato</span>
+                <span>Formato de salida</span>
                 <select id="conv-format">
                   <option value="">Elegir formato</option>
                   <option value="mp3">MP3</option>
                   <option value="wav">WAV</option>
                   <option value="aiff">AIFF</option>
+                  <option value="flac">FLAC</option>
+                  <option value="m4a">M4A</option>
                 </select>
               </label>
               <label class="field">
@@ -278,9 +293,9 @@
 
             <div class="conv-drop-zone" id="conv-output-drop">
               <div class="conv-drop-content">
-                <span class="conv-drop-icon">📂</span>
+                <span class="iconify conv-drop-icon" data-icon="mdi:folder-outline"></span>
                 <span class="conv-drop-text">Carpeta de salida</span>
-                <span class="conv-drop-hint">Arrastra la carpeta de destino</span>
+                <span class="conv-drop-hint">Arrastra la carpeta de destino o haz clic para seleccionar</span>
               </div>
               <input id="conv-output" type="text" class="conv-path-input hidden" readonly />
             </div>
@@ -316,7 +331,7 @@
           <div class="panel-body">
             <div class="conv-drop-zone" id="bpm-input-drop">
               <div class="conv-drop-content">
-                <span class="conv-drop-icon">📂</span>
+                <span class="iconify conv-drop-icon" data-icon="mdi:folder-music-outline"></span>
                 <span class="conv-drop-text">Carpeta con archivos</span>
                 <span class="conv-drop-hint">Arrastra la carpeta o haz clic para seleccionar</span>
               </div>
@@ -454,7 +469,7 @@
             
             <div class="conv-drop-zone" id="meta-input-drop">
               <div class="conv-drop-content">
-                <span class="conv-drop-icon">📂</span>
+                <span class="iconify conv-drop-icon" data-icon="mdi:folder-music-outline"></span>
                 <span class="conv-drop-text">Carpeta con archivos</span>
                 <span class="conv-drop-hint">Arrastra la carpeta o haz clic para seleccionar</span>
               </div>

@@ -53,14 +53,13 @@ async function getFilesFromHandle(dirHandle) {
 }
 
 // Language toggle in sidebar - Initialize on DOMContentLoaded
-let langToggle, langIcon, brandSubtitle;
+let langToggle, brandSubtitle;
 
 document.addEventListener("DOMContentLoaded", () => {
   langToggle = document.getElementById("lang-toggle");
-  langIcon = document.getElementById("lang-icon");
   brandSubtitle = document.getElementById("brand-subtitle");
   
-  if (langToggle && langIcon && brandSubtitle) {
+  if (langToggle && brandSubtitle) {
     langToggle.addEventListener("click", () => {
       const currentLang = localStorage.getItem("musickind-lang") || "es";
       const newLang = currentLang === "es" ? "en" : "es";
@@ -70,17 +69,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (langSelect) langSelect.value = newLang;
       applyLanguage(newLang);
       
-      // Update icon
-      langIcon.textContent = "🌐";
+      // Update brand subtitle
       brandSubtitle.textContent = translations[newLang].dashboard;
       
       // Save and apply
       localStorage.setItem("musickind-lang", newLang);
       showToast(`Idioma cambiado a ${newLang === "es" ? "Español" : "English"}`, "success");
     });
-    
-    // Initialize language icon
-    langIcon.textContent = "🌐";
     
     // Apply saved language on load
     const savedLang = localStorage.getItem("musickind-lang");
@@ -1413,9 +1408,9 @@ function applyLanguage(lang) {
   if (navBtns[4]) navBtns[4].textContent = t.bpm;
   if (navBtns[5]) navBtns[5].textContent = t.settings;
   
-  // Update sidebar brand
-  const brandSub = document.querySelector(".brand-sub");
-  if (brandSub) brandSub.textContent = t.dashboard;
+  // Update sidebar brand subtitle only (not the whole container)
+  const brandSubtitle = document.getElementById("brand-subtitle");
+  if (brandSubtitle) brandSubtitle.textContent = t.dashboard;
   
   // Update hero
   document.querySelector(".hero h1").textContent = t.panelTitle;
@@ -1440,14 +1435,21 @@ async function initFFmpegStatus() {
   let isInstalled = true;
   
   try {
-    const res = await fetch("/api/ffmpeg-status");
+    // Add timeout to prevent indefinite loading
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    
+    const res = await fetch("/api/ffmpeg-status", { signal: controller.signal });
+    clearTimeout(timeoutId);
+    
     if (res.ok) {
       const data = await res.json();
       isInstalled = data.installed === true;
     }
   } catch (e) {
-    console.log("FFmpeg status check skipped:", e.message);
+    console.log("FFmpeg status check:", e.message);
     // Keep isInstalled = true to not block UI
+    // Default "Instalado" will show
   }
   
   // Update settings panel

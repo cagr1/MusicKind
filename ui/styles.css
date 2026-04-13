@@ -401,10 +401,17 @@ body {
   color: var(--accent) !important;
   padding: 8px 10px !important;
   font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .icon-btn:hover {
   background: rgba(242, 92, 84, 0.2) !important;
+}
+
+.icon-btn .iconify {
+  color: var(--accent);
 }
 
 .input-hint {
@@ -434,6 +441,30 @@ body {
 
 .sets-formats {
   color: var(--accent-2) !important;
+}
+
+.conv-instructions {
+  background: rgba(28, 34, 48, 0.6);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+
+.conv-instructions p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.conv-instructions p:last-child {
+  margin-bottom: 0;
+}
+
+.conv-drop-icon {
+  font-size: 32px;
+  color: var(--accent);
 }
 
 .btn.primary {
