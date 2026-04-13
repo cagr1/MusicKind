@@ -1,8 +1,10 @@
 # MusicKind - Plan de Desarrollo
 
 ## ESTADO ACTUAL (12/04/2026)
-- Dashboard funcional con tabs: Clasificador, Creador de Sets, Convertidor, Configuración
-- Progreso visible durante el procesamiento implementado
+- Dashboard funcional con tabs: Clasificador, Creador de Sets, Convertidor, Auto-Tag, Editor BPM, Configuración
+- Toast notifications en esquina superior derecha
+- Drag & drop zones para convertir y auto-tag
+- Cambio de idioma visible en sidebar
 - App corre como web (npm run dashboard) o Electron (npm run electron)
 
 ## TAREAS PENDIENTES

@@ -824,6 +824,157 @@ body {
   font-family: monospace;
 }
 
+/* Toast Notifications */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--panel-2);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 14px 18px;
+  min-width: 280px;
+  max-width: 400px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow);
+  animation: toastIn 0.3s ease;
+  pointer-events: auto;
+}
+
+.toast.success {
+  border-color: var(--accent-2);
+}
+
+.toast.error {
+  border-color: var(--accent);
+}
+
+.toast-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.toast.success .toast-icon {
+  color: var(--accent-2);
+}
+
+.toast.error .toast-icon {
+  color: var(--accent);
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.toast-close:hover {
+  color: var(--text);
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+.toast.hiding {
+  animation: toastOut 0.3s ease forwards;
+}
+
+/* Drop zone styles */
+.conv-drop-zone {
+  border: 2px dashed var(--stroke);
+  border-radius: 16px;
+  padding: 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 16px;
+  background: rgba(28, 34, 48, 0.3);
+}
+
+.conv-drop-zone:hover {
+  border-color: var(--accent);
+  background: rgba(242, 92, 84, 0.08);
+}
+
+.conv-drop-zone.drag-over {
+  border-color: var(--accent-2);
+  background: rgba(0, 208, 132, 0.1);
+}
+
+.conv-drop-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.conv-drop-icon {
+  font-size: 32px;
+}
+
+.conv-drop-text {
+  font-size: 15px;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.conv-drop-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.conv-path-input {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.conv-path-input::placeholder {
+  color: #6b7285;
+}
+
 /* Progress Bar Styles */
 .progress-container {
   background: rgba(28, 34, 48, 0.6);

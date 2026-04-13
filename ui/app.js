@@ -7,14 +7,66 @@ async function selectDirectory(title) {
       return result;
     }
     
-    // For web environment (development server) - show manual input prompt
-    alert('Para seleccionar carpetas, ejecuta la aplicación como app de escritorio: npm run electron');
-    const input = prompt(`Ingresa la ruta manualmente para: ${title}`);
-    return input;
+    // For web environment (development server) - show toast notification
+    showToast("Usa la app de escritorio para seleccionar carpetas: npm run electron", "error");
+    return null;
   } catch (error) {
     console.error('Error selecting directory:', error);
+    showToast("Error al seleccionar carpeta", "error");
     return null;
   }
+}
+
+// File selection for individual files (drag & drop or file picker)
+async function selectFiles(title, multiple = false) {
+  try {
+    // For Electron environment - use native dialog
+    if (window.electronAPI && window.electronAPI.openFiles) {
+      const result = await window.electronAPI.openFiles(title, multiple);
+      return result;
+    }
+    
+    // Fallback: use HTML file input
+    return new Promise((resolve) => {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.multiple = multiple;
+      input.accept = ".mp3,.wav,.aiff,.aif,.flac,.m4a";
+      
+      input.onchange = (e) => {
+        const files = Array.from(e.target.files).map(f => f.path || f.name);
+        resolve(multiple ? files : files[0] || null);
+      };
+      
+      input.click();
+    });
+  } catch (error) {
+    console.error('Error selecting files:', error);
+    showToast("Error al seleccionar archivos", "error");
+    return null;
+  }
+}
+
+// Drag and drop handler
+function setupDragDrop(element, onFilesDropped) {
+  element.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    element.classList.add("drag-over");
+  });
+  
+  element.addEventListener("dragleave", () => {
+    element.classList.remove("drag-over");
+  });
+  
+  element.addEventListener("drop", (e) => {
+    e.preventDefault();
+    element.classList.remove("drag-over");
+    
+    const files = Array.from(e.dataTransfer.files).map(f => f.path || f.name);
+    if (files.length > 0) {
+      onFilesDropped(files);
+    }
+  });
 }
 
 // Check FFmpeg status on startup
@@ -74,17 +126,49 @@ document.getElementById('set-output-browse').addEventListener('click', async () 
   }
 });
 
-document.getElementById('conv-input-browse').addEventListener('click', async () => {
-  const path = await selectDirectory('Selecciona carpeta de entrada');
-  if (path) {
-    document.getElementById('conv-input').value = path;
+// Converter drop zones
+const convInputDrop = document.getElementById("conv-input-drop");
+const convOutputDrop = document.getElementById("conv-output-drop");
+const convInput = document.getElementById("conv-input");
+const convOutput = document.getElementById("conv-output");
+
+// Setup drag & drop for converter input
+setupDragDrop(convInputDrop, async (files) => {
+  if (files.length === 1) {
+    convInput.value = files[0];
+    convInput.classList.remove("hidden");
+    convInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
+  } else {
+    showToast("Selecciona una carpeta", "info");
   }
 });
 
-document.getElementById('conv-output-browse').addEventListener('click', async () => {
-  const path = await selectDirectory('Selecciona carpeta de salida');
+convInputDrop.addEventListener("click", async () => {
+  const path = await selectDirectory("Selecciona carpeta de entrada");
   if (path) {
-    document.getElementById('conv-output').value = path;
+    convInput.value = path;
+    convInput.classList.remove("hidden");
+    convInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
+  }
+});
+
+// Setup drag & drop for converter output
+setupDragDrop(convOutputDrop, async (files) => {
+  if (files.length === 1) {
+    convOutput.value = files[0];
+    convOutput.classList.remove("hidden");
+    convOutputDrop.querySelector(".conv-drop-content").classList.add("hidden");
+  } else {
+    showToast("Selecciona una carpeta", "info");
+  }
+});
+
+convOutputDrop.addEventListener("click", async () => {
+  const path = await selectDirectory("Selecciona carpeta de salida");
+  if (path) {
+    convOutput.value = path;
+    convOutput.classList.remove("hidden");
+    convOutputDrop.querySelector(".conv-drop-content").classList.add("hidden");
   }
 });
 
@@ -428,9 +512,16 @@ const convRun = document.getElementById("conv-run");
 const convCancel = document.getElementById("conv-cancel");
 let convProcessId = null;
 
+// Converter drop zones - already declared above at line 130
+const convInputPath = document.getElementById("conv-input");
+const convOutputPath = document.getElementById("conv-output");
+
+// Ensure we have the correct elements (if they exist from new HTML structure)
+const convInputDropZone = document.getElementById("conv-input-drop");
+const convOutputDropZone = document.getElementById("conv-output-drop");
 convRun.addEventListener("click", async () => {
-  const inputPath = document.getElementById("conv-input").value.trim();
-  const outputPath = document.getElementById("conv-output").value.trim();
+  const inputPath = convInputPath.value.trim();
+  const outputPath = convOutputPath.value.trim();
   const format = document.getElementById("conv-format").value;
   const bitrate = document.getElementById("conv-bitrate").value;
   const status = document.getElementById("conv-status");
@@ -1017,6 +1108,9 @@ async function loadSettings() {
   } catch (error) {
     console.error("Error loading settings:", error);
   }
+  
+  // Load FFmpeg status after settings
+  initFFmpegStatus();
 }
 
 // Save settings
@@ -1113,7 +1207,10 @@ const translations = {
     classifier: "Clasificador",
     sets: "Creador de Sets",
     converter: "Convertidor",
+    metadata: "Auto-Tag",
+    bpm: "Editor BPM",
     settings: "Configuracion",
+    dashboard: "Dashboard",
     sidebarNote: "Panel de control para DJs"
   },
   en: {
@@ -1122,7 +1219,10 @@ const translations = {
     classifier: "Classifier",
     sets: "Set Creator",
     converter: "Converter",
+    metadata: "Auto-Tag",
+    bpm: "BPM Editor",
     settings: "Settings",
+    dashboard: "Dashboard",
     sidebarNote: "Control panel for DJs"
   }
 };
@@ -1130,12 +1230,18 @@ const translations = {
 function applyLanguage(lang) {
   const t = translations[lang] || translations.es;
   
-  // Update navigation
+  // Update navigation (5 tabs now)
   const navBtns = document.querySelectorAll(".nav-btn");
   if (navBtns[0]) navBtns[0].textContent = t.classifier;
   if (navBtns[1]) navBtns[1].textContent = t.sets;
   if (navBtns[2]) navBtns[2].textContent = t.converter;
-  if (navBtns[3]) navBtns[3].textContent = t.settings;
+  if (navBtns[3]) navBtns[3].textContent = t.metadata;
+  if (navBtns[4]) navBtns[4].textContent = t.bpm;
+  if (navBtns[5]) navBtns[5].textContent = t.settings;
+  
+  // Update sidebar brand
+  const brandSub = document.querySelector(".brand-sub");
+  if (brandSub) brandSub.textContent = t.dashboard;
   
   // Update hero
   document.querySelector(".hero h1").textContent = t.panelTitle;
@@ -1208,6 +1314,40 @@ function setupFFmpegWarningButtons() {
       document.querySelector("[data-tab='settings']").classList.add("active");
     });
   });
+}
+
+// Toast notification system
+function showToast(message, type = "info", duration = 4000) {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+  
+  const toast = document.createElement("div");
+  toast.className = `toast ${type}`;
+  
+  const icon = type === "success" ? "✓" : type === "error" ? "✕" : "ℹ";
+  
+  toast.innerHTML = `
+    <span class="toast-icon">${icon}</span>
+    <span class="toast-message">${message}</span>
+    <button class="toast-close">×</button>
+  `;
+  
+  container.appendChild(toast);
+  
+  const closeBtn = toast.querySelector(".toast-close");
+  closeBtn.addEventListener("click", () => hideToast(toast));
+  
+  if (duration > 0) {
+    setTimeout(() => hideToast(toast), duration);
+  }
+  
+  return toast;
+}
+
+function hideToast(toast) {
+  if (!toast) return;
+  toast.classList.add("hiding");
+  setTimeout(() => toast.remove(), 300);
 }
 
 // Apply saved language

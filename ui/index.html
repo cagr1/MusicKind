@@ -8,6 +8,7 @@
   </head>
   <body>
     <div class="bg-glow"></div>
+    <div id="toast-container" class="toast-container"></div>
     <div class="app">
       <aside class="sidebar">
         <div class="brand">
@@ -228,21 +229,16 @@
             <button id="conv-goto-settings" class="btn btn-small">Ir a Configuración</button>
           </div>
           <div class="panel-body">
+            <div class="conv-drop-zone" id="conv-input-drop">
+              <div class="conv-drop-content">
+                <span class="conv-drop-icon">📁</span>
+                <span class="conv-drop-text">Arrastra archivos o carpeta aquí</span>
+                <span class="conv-drop-hint">o haz clic para seleccionar</span>
+              </div>
+              <input id="conv-input" type="text" class="conv-path-input hidden" readonly />
+            </div>
+
             <div class="form-grid">
-              <label class="field">
-                <span>Carpeta de entrada</span>
-                <div class="input-group">
-                  <input id="conv-input" type="text" placeholder="/ruta/audios" readonly />
-                  <button id="conv-input-browse" class="btn browse-btn">Examinar</button>
-                </div>
-              </label>
-              <label class="field">
-                <span>Carpeta de salida</span>
-                <div class="input-group">
-                  <input id="conv-output" type="text" placeholder="/ruta/convertidos" readonly />
-                  <button id="conv-output-browse" class="btn browse-btn">Examinar</button>
-                </div>
-              </label>
               <label class="field">
                 <span>Formato</span>
                 <select id="conv-format">
@@ -261,6 +257,15 @@
                   <option value="320">320 kbps</option>
                 </select>
               </label>
+            </div>
+
+            <div class="conv-drop-zone" id="conv-output-drop">
+              <div class="conv-drop-content">
+                <span class="conv-drop-icon">📂</span>
+                <span class="conv-drop-text">Carpeta de salida</span>
+                <span class="conv-drop-hint">Arrastra la carpeta de destino</span>
+              </div>
+              <input id="conv-output" type="text" class="conv-path-input hidden" readonly />
             </div>
 
             <div class="actions">
