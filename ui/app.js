@@ -1,3 +1,31 @@
+// Language translations - defined at top to avoid temporal dead zone issues
+const translations = {
+  es: {
+    panelTitle: "Panel de Control",
+    panelSubtitle: "Clasifica por genero, crea sets y convierte audio sin escribir comandos.",
+    classifier: "Clasificador",
+    sets: "Creador de Sets",
+    converter: "Convertidor",
+    metadata: "Auto-Tag",
+    bpm: "Editor BPM",
+    settings: "Configuracion",
+    dashboard: "Dashboard",
+    sidebarNote: "Panel de control para DJs"
+  },
+  en: {
+    panelTitle: "Dashboard",
+    panelSubtitle: "Classify by genre, create sets and convert audio without writing commands.",
+    classifier: "Classifier",
+    sets: "Set Creator",
+    converter: "Converter",
+    metadata: "Auto-Tag",
+    bpm: "BPM Editor",
+    settings: "Settings",
+    dashboard: "Dashboard",
+    sidebarNote: "Control panel for DJs"
+  }
+};
+
 // File dialog functionality
 async function selectDirectory(title) {
   try {
@@ -1385,34 +1413,6 @@ ffmpegInstall.addEventListener("click", async () => {
     statusText.className = "ffmpeg-value error";
   }
 });
-
-// Language translations
-const translations = {
-  es: {
-    panelTitle: "Panel de Control",
-    panelSubtitle: "Clasifica por genero, crea sets y convierte audio sin escribir comandos.",
-    classifier: "Clasificador",
-    sets: "Creador de Sets",
-    converter: "Convertidor",
-    metadata: "Auto-Tag",
-    bpm: "Editor BPM",
-    settings: "Configuracion",
-    dashboard: "Dashboard",
-    sidebarNote: "Panel de control para DJs"
-  },
-  en: {
-    panelTitle: "Dashboard",
-    panelSubtitle: "Classify by genre, create sets and convert audio without writing commands.",
-    classifier: "Classifier",
-    sets: "Set Creator",
-    converter: "Converter",
-    metadata: "Auto-Tag",
-    bpm: "BPM Editor",
-    settings: "Settings",
-    dashboard: "Dashboard",
-    sidebarNote: "Control panel for DJs"
-  }
-};
 
 function applyLanguage(lang) {
   const t = translations[lang] || translations.es;
