@@ -3,15 +3,16 @@
 ## ESTADO ACTUAL (12/04/2026)
 
 ### PROBLEMAS REPORTADOS POR USUARIO (CRÍTICOS)
-1. **Toggle de idioma** - [EN PROGRESO] Mover a parte inferior del sidebar como "ES | EN"
+1. **Toggle de idioma** - [EN PROGRESO] "ES | EN" en footer del sidebar
 2. **Validación archivos** - [PENDIENTE] Validación ESTRICTA solo audio en convertidor
 3. **Eliminar archivos** - [PENDIENTE] Botón × en cada archivo para eliminar
-4. **Auto-tag error** - [PENDIENTE] Fix "Directory not found: archivo.mp3"
+4. **Auto-tag error** - [PENDIENTE] "Directory not found: archivo.mp3"
 5. **BPM analyzer** - [PENDIENTE] Verificar que funciona correctamente
+6. **Server crash al convertir** - [EN PROGRESO] "Cannot write headers after they are sent"
 
 ### CAMBIOS REALIZADOS ESTA SESIÓN
+- [x] Fix server crash: APIs de convert, set-create, genre-classify y bpm/analyze ya no envían respuesta dual
 - [x] Toggle idioma movido a footer del sidebar "ES | EN" con estilo visible
-- [x] applyLanguage() ya no referencing brand-subtitle que no existe
 - [x] Removido código de langIcon que ya no se usa
 
 ---
@@ -61,6 +62,10 @@
 ---
 
 ## HISTORIAL
+
+### 2026-04-12 - Fix Server Crash
+- Corregido error "Cannot write headers after they are sent"
+- Las APIs de streaming ya no envían respuesta dual
 
 ### 2026-04-12 - Correcciones de UX/UI
 - Iconos con Iconify (Material Design)

@@ -83,8 +83,11 @@ async function handleApi(req, res, url) {
     
     const args = [path.join(projectRoot, "src", "cli.js"), "--input", inputPath];
     if (dryRun) args.push("--dry-run");
-    const result = await runProcessWithProgress(process.execPath, args, res, processId);
-    return sendJson(res, result.ok ? { ok: true, output: result.output, ffmpegAvailable } : result, result.ok ? 200 : 500);
+    
+    // Note: runProcessWithProgress handles response completion (res.end())
+    // so no further response should be sent after this
+    await runProcessWithProgress(process.execPath, args, res, processId);
+    return; // Response already sent by runProcessWithProgress
   }
 
   if (req.method === "POST" && url.pathname === "/api/set-counts") {
@@ -127,8 +130,10 @@ async function handleApi(req, res, url) {
     if (tempFormat) args.push("--temp-format", tempFormat);
     if (tempBitrate) args.push("--temp-bitrate", String(tempBitrate));
 
-    const result = await runProcessWithProgress("python3", args, res, processId);
-    return sendJson(res, result.ok ? { ok: true, output: result.output, ffmpegAvailable } : result, result.ok ? 200 : 500);
+    // Note: runProcessWithProgress handles response completion (res.end())
+    // so no further response should be sent after this
+    await runProcessWithProgress("python3", args, res, processId);
+    return; // Response already sent by runProcessWithProgress
   }
 
   if (req.method === "POST" && url.pathname === "/api/convert") {
@@ -142,13 +147,13 @@ async function handleApi(req, res, url) {
     if (!inputPath || !outputPath || !format) {
       return sendJson(res, { ok: false, error: "inputPath, outputPath y format requeridos" }, 400);
     }
-
+    
     // Check FFmpeg availability
     const ffmpegAvailable = await checkFFmpeg();
     if (!ffmpegAvailable) {
       return sendJson(res, { ok: false, error: "FFmpeg no disponible. Instala FFmpeg para usar el convertidor." }, 400);
     }
-
+    
     const args = [
       path.join(projectRoot, "src", "convert_audio.py"),
       "--input",
@@ -160,8 +165,10 @@ async function handleApi(req, res, url) {
     ];
     if (bitrate) args.push("--bitrate", String(bitrate));
 
-    const result = await runProcessWithProgress("python3", args, res, processId);
-    return sendJson(res, result.ok ? { ok: true, output: result.output, ffmpegAvailable } : result, result.ok ? 200 : 500);
+    // Note: runProcessWithProgress handles response completion (res.end())
+    // so no further response should be sent after this
+    await runProcessWithProgress("python3", args, res, processId);
+    return; // Response already sent by runProcessWithProgress
   }
 
   // Settings API
@@ -334,8 +341,10 @@ async function handleApi(req, res, url) {
       args.push("--analysis-seconds", String(analysisSeconds));
     }
     
-    const result = await runProcessWithProgress("python3", args, res, processId);
-    return sendJson(res, result.ok ? { ok: true, output: result.output, ffmpegAvailable } : result, result.ok ? 200 : 500);
+    // Note: runProcessWithProgress handles response completion (res.end())
+    // so no further response should be sent after this
+    await runProcessWithProgress("python3", args, res, processId);
+    return; // Response already sent by runProcessWithProgress
   }
 
   res.writeHead(404);
