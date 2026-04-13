@@ -7,15 +7,88 @@ async function selectDirectory(title) {
       return result;
     }
     
-    // For web environment (development server) - show toast notification
-    showToast("Usa la app de escritorio para seleccionar carpetas: npm run electron", "error");
+    // For web environment - use File System Access API
+    if ('showDirectoryPicker' in window) {
+      try {
+        const dirHandle = await window.showDirectoryPicker();
+        // Get the path from the handle - we'll use a workaround to get the path
+        // since the API doesn't directly expose the path
+        // We store the handle and use it later for file access
+        return dirHandle;
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          return null; // User cancelled
+        }
+        throw err;
+      }
+    }
+    
+    // Fallback for browsers without File System Access API
+    showToast("Tu navegador no soporta selección de carpetas. Usa la app de escritorio o arrastra archivos aquí.", "error");
     return null;
   } catch (error) {
     console.error('Error selecting directory:', error);
-    showToast("Error al seleccionar carpeta", "error");
+    showToast("Error al seleccionar carpeta: " + error.message, "error");
     return null;
   }
 }
+
+// Check if we have a valid directory handle (for web File System Access API)
+function isValidDirectoryHandle(handle) {
+  return handle && typeof handle === 'object' && 'kind' in handle && handle.kind === 'directory';
+}
+
+// Resolve a directory handle to actual files (for File System Access API)
+async function getFilesFromHandle(dirHandle) {
+  const files = [];
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind === 'file') {
+      // Get file to get its path
+      const file = await entry.getFile();
+      file.handle = entry; // Store the handle reference
+      files.push(file);
+    }
+  }
+  return files;
+}
+
+// Language toggle in sidebar - Initialize on DOMContentLoaded
+let langToggle, langIcon, brandSubtitle;
+
+document.addEventListener("DOMContentLoaded", () => {
+  langToggle = document.getElementById("lang-toggle");
+  langIcon = document.getElementById("lang-icon");
+  brandSubtitle = document.getElementById("brand-subtitle");
+  
+  if (langToggle && langIcon && brandSubtitle) {
+    langToggle.addEventListener("click", () => {
+      const currentLang = localStorage.getItem("musickind-lang") || "es";
+      const newLang = currentLang === "es" ? "en" : "es";
+      
+      // Update language immediately
+      const langSelect = document.getElementById("cfg-language");
+      if (langSelect) langSelect.value = newLang;
+      applyLanguage(newLang);
+      
+      // Update icon
+      langIcon.textContent = "🌐";
+      brandSubtitle.textContent = translations[newLang].dashboard;
+      
+      // Save and apply
+      localStorage.setItem("musickind-lang", newLang);
+      showToast(`Idioma cambiado a ${newLang === "es" ? "Español" : "English"}`, "success");
+    });
+    
+    // Initialize language icon
+    langIcon.textContent = "🌐";
+    
+    // Apply saved language on load
+    const savedLang = localStorage.getItem("musickind-lang");
+    if (savedLang && brandSubtitle) {
+      brandSubtitle.textContent = translations[savedLang]?.dashboard || "Dashboard";
+    }
+  }
+});
 
 // File selection for individual files (drag & drop or file picker)
 async function selectFiles(title, multiple = false) {
@@ -172,6 +245,54 @@ convOutputDrop.addEventListener("click", async () => {
   }
 });
 
+// ==================== BPM EDITOR DROP ZONE ====================
+
+const bpmInputDrop = document.getElementById("bpm-input-drop");
+const bpmInputPath = document.getElementById("bpm-input");
+
+setupDragDrop(bpmInputDrop, async (files) => {
+  if (files.length === 1) {
+    bpmInputPath.value = files[0];
+    bpmInputPath.classList.remove("hidden");
+    bpmInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
+  } else {
+    showToast("Selecciona una carpeta", "info");
+  }
+});
+
+bpmInputDrop.addEventListener("click", async () => {
+  const path = await selectDirectory("Selecciona carpeta con archivos de audio");
+  if (path) {
+    bpmInputPath.value = path;
+    bpmInputPath.classList.remove("hidden");
+    bpmInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
+  }
+});
+
+// ==================== METADATA EDITOR DROP ZONE ====================
+
+const metaInputDrop = document.getElementById("meta-input-drop");
+const metaInputPath = document.getElementById("meta-input");
+
+setupDragDrop(metaInputDrop, async (files) => {
+  if (files.length === 1) {
+    metaInputPath.value = files[0];
+    metaInputPath.classList.remove("hidden");
+    metaInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
+  } else {
+    showToast("Selecciona una carpeta", "info");
+  }
+});
+
+metaInputDrop.addEventListener("click", async () => {
+  const path = await selectDirectory("Selecciona carpeta con archivos de audio");
+  if (path) {
+    metaInputPath.value = path;
+    metaInputPath.classList.remove("hidden");
+    metaInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
+  }
+});
+
 const navButtons = document.querySelectorAll(".nav-btn");
 const panels = {
   classifier: document.getElementById("tab-classifier"),
@@ -199,18 +320,30 @@ let genres = [];
 
 function renderGenres() {
   genresList.innerHTML = "";
+  
+  if (genres.length === 0) {
+    genresList.innerHTML = '<div class="genres-empty">No hay géneros definidos. Agrega uno para comenzar.</div>';
+    return;
+  }
+  
   genres.forEach((genre, idx) => {
     const chip = document.createElement("div");
     chip.className = "chip";
-    chip.innerHTML = `<span>${genre}</span>`;
-    const remove = document.createElement("button");
-    remove.textContent = "x";
-    remove.addEventListener("click", () => {
+    chip.innerHTML = `
+      <span>${genre}</span>
+      <button class="chip-remove" data-idx="${idx}" title="Eliminar género">×</button>
+    `;
+    genresList.appendChild(chip);
+  });
+  
+  // Add click handlers for remove buttons
+  document.querySelectorAll(".chip-remove").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      const idx = parseInt(e.target.dataset.idx);
       genres.splice(idx, 1);
       renderGenres();
+      showToast("Género eliminado", "info");
     });
-    chip.appendChild(remove);
-    genresList.appendChild(chip);
   });
 }
 
@@ -638,7 +771,6 @@ convCancel.addEventListener("click", async () => {
 
 // ==================== METADATA EDITOR FUNCTIONALITY ====================
 
-const metaBrowse = document.getElementById("meta-browse");
 const metaInput = document.getElementById("meta-input");
 const metaLoad = document.getElementById("meta-load");
 const metaIdentifyAll = document.getElementById("meta-identify-all");
@@ -656,14 +788,6 @@ const metaStatus = document.getElementById("meta-status");
 let metaFiles = [];
 let metaProcessId = null;
 let metaResultsData = [];
-
-// Browse for folder
-metaBrowse.addEventListener("click", async () => {
-  const path = await selectDirectory("Selecciona carpeta con archivos de audio");
-  if (path) {
-    metaInput.value = path;
-  }
-});
 
 // Load files from selected folder
 metaLoad.addEventListener("click", async () => {
@@ -703,22 +827,80 @@ metaLoad.addEventListener("click", async () => {
   }
 });
 
+// Audio file extensions filter
+const AUDIO_EXTENSIONS = ['mp3', 'wav', 'aiff', 'aif', 'flac', 'm4a'];
+
+function isAudioFile(fileName) {
+  const ext = fileName.split('.').pop().toLowerCase();
+  return AUDIO_EXTENSIONS.includes(ext);
+}
+
 // Render file list
 function renderMetaFileList(files, showStatus = true) {
   metaFileList.innerHTML = "";
   
-  files.forEach((filePath) => {
+  // Filter audio files only
+  const audioFiles = files.filter(f => {
+    const fileName = f.split("/").pop();
+    return isAudioFile(fileName);
+  });
+  
+  const rejectedCount = files.length - audioFiles.length;
+  
+  if (rejectedCount > 0) {
+    metaFileList.innerHTML = `<div class="file-rejected">${rejectedCount} archivo(s) no válido(s) ignorado(s)</div>`;
+  }
+  
+  if (audioFiles.length === 0) {
+    metaFileList.innerHTML += '<div class="empty-state">No se encontraron archivos de audio válidos</div>';
+    return;
+  }
+  
+  metaFiles = audioFiles;
+  
+  audioFiles.forEach((filePath, idx) => {
     const fileName = filePath.split("/").pop();
-    const ext = filePath.split(".").pop().toUpperCase();
+    const ext = fileName.split(".").pop().toUpperCase();
     const fileItem = document.createElement("div");
     fileItem.className = "file-item";
     fileItem.dataset.path = filePath;
+    fileItem.dataset.idx = idx;
     fileItem.innerHTML = `
+      <button class="file-item-remove" data-idx="${idx}" title="Quitar archivo">×</button>
       <span class="file-item-name">${fileName}</span>
       <span class="file-item-meta">${ext}</span>
     `;
     metaFileList.appendChild(fileItem);
   });
+  
+  // Add click handlers for remove buttons
+  document.querySelectorAll(".file-item-remove").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const idx = parseInt(e.target.dataset.idx);
+      removeMetaFile(idx);
+    });
+  });
+}
+
+function removeMetaFile(idx) {
+  if (idx >= 0 && idx < metaFiles.length) {
+    const removedFile = metaFiles[idx].split("/").pop();
+    metaFiles.splice(idx, 1);
+    
+    // Re-render with updated indices
+    const container = metaFileList;
+    const currentScroll = container.scrollTop;
+    renderMetaFileList(metaFiles, false);
+    container.scrollTop = currentScroll;
+    
+    showToast(`"${removedFile}" removido`, "info");
+    
+    // If no files left, show original empty state
+    if (metaFiles.length === 0) {
+      metaFileList.innerHTML = '<div class="empty-state">Selecciona una carpeta para ver los archivos</div>';
+    }
+  }
 }
 
 // Identify all files
@@ -953,14 +1135,6 @@ let bpmResults = [];
 // Slider value display
 bpmSeconds.addEventListener("input", () => {
   bpmSecondsValue.textContent = `${bpmSeconds.value}s`;
-});
-
-// Browse for folder
-bpmBrowse.addEventListener("click", async () => {
-  const path = await selectDirectory("Selecciona carpeta con archivos de audio");
-  if (path) {
-    bpmInput.value = path;
-  }
 });
 
 // Analyze BPM

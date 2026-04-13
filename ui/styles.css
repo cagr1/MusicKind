@@ -76,6 +76,27 @@ body {
 .brand-sub {
   color: var(--muted);
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lang-toggle {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.lang-toggle:hover {
+  opacity: 1;
+}
+
+#lang-icon {
+  font-size: 16px;
 }
 
 .nav {
@@ -286,6 +307,25 @@ body {
   margin-top: 12px;
 }
 
+.genres-empty {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 12px 0;
+  text-align: center;
+}
+
+.genres-note {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--stroke);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.genres-note p {
+  margin: 0 0 4px;
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -295,6 +335,23 @@ body {
   background: #20273a;
   border: 1px solid var(--stroke);
   font-size: 13px;
+}
+
+.chip-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0.6;
+  transition: opacity 0.2s, color 0.2s;
+}
+
+.chip-remove:hover {
+  opacity: 1;
+  color: var(--accent);
 }
 
 .chip button {
@@ -336,6 +393,47 @@ body {
 
 .browse-btn:hover {
   background: rgba(242, 92, 84, 0.2);
+}
+
+.icon-btn {
+  background: rgba(242, 92, 84, 0.1) !important;
+  border: 1px solid var(--accent) !important;
+  color: var(--accent) !important;
+  padding: 8px 10px !important;
+  font-size: 16px;
+}
+
+.icon-btn:hover {
+  background: rgba(242, 92, 84, 0.2) !important;
+}
+
+.input-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: -4px;
+}
+
+.sets-instructions {
+  background: rgba(28, 34, 48, 0.6);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+
+.sets-instructions p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.sets-instructions p:last-child {
+  margin-bottom: 0;
+}
+
+.sets-formats {
+  color: var(--accent-2) !important;
 }
 
 .btn.primary {
@@ -424,6 +522,36 @@ body {
 .file-item-meta {
   font-size: 12px;
   color: var(--muted);
+}
+
+.file-item-remove {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+
+.file-item:hover .file-item-remove {
+  opacity: 1;
+}
+
+.file-item-remove:hover {
+  color: var(--accent);
+}
+
+.file-rejected {
+  font-size: 12px;
+  color: var(--accent);
+  padding: 8px 12px;
+  background: rgba(242, 92, 84, 0.1);
+  border-radius: 8px;
+  margin-bottom: 8px;
 }
 
 .file-item-edit {
