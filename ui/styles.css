@@ -126,6 +126,52 @@ body {
   background: rgba(242, 92, 84, 0.12);
 }
 
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 24px;
+  border-top: 1px solid var(--stroke);
+}
+
+.lang-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lang-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.lang-btn {
+  background: var(--panel-2);
+  border: 1px solid var(--stroke);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.lang-btn:hover {
+  border-color: var(--accent);
+  background: rgba(242, 92, 84, 0.1);
+}
+
+.lang-btn.active-lang {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.lang-sep {
+  color: var(--muted);
+  opacity: 0.5;
+}
+
 .sidebar-note {
   margin-top: 32px;
   font-size: 13px;

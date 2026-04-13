@@ -53,37 +53,55 @@ async function getFilesFromHandle(dirHandle) {
 }
 
 // Language toggle in sidebar - Initialize on DOMContentLoaded
-let langToggle, brandSubtitle;
+let langToggle, langActive, langInactive;
 
 document.addEventListener("DOMContentLoaded", () => {
   langToggle = document.getElementById("lang-toggle");
-  brandSubtitle = document.getElementById("brand-subtitle");
+  langActive = document.getElementById("lang-active");
+  langInactive = document.getElementById("lang-inactive");
   
-  if (langToggle && brandSubtitle) {
+  if (langToggle && langActive && langInactive) {
+    // Initialize active/inactive language display
+    const currentLang = localStorage.getItem("musickind-lang") || "es";
+    updateLangDisplay(currentLang);
+    
     langToggle.addEventListener("click", () => {
       const currentLang = localStorage.getItem("musickind-lang") || "es";
       const newLang = currentLang === "es" ? "en" : "es";
       
-      // Update language immediately
+      // Update language in settings select
       const langSelect = document.getElementById("cfg-language");
       if (langSelect) langSelect.value = newLang;
+      
+      // Apply language to all UI elements
       applyLanguage(newLang);
       
-      // Update brand subtitle
-      brandSubtitle.textContent = translations[newLang].dashboard;
+      // Update the EN | ES display
+      updateLangDisplay(newLang);
       
-      // Save and apply
+      // Save to localStorage
       localStorage.setItem("musickind-lang", newLang);
+      
       showToast(`Idioma cambiado a ${newLang === "es" ? "Español" : "English"}`, "success");
     });
-    
-    // Apply saved language on load
-    const savedLang = localStorage.getItem("musickind-lang");
-    if (savedLang && brandSubtitle) {
-      brandSubtitle.textContent = translations[savedLang]?.dashboard || "Dashboard";
-    }
   }
 });
+
+function updateLangDisplay(lang) {
+  if (langActive && langInactive) {
+    if (lang === "es") {
+      langActive.textContent = "ES";
+      langActive.classList.add("active-lang");
+      langInactive.textContent = "EN";
+      langInactive.classList.remove("active-lang");
+    } else {
+      langActive.textContent = "EN";
+      langActive.classList.add("active-lang");
+      langInactive.textContent = "ES";
+      langInactive.classList.remove("active-lang");
+    }
+  }
+}
 
 // File selection for individual files (drag & drop or file picker)
 async function selectFiles(title, multiple = false) {
@@ -1407,10 +1425,6 @@ function applyLanguage(lang) {
   if (navBtns[3]) navBtns[3].textContent = t.metadata;
   if (navBtns[4]) navBtns[4].textContent = t.bpm;
   if (navBtns[5]) navBtns[5].textContent = t.settings;
-  
-  // Update sidebar brand subtitle only (not the whole container)
-  const brandSubtitle = document.getElementById("brand-subtitle");
-  if (brandSubtitle) brandSubtitle.textContent = t.dashboard;
   
   // Update hero
   document.querySelector(".hero h1").textContent = t.panelTitle;
