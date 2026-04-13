@@ -421,10 +421,15 @@
 
         <section class="panel hidden" id="tab-metadata">
           <div class="panel-header">
-            <h2>Editor de Metadata</h2>
-            <span class="pill">Audio</span>
+            <h2>Auto-Tag de Música</h2>
+            <span class="pill">Spotify</span>
           </div>
           <div class="panel-body">
+            <p class="meta-description">
+              Selecciona archivos de audio y deja que Spotify identifique la canción automaticamente. 
+              Los tags serán escritos y el archivo renombrado a: <strong>"Artista - Canción.ext"</strong>
+            </p>
+            
             <div class="form-grid">
               <label class="field">
                 <span>Carpeta con archivos</span>
@@ -437,52 +442,28 @@
 
             <div class="actions">
               <button id="meta-load" class="btn">Cargar archivos</button>
+              <button id="meta-identify-all" class="btn primary">Identificar todos</button>
+              <button id="meta-cancel" class="btn danger hidden">Cancelar</button>
+            </div>
+
+            <div id="meta-progress" class="progress-container hidden">
+              <div class="progress-info">
+                <span id="meta-progress-text">Preparando...</span>
+                <span id="meta-progress-percent">0%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="meta-progress-fill"></div>
+              </div>
+              <div class="progress-file" id="meta-current-file"></div>
             </div>
 
             <div id="meta-file-list" class="file-list">
               <div class="empty-state">Selecciona una carpeta para ver los archivos</div>
             </div>
 
-            <div id="meta-editor" class="metadata-editor hidden">
-              <h3>Editar: <span id="meta-filename"></span></h3>
-              <div class="form-grid meta-grid">
-                <label class="field">
-                  <span>Nombre del archivo</span>
-                  <input id="meta-new-filename" type="text" placeholder="Nuevo nombre sin extensión" />
-                </label>
-                <label class="field">
-                  <span>Título</span>
-                  <input id="meta-title" type="text" placeholder="Título de la canción" />
-                </label>
-                <label class="field">
-                  <span>Artista</span>
-                  <input id="meta-artist" type="text" placeholder="Nombre del artista" />
-                </label>
-                <label class="field">
-                  <span>Álbum</span>
-                  <input id="meta-album" type="text" placeholder="Nombre del álbum" />
-                </label>
-                <label class="field">
-                  <span>Año</span>
-                  <input id="meta-year" type="number" placeholder="2024" min="1900" max="2099" />
-                </label>
-                <label class="field">
-                  <span>Género</span>
-                  <input id="meta-genre" type="text" placeholder="Género musical" />
-                </label>
-                <label class="field">
-                  <span>Pista #</span>
-                  <input id="meta-track" type="number" placeholder="1" min="1" />
-                </label>
-              </div>
-              <div class="meta-preview">
-                <span>Vista previa:</span>
-                <code id="meta-preview-name">---</code>
-              </div>
-              <div class="actions">
-                <button id="meta-save" class="btn primary">Guardar cambios</button>
-                <button id="meta-cancel-edit" class="btn ghost">Cancelar</button>
-              </div>
+            <div id="meta-results" class="meta-results hidden">
+              <h3>Resultados:</h3>
+              <div id="meta-results-list"></div>
             </div>
 
             <div class="status" id="meta-status"></div>

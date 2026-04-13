@@ -24,10 +24,10 @@
 
 ### 3. EDICIÓN DE METADATA DE AUDIO [COMPLETADO]
 - [x] Crear módulo de edición de metadata (src/metadata_editor.js)
-- [x] Añadir nuevo tab "Editor de Metadata" en el dashboard
-- [x] Funcionalidad: buscar archivo, renombrar y escribir metadata
-- [x] Ejemplo: track01.mp3 -> Bad Bunny - inolvidable.mp3 + metadata actualizada
-- [x] Integrar con server.js para API de metadata
+- [x] Añadir nuevo tab "Auto-Tag de Música" en el dashboard
+- [x] Integración con Spotify API para identificar canciones automáticamente
+- [x] Escribir tags y renombrar archivos a formato "Artista - Canción.ext"
+- [x] Mostrar resultados finales de identificación
 
 ### 4. EDITOR DE BPM [COMPLETADO]
 - [x] Añadir nuevo tab "Editor de BPM" en el dashboard

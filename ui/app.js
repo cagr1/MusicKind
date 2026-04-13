@@ -550,23 +550,21 @@ convCancel.addEventListener("click", async () => {
 const metaBrowse = document.getElementById("meta-browse");
 const metaInput = document.getElementById("meta-input");
 const metaLoad = document.getElementById("meta-load");
+const metaIdentifyAll = document.getElementById("meta-identify-all");
+const metaCancel = document.getElementById("meta-cancel");
 const metaFileList = document.getElementById("meta-file-list");
-const metaEditor = document.getElementById("meta-editor");
-const metaFilename = document.getElementById("meta-filename");
-const metaNewFilename = document.getElementById("meta-new-filename");
-const metaTitle = document.getElementById("meta-title");
-const metaArtist = document.getElementById("meta-artist");
-const metaAlbum = document.getElementById("meta-album");
-const metaYear = document.getElementById("meta-year");
-const metaGenre = document.getElementById("meta-genre");
-const metaTrack = document.getElementById("meta-track");
-const metaPreviewName = document.getElementById("meta-preview-name");
-const metaSave = document.getElementById("meta-save");
-const metaCancelEdit = document.getElementById("meta-cancel-edit");
+const metaProgress = document.getElementById("meta-progress");
+const metaProgressText = document.getElementById("meta-progress-text");
+const metaProgressPercent = document.getElementById("meta-progress-percent");
+const metaProgressFill = document.getElementById("meta-progress-fill");
+const metaCurrentFile = document.getElementById("meta-current-file");
+const metaResults = document.getElementById("meta-results");
+const metaResultsList = document.getElementById("meta-results-list");
 const metaStatus = document.getElementById("meta-status");
 
-let currentMetaFile = null;
-let currentMetaData = null;
+let metaFiles = [];
+let metaProcessId = null;
+let metaResultsData = [];
 
 // Browse for folder
 metaBrowse.addEventListener("click", async () => {
@@ -603,8 +601,11 @@ metaLoad.addEventListener("click", async () => {
       return;
     }
     
-    metaStatus.textContent = `${data.files.length} archivos encontrados`;
-    renderMetaFileList(data.files);
+    metaFiles = data.files;
+    metaStatus.textContent = `${data.files.length} archivos encontrados. Presiona "Identificar todos" para comenzar.`;
+    renderMetaFileList(data.files, false);
+    metaResults.classList.add("hidden");
+    metaResultsList.innerHTML = "";
   } catch (e) {
     metaStatus.textContent = `Error: ${e.message}`;
     metaFileList.innerHTML = '<div class="empty-state">Error de conexion</div>';
@@ -612,65 +613,145 @@ metaLoad.addEventListener("click", async () => {
 });
 
 // Render file list
-function renderMetaFileList(files) {
+function renderMetaFileList(files, showStatus = true) {
   metaFileList.innerHTML = "";
   
-  files.forEach((filePath, index) => {
+  files.forEach((filePath) => {
     const fileName = filePath.split("/").pop();
+    const ext = filePath.split(".").pop().toUpperCase();
     const fileItem = document.createElement("div");
     fileItem.className = "file-item";
+    fileItem.dataset.path = filePath;
     fileItem.innerHTML = `
       <span class="file-item-name">${fileName}</span>
-      <span class="file-item-meta">${(filePath.split(".").pop()).toUpperCase()}</span>
-      <button class="btn btn-small file-item-edit">Editar</button>
+      <span class="file-item-meta">${ext}</span>
     `;
-    
-    fileItem.querySelector(".file-item-edit").addEventListener("click", (e) => {
-      e.stopPropagation();
-      loadMetaFile(filePath);
-    });
-    
-    fileItem.addEventListener("click", () => loadMetaFile(filePath));
     metaFileList.appendChild(fileItem);
   });
 }
 
-// Load a file for editing
-async function loadMetaFile(filePath) {
-  metaStatus.textContent = "Cargando metadata...";
+// Identify all files
+metaIdentifyAll.addEventListener("click", async () => {
+  if (metaFiles.length === 0) {
+    metaStatus.textContent = "Carga archivos primero.";
+    return;
+  }
   
-  try {
-    const res = await fetch(`/api/metadata?file=${encodeURIComponent(filePath)}`);
-    const data = await res.json();
+  metaProcessId = `meta-${Date.now()}`;
+  metaResultsData = [];
+  
+  // Show progress
+  metaProgress.classList.remove("hidden");
+  metaIdentifyAll.classList.add("hidden");
+  metaCancel.classList.remove("hidden");
+  metaStatus.textContent = "Identificando canciones...";
+  
+  const total = metaFiles.length;
+  let processed = 0;
+  
+  for (const filePath of metaFiles) {
+    const fileName = filePath.split("/").pop();
     
-    if (!data.ok) {
-      metaStatus.textContent = `Error: ${data.error}`;
-      return;
+    metaProgressText.textContent = `Identificando archivo ${processed + 1} de ${total}`;
+    metaProgressPercent.textContent = `${Math.round((processed / total) * 100)}%`;
+    metaProgressFill.style.width = `${(processed / total) * 100}%`;
+    metaCurrentFile.textContent = fileName;
+    
+    try {
+      const res = await fetch("/api/metadata/identify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filePath, processId: metaProcessId })
+      });
+      
+      const data = await res.json();
+      
+      if (data.ok) {
+        metaResultsData.push({
+          original: data.original,
+          result: data.result,
+          success: true
+        });
+        
+        // Update file item status
+        const fileItem = metaFileList.querySelector(`[data-path="${filePath}"]`);
+        if (fileItem) {
+          fileItem.classList.add("success");
+          fileItem.innerHTML = `
+            <span class="file-item-name">${data.result}</span>
+            <span class="file-item-meta">OK</span>
+          `;
+        }
+      } else {
+        metaResultsData.push({
+          original: fileName,
+          result: data.error || "Error desconocido",
+          success: false
+        });
+        
+        const fileItem = metaFileList.querySelector(`[data-path="${filePath}"]`);
+        if (fileItem) {
+          fileItem.classList.add("error");
+        }
+      }
+    } catch (e) {
+      metaResultsData.push({
+        original: fileName,
+        result: e.message,
+        success: false
+      });
     }
     
-    currentMetaFile = filePath;
-    currentMetaData = data.metadata;
-    
-    // Populate form
-    const fileName = filePath.split("/").pop();
-    const baseName = fileName.replace(/\.[^.]+$/, "");
-    metaFilename.textContent = fileName;
-    metaNewFilename.value = baseName;
-    metaTitle.value = data.metadata.title || "";
-    metaArtist.value = data.metadata.artist || "";
-    metaAlbum.value = data.metadata.album || "";
-    metaYear.value = data.metadata.year || "";
-    metaGenre.value = data.metadata.genre || "";
-    metaTrack.value = data.metadata.track || "";
-    
-    // Show editor
-    metaEditor.classList.remove("hidden");
-    metaStatus.textContent = "Editando: " + fileName;
-    
-    updateMetaPreview();
-  } catch (e) {
-    metaStatus.textContent = `Error: ${e.message}`;
+    processed++;
   }
+  
+  // Show final results
+  metaProgressText.textContent = "Completado";
+  metaProgressPercent.textContent = "100%";
+  metaProgressFill.style.width = "100%";
+  metaStatus.textContent = `Identificados ${metaResultsData.filter(r => r.success).length} de ${total} archivos`;
+  
+  // Show results panel
+  renderMetaResults();
+  
+  // Reset buttons after delay
+  setTimeout(() => {
+    metaProgress.classList.add("hidden");
+    metaIdentifyAll.classList.remove("hidden");
+    metaCancel.classList.add("hidden");
+    metaProcessId = null;
+  }, 2000);
+});
+
+// Cancel identification
+metaCancel.addEventListener("click", async () => {
+  if (!metaProcessId) return;
+  
+  try {
+    await fetch("/api/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ processId: metaProcessId })
+    });
+  } catch (e) {
+    console.error('Error cancelling:', e);
+  }
+});
+
+// Render results
+function renderMetaResults() {
+  metaResults.classList.remove("hidden");
+  metaResultsList.innerHTML = "";
+  
+  metaResultsData.forEach(item => {
+    const resultItem = document.createElement("div");
+    resultItem.className = `meta-result-item ${item.success ? "success" : "error"}`;
+    resultItem.innerHTML = `
+      <span class="meta-result-original">${item.original}</span>
+      <span class="meta-result-result">→ ${item.result}</span>
+    `;
+    metaResultsList.appendChild(resultItem);
+  });
 }
 
 // Update filename preview

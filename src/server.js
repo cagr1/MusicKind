@@ -3,7 +3,9 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
-import { readMetadata, listAudioFiles, renameFile, writeMetadata, generateFilename } from "./metadata_editor.js";
+import { readMetadata, listAudioFiles, renameFile, writeMetadata, generateFilename, identifyAndTag } from "./metadata_editor.js";
+import { SpotifyClient } from "./spotify.js";
+import { JsonCache } from "./cache.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -272,6 +274,36 @@ async function handleApi(req, res, url) {
     const format = body.format || "{artist} - {title}";
     const filename = generateFilename(metadata, format);
     return sendJson(res, { ok: true, filename });
+  }
+
+  // Auto-identify and tag a file using Spotify
+  if (req.method === "POST" && url.pathname === "/api/metadata/identify") {
+    const body = await readJsonBody(req);
+    const filePath = body.filePath ? String(body.filePath) : "";
+    
+    if (!filePath) {
+      return sendJson(res, { ok: false, error: "filePath required" }, 400);
+    }
+    
+    try {
+      // Load Spotify credentials
+      const settings = loadSettings();
+      if (!settings.spotifyClientId || !settings.spotifyClientSecret) {
+        return sendJson(res, { ok: false, error: "Spotify credentials not configured. Go to Settings." }, 400);
+      }
+      
+      const cache = new JsonCache(path.join(projectRoot, ".cache/api-cache.json"));
+      const spotify = new SpotifyClient({
+        clientId: settings.spotifyClientId,
+        clientSecret: settings.spotifyClientSecret,
+        cache
+      });
+      
+      const result = await identifyAndTag(filePath, spotify);
+      return sendJson(res, result);
+    } catch (error) {
+      return sendJson(res, { ok: false, error: error.message }, 400);
+    }
   }
 
   // ==================== BPM ANALYZER API ====================

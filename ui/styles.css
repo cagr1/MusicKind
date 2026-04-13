@@ -143,6 +143,11 @@ body {
   display: none;
 }
 
+/* Generic hidden class */
+.hidden {
+  display: none !important;
+}
+
 .panel-header {
   display: flex;
   align-items: center;
@@ -469,6 +474,68 @@ body {
   border-radius: 6px;
   color: var(--accent-2);
   font-family: monospace;
+}
+
+.meta-description {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.meta-results {
+  background: rgba(28, 34, 48, 0.6);
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.meta-results h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.meta-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.meta-result-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--panel-2);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.meta-result-item.success {
+  border-left: 3px solid var(--accent-2);
+}
+
+.meta-result-item.error {
+  border-left: 3px solid var(--accent);
+}
+
+.meta-result-original {
+  color: var(--muted);
+  font-size: 12px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta-result-result {
+  color: var(--accent-2);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* BPM Editor Styles */
