@@ -56,8 +56,20 @@
 
 ### 6. UI/UX IDIOMA [EN PROGRESO]
 - [x] Toggle EN | ES visible en parte inferior del sidebar
-- [ ] Cambio instantáneo sin recargar página
+- [x] Cambio instantáneo funcionando parcialmente
+- [ ] Refactorizar traducciones a archivo JSON separado (best practice)
+- [ ] Agregar TODAS las cadenas de texto traducibles (no solo títulos)
 - [ ] Estilo visible (no oscuro)
+
+---
+
+## MEJORAS TÉCNICAS [PENDIENTE]
+
+### Externalizar traducciones
+- [ ] Crear archivo ui/i18n/es.json con todas las cadenas en español
+- [ ] Crear archivo ui/i18n/en.json con todas las cadenas en inglés
+- [ ] Cargar archivo JSON según idioma seleccionado
+- [ ] Aplicar traducciones a TODOS los elementos (labels, placeholders, botones, mensajes, etc.)
 
 ---
 
