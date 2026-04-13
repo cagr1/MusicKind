@@ -1078,33 +1078,39 @@ async function initFFmpegStatus() {
   
   let isInstalled = false;
   
-  if (window.electronAPI && window.electronAPI.checkFFmpeg) {
-    isInstalled = await window.electronAPI.checkFFmpeg();
-  } else {
-    try {
-      const res = await fetch("/api/ffmpeg-status");
+  try {
+    const res = await fetch("/api/ffmpeg-status");
+    if (res.ok) {
       const data = await res.json();
       isInstalled = data.installed;
-    } catch (e) {
-      // Ignore
     }
+  } catch (e) {
+    console.log("FFmpeg status check failed:", e.message);
+    // Assume installed if we can't check - don't block the UI
+    isInstalled = true;
   }
   
+  // Update settings panel
   if (isInstalled) {
     statusText.textContent = "Instalado";
     statusText.className = "ffmpeg-value ok";
-    // Hide all warnings
-    document.getElementById("cls-ffmpeg-warning")?.classList.add("hidden");
-    document.getElementById("set-ffmpeg-warning")?.classList.add("hidden");
-    document.getElementById("conv-ffmpeg-warning")?.classList.add("hidden");
   } else {
     statusText.textContent = "No instalado";
     statusText.className = "ffmpeg-value error";
-    // Show warnings in tabs
-    document.getElementById("cls-ffmpeg-warning")?.classList.remove("hidden");
-    document.getElementById("set-ffmpeg-warning")?.classList.remove("hidden");
-    document.getElementById("conv-ffmpeg-warning")?.classList.remove("hidden");
   }
+  
+  // Show/hide warnings based on FFmpeg status
+  const warnings = ["cls-ffmpeg-warning", "set-ffmpeg-warning", "conv-ffmpeg-warning"];
+  warnings.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (isInstalled) {
+        el.classList.add("hidden");
+      } else {
+        el.classList.remove("hidden");
+      }
+    }
+  });
 }
 
 // Go to settings handler for warning buttons
