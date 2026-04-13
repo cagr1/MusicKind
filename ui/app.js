@@ -1074,32 +1074,34 @@ loadSettings();
 // Check and display FFmpeg status on load
 async function initFFmpegStatus() {
   const statusText = document.getElementById("ffmpeg-status-text");
-  if (!statusText) return;
   
-  let isInstalled = false;
+  // Default: assume FFmpeg is installed (don't block UI)
+  let isInstalled = true;
   
   try {
     const res = await fetch("/api/ffmpeg-status");
     if (res.ok) {
       const data = await res.json();
-      isInstalled = data.installed;
+      isInstalled = data.installed === true;
     }
   } catch (e) {
-    console.log("FFmpeg status check failed:", e.message);
-    // Assume installed if we can't check - don't block the UI
-    isInstalled = true;
+    console.log("FFmpeg status check skipped:", e.message);
+    // Keep isInstalled = true to not block UI
   }
   
   // Update settings panel
-  if (isInstalled) {
-    statusText.textContent = "Instalado";
-    statusText.className = "ffmpeg-value ok";
-  } else {
-    statusText.textContent = "No instalado";
-    statusText.className = "ffmpeg-value error";
+  if (statusText) {
+    if (isInstalled) {
+      statusText.textContent = "Instalado";
+      statusText.className = "ffmpeg-value ok";
+    } else {
+      statusText.textContent = "No instalado";
+      statusText.className = "ffmpeg-value error";
+    }
   }
   
   // Show/hide warnings based on FFmpeg status
+  // Only show warnings if FFmpeg is confirmed NOT installed
   const warnings = ["cls-ffmpeg-warning", "set-ffmpeg-warning", "conv-ffmpeg-warning"];
   warnings.forEach(id => {
     const el = document.getElementById(id);

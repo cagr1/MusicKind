@@ -490,3 +490,79 @@
         </section>
 
         <section class="panel hidden" id="tab-settings">
+          <div class="panel-header">
+            <h2>Configuracion</h2>
+            <span class="pill">Ajustes</span>
+          </div>
+          <div class="panel-body">
+            <div class="settings-section">
+              <h3>API Keys</h3>
+              <p class="settings-desc">Ingresa tus credenciales para usar el clasificador de musica. Si no tienes claves, puedes obtenerlas gratuitamente en:</p>
+              <ul class="settings-links">
+                <li><a href="https://developer.spotify.com/dashboard" target="_blank">Spotify Developer Dashboard</a></li>
+                <li><a href="https://www.last.fm/api" target="_blank">Last.fm API</a></li>
+              </ul>
+              
+              <div class="form-grid">
+                <label class="field">
+                  <span>Spotify Client ID</span>
+                  <input id="cfg-spotify-id" type="text" placeholder="Tu Spotify Client ID" />
+                </label>
+                <label class="field">
+                  <span>Spotify Client Secret</span>
+                  <input id="cfg-spotify-secret" type="password" placeholder="Tu Spotify Client Secret" />
+                </label>
+                <label class="field">
+                  <span>Last.fm API Key</span>
+                  <input id="cfg-lastfm-key" type="text" placeholder="Tu Last.fm API Key" />
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3>Idioma / Idioma</h3>
+              <div class="form-grid">
+                <label class="field">
+                  <span>Seleccionar idioma</span>
+                  <select id="cfg-language">
+                    <option value="es">Espanol</option>
+                    <option value="en">English</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3>FFmpeg</h3>
+              <div class="ffmpeg-status" id="ffmpeg-status-card">
+                <div class="ffmpeg-info">
+                  <span class="ffmpeg-label">Estado:</span>
+                  <span class="ffmpeg-value" id="ffmpeg-status-text">Verificando...</span>
+                </div>
+                <button id="ffmpeg-check" class="btn ghost">Verificar</button>
+                <button id="ffmpeg-install" class="btn">Instalar FFmpeg</button>
+              </div>
+              <div class="analysis-note">FFmpeg es necesario para el analisis de audio y conversion de archivos.</div>
+            </div>
+
+            <div class="settings-section">
+              <h3>Acerca de</h3>
+              <div class="about-info">
+                <p><strong>MusicKind</strong> v1.0.0</p>
+                <p>Herramienta para DJs: clasificacion de musica por genero, creacion de sets y conversion de audio.</p>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button id="cfg-save" class="btn primary">Guardar configuracion</button>
+            </div>
+
+            <div class="status" id="cfg-status"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
