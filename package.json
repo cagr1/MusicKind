@@ -14,7 +14,10 @@
     "electron": "electron .",
     "electron-dev": "NODE_ENV=development electron .",
     "build": "electron-builder",
-    "test": "jest"
+    "test": "jest",
+    "test:audio-ingestion": "node --test tests/audio-ingestion.test.js",
+    "test:metadata-editor": "node --test tests/metadata-editor.test.js",
+    "test:metadata-endpoint": "node --test tests/server-metadata-list.test.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

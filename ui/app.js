@@ -26,58 +26,66 @@ const translations = {
   }
 };
 
+const Runtime = {
+  isElectron: Boolean(window.electronAPI?.openDirectory)
+};
+
+const AppState = {
+  settings: {
+    defaultOutputDir: "output"
+  },
+  ffmpegReady: null
+};
+
+const ffmpegStateListeners = [];
+const FFMPEG_WARNING_IDS = ["cls-ffmpeg-warning", "set-ffmpeg-warning", "conv-ffmpeg-warning"];
+
+function setFfmpegReady(value) {
+  const normalized = typeof value === "boolean" ? value : null;
+  AppState.ffmpegReady = normalized;
+  ffmpegStateListeners.forEach((listener) => {
+    try {
+      listener(normalized);
+    } catch (error) {
+      console.error("FFmpeg state listener error:", error);
+    }
+  });
+}
+
+function onFfmpegStateChange(listener) {
+  if (typeof listener !== "function") return () => {};
+  ffmpegStateListeners.push(listener);
+  listener(AppState.ffmpegReady);
+  return () => {
+    const idx = ffmpegStateListeners.indexOf(listener);
+    if (idx >= 0) ffmpegStateListeners.splice(idx, 1);
+  };
+}
+
+function displayPathLabel(value) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const normalized = trimmed.replace(/\\/g, "/");
+  const parts = normalized.split("/").filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : trimmed;
+}
+
 // File dialog functionality
 async function selectDirectory(title) {
   try {
-    // For Electron environment - use native dialog
-    if (window.electronAPI && window.electronAPI.openDirectory) {
+    if (Runtime.isElectron) {
       const result = await window.electronAPI.openDirectory(title);
       return result;
     }
-    
-    // For web environment - use File System Access API
-    if ('showDirectoryPicker' in window) {
-      try {
-        const dirHandle = await window.showDirectoryPicker();
-        // Get the path from the handle - we'll use a workaround to get the path
-        // since the API doesn't directly expose the path
-        // We store the handle and use it later for file access
-        return dirHandle;
-      } catch (err) {
-        if (err.name === 'AbortError') {
-          return null; // User cancelled
-        }
-        throw err;
-      }
-    }
-    
-    // Fallback for browsers without File System Access API
-    showToast("Tu navegador no soporta selección de carpetas. Usa la app de escritorio o arrastra archivos aquí.", "error");
-    return null;
+
+    const manualPath = prompt(`${title}\n\nIngresa la ruta completa:`);
+    return manualPath && manualPath.trim() ? manualPath.trim() : null;
   } catch (error) {
     console.error('Error selecting directory:', error);
     showToast("Error al seleccionar carpeta: " + error.message, "error");
     return null;
   }
-}
-
-// Check if we have a valid directory handle (for web File System Access API)
-function isValidDirectoryHandle(handle) {
-  return handle && typeof handle === 'object' && 'kind' in handle && handle.kind === 'directory';
-}
-
-// Resolve a directory handle to actual files (for File System Access API)
-async function getFilesFromHandle(dirHandle) {
-  const files = [];
-  for await (const entry of dirHandle.values()) {
-    if (entry.kind === 'file') {
-      // Get file to get its path
-      const file = await entry.getFile();
-      file.handle = entry; // Store the handle reference
-      files.push(file);
-    }
-  }
-  return files;
 }
 
 // Language toggle in sidebar - Initialize on DOMContentLoaded
@@ -134,26 +142,23 @@ function updateLangDisplay(lang) {
 // File selection for individual files (drag & drop or file picker)
 async function selectFiles(title, multiple = false) {
   try {
-    // For Electron environment - use native dialog
-    if (window.electronAPI && window.electronAPI.openFiles) {
+    if (Runtime.isElectron && window.electronAPI?.openFiles) {
       const result = await window.electronAPI.openFiles(title, multiple);
       return result;
     }
-    
-    // Fallback: use HTML file input
-    return new Promise((resolve) => {
-      const input = document.createElement("input");
-      input.type = "file";
-      input.multiple = multiple;
-      input.accept = ".mp3,.wav,.aiff,.aif,.flac,.m4a";
-      
-      input.onchange = (e) => {
-        const files = Array.from(e.target.files).map(f => f.path || f.name);
-        resolve(multiple ? files : files[0] || null);
-      };
-      
-      input.click();
-    });
+
+    const promptMessage = multiple
+      ? `${title}\n\nIngresa rutas separadas por coma:`
+      : `${title}\n\nIngresa la ruta completa del archivo:`;
+    const raw = prompt(promptMessage);
+    if (!raw || !raw.trim()) return multiple ? [] : null;
+
+    const values = raw
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    return multiple ? values : values[0] || null;
   } catch (error) {
     console.error('Error selecting files:', error);
     showToast("Error al seleccionar archivos", "error");
@@ -183,60 +188,40 @@ function setupDragDrop(element, onFilesDropped) {
   });
 }
 
-// Check FFmpeg status on startup
-async function checkFFmpegStatus() {
-  if (!window.electronAPI || !window.electronAPI.checkFFmpeg) {
-    return; // Not running in Electron
-  }
-  
-  try {
-    const isInstalled = await window.electronAPI.checkFFmpeg();
-    
-    if (!isInstalled) {
-      const statusEl = document.getElementById('cls-status') || document.getElementById('set-status') || document.getElementById('conv-status');
-      if (statusEl) {
-        const install = confirm('FFmpeg no está instalado. ¿Deseas instalarlo ahora?\n\nFFmpeg es necesario para el análisis y conversión de audio.');
-        if (install) {
-          statusEl.textContent = 'Instalando FFmpeg...';
-          const result = await window.electronAPI.installFFmpeg();
-          statusEl.textContent = result.message;
-          if (result.success) {
-            alert('FFmpeg instalado correctamente. La aplicación está lista para usar.');
-          }
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error checking FFmpeg:', error);
-  }
-}
-
 // Browse button handlers
 document.getElementById('cls-browse').addEventListener('click', async () => {
   const path = await selectDirectory('Selecciona carpeta a clasificar');
   if (path) {
-    document.getElementById('cls-input').value = path;
+    const input = document.getElementById('cls-input');
+    input.value = path;
+    input.dataset.pathLabel = displayPathLabel(path);
   }
 });
 
 document.getElementById('set-base-browse').addEventListener('click', async () => {
   const path = await selectDirectory('Selecciona carpeta base DJ');
   if (path) {
-    document.getElementById('set-base').value = path;
+    const input = document.getElementById('set-base');
+    input.value = path;
+    input.dataset.pathLabel = displayPathLabel(path);
   }
 });
 
 document.getElementById('set-pack-browse').addEventListener('click', async () => {
   const path = await selectDirectory('Selecciona pack nuevo');
   if (path) {
-    document.getElementById('set-pack').value = path;
+    const input = document.getElementById('set-pack');
+    input.value = path;
+    input.dataset.pathLabel = displayPathLabel(path);
   }
 });
 
 document.getElementById('set-output-browse').addEventListener('click', async () => {
   const path = await selectDirectory('Selecciona carpeta de salida');
   if (path) {
-    document.getElementById('set-output').value = path;
+    const input = document.getElementById('set-output');
+    input.value = path;
+    input.dataset.pathLabel = displayPathLabel(path);
   }
 });
 
@@ -250,6 +235,7 @@ const convOutput = document.getElementById("conv-output");
 setupDragDrop(convInputDrop, async (files) => {
   if (files.length === 1) {
     convInput.value = files[0];
+    convInput.dataset.pathLabel = displayPathLabel(files[0]);
     convInput.classList.remove("hidden");
     convInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
   } else {
@@ -261,6 +247,7 @@ convInputDrop.addEventListener("click", async () => {
   const path = await selectDirectory("Selecciona carpeta de entrada");
   if (path) {
     convInput.value = path;
+    convInput.dataset.pathLabel = displayPathLabel(path);
     convInput.classList.remove("hidden");
     convInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
   }
@@ -270,6 +257,7 @@ convInputDrop.addEventListener("click", async () => {
 setupDragDrop(convOutputDrop, async (files) => {
   if (files.length === 1) {
     convOutput.value = files[0];
+    convOutput.dataset.pathLabel = displayPathLabel(files[0]);
     convOutput.classList.remove("hidden");
     convOutputDrop.querySelector(".conv-drop-content").classList.add("hidden");
   } else {
@@ -281,6 +269,7 @@ convOutputDrop.addEventListener("click", async () => {
   const path = await selectDirectory("Selecciona carpeta de salida");
   if (path) {
     convOutput.value = path;
+    convOutput.dataset.pathLabel = displayPathLabel(path);
     convOutput.classList.remove("hidden");
     convOutputDrop.querySelector(".conv-drop-content").classList.add("hidden");
   }
@@ -294,6 +283,7 @@ const bpmInputPath = document.getElementById("bpm-input");
 setupDragDrop(bpmInputDrop, async (files) => {
   if (files.length === 1) {
     bpmInputPath.value = files[0];
+    bpmInputPath.dataset.pathLabel = displayPathLabel(files[0]);
     bpmInputPath.classList.remove("hidden");
     bpmInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
   } else {
@@ -305,6 +295,7 @@ bpmInputDrop.addEventListener("click", async () => {
   const path = await selectDirectory("Selecciona carpeta con archivos de audio");
   if (path) {
     bpmInputPath.value = path;
+    bpmInputPath.dataset.pathLabel = displayPathLabel(path);
     bpmInputPath.classList.remove("hidden");
     bpmInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
   }
@@ -315,20 +306,25 @@ bpmInputDrop.addEventListener("click", async () => {
 const metaInputDrop = document.getElementById("meta-input-drop");
 const metaInputPath = document.getElementById("meta-input");
 
-setupDragDrop(metaInputDrop, async (files) => {
-  if (files.length === 1) {
-    metaInputPath.value = files[0];
-    metaInputPath.classList.remove("hidden");
-    metaInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
-  } else {
-    showToast("Selecciona una carpeta", "info");
-  }
-});
+if (metaInputDrop && metaInputPath) {
+  setupDragDrop(metaInputDrop, async (files) => {
+    if (files.length === 1) {
+      metaInputPath.value = files[0];
+      metaInputPath.dataset.pathLabel = displayPathLabel(files[0]);
+      metaInputPath.classList.remove("hidden");
+      metaInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
+    } else {
+      showToast("Selecciona una carpeta", "info");
+    }
+  });
+}
 
-metaInputDrop.addEventListener("click", async () => {
+if (metaInputDrop) metaInputDrop.addEventListener("click", async () => {
+  if (!metaInputPath) return;
   const path = await selectDirectory("Selecciona carpeta con archivos de audio");
   if (path) {
     metaInputPath.value = path;
+    metaInputPath.dataset.pathLabel = displayPathLabel(path);
     metaInputPath.classList.remove("hidden");
     metaInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
   }
@@ -490,10 +486,24 @@ clsRun.addEventListener("click", async () => {
             progressFill.style.width = `${data.percentage}%`;
             currentFile.textContent = data.current || "";
             status.textContent = `(${data.processed}/${data.total}) ${data.current}`;
+            if (data.current) {
+              log.textContent += `${log.textContent ? "\n" : ""}[${data.processed}/${data.total}] Analizando: ${data.current}`;
+              log.scrollTop = log.scrollHeight;
+            }
+          } else if (data.type === 'log') {
+            if (data.message) {
+              log.textContent += `${log.textContent ? "\n" : ""}${data.message}`;
+              log.scrollTop = log.scrollHeight;
+            }
           } else if (data.type === 'complete') {
             status.textContent = data.success ? "Clasificacion completada." : "Proceso cancelado o error.";
             progressText.textContent = data.success ? "Completado" : "Cancelado";
             progressFill.style.width = data.success ? "100%" : "0%";
+            if (data.error) {
+              log.textContent += `${log.textContent ? "\n\n" : ""}Error:\n${data.error}`;
+            } else if (data.message) {
+              log.textContent += `${log.textContent ? "\n\n" : ""}${data.message}`;
+            }
           }
         } catch (e) {
           console.error('Error parsing SSE data:', e);
@@ -825,13 +835,28 @@ const metaCurrentFile = document.getElementById("meta-current-file");
 const metaResults = document.getElementById("meta-results");
 const metaResultsList = document.getElementById("meta-results-list");
 const metaStatus = document.getElementById("meta-status");
+const metaEditor = null;
+const metaNewFilename = null;
+const metaCancelEdit = null;
+const metaSave = null;
+const metaPreviewName = null;
+const metaTitle = null;
+const metaArtist = null;
+const metaAlbum = null;
+const metaYear = null;
+const metaGenre = null;
+const metaTrack = null;
 
 let metaFiles = [];
 let metaProcessId = null;
 let metaResultsData = [];
+let currentMetaFile = null;
+let currentMetaData = null;
 
 // Load files from selected folder
-metaLoad.addEventListener("click", async () => {
+if (metaLoad) metaLoad.addEventListener("click", async () => {
+  if (!metaInput || !metaStatus || !metaFileList || !metaResults || !metaResultsList) return;
+
   const dir = metaInput.value.trim();
   if (!dir) {
     metaStatus.textContent = "Selecciona una carpeta primero.";
@@ -945,7 +970,9 @@ function removeMetaFile(idx) {
 }
 
 // Identify all files
-metaIdentifyAll.addEventListener("click", async () => {
+if (metaIdentifyAll) metaIdentifyAll.addEventListener("click", async () => {
+  if (!metaStatus || !metaProgress || !metaCancel || !metaProgressText || !metaProgressPercent || !metaProgressFill || !metaCurrentFile || !metaFileList || !metaResults || !metaResultsList) return;
+
   if (metaFiles.length === 0) {
     metaStatus.textContent = "Carga archivos primero.";
     return;
@@ -1032,13 +1059,13 @@ metaIdentifyAll.addEventListener("click", async () => {
   setTimeout(() => {
     metaProgress.classList.add("hidden");
     metaIdentifyAll.classList.remove("hidden");
-    metaCancel.classList.add("hidden");
+    if (metaCancel) metaCancel.classList.add("hidden");
     metaProcessId = null;
   }, 2000);
 });
 
 // Cancel identification
-metaCancel.addEventListener("click", async () => {
+if (metaCancel) metaCancel.addEventListener("click", async () => {
   if (!metaProcessId) return;
   
   try {
@@ -1054,6 +1081,7 @@ metaCancel.addEventListener("click", async () => {
 
 // Render results
 function renderMetaResults() {
+  if (!metaResults || !metaResultsList) return;
   metaResults.classList.remove("hidden");
   metaResultsList.innerHTML = "";
   
@@ -1070,24 +1098,29 @@ function renderMetaResults() {
 
 // Update filename preview
 function updateMetaPreview() {
+  if (!metaNewFilename || !metaPreviewName) return;
   const newName = metaNewFilename.value || "Nuevo nombre";
   const ext = currentMetaFile ? "." + currentMetaFile.split(".").pop() : "";
   metaPreviewName.textContent = newName + ext;
 }
 
 // Listen to input changes for preview
-metaNewFilename.addEventListener("input", updateMetaPreview);
+if (metaNewFilename) {
+  metaNewFilename.addEventListener("input", updateMetaPreview);
+}
 
 // Cancel editing
-metaCancelEdit.addEventListener("click", () => {
-  metaEditor.classList.add("hidden");
+if (metaCancelEdit) metaCancelEdit.addEventListener("click", () => {
+  if (metaEditor) metaEditor.classList.add("hidden");
   currentMetaFile = null;
   currentMetaData = null;
-  metaStatus.textContent = "Edicion cancelada";
+  if (metaStatus) metaStatus.textContent = "Edicion cancelada";
 });
 
 // Save metadata changes
-metaSave.addEventListener("click", async () => {
+if (metaSave) metaSave.addEventListener("click", async () => {
+  if (!metaStatus || !metaNewFilename || !metaTitle || !metaArtist || !metaAlbum || !metaYear || !metaGenre || !metaTrack) return;
+
   if (!currentMetaFile) {
     metaStatus.textContent = "No hay archivo seleccionado";
     return;
@@ -1143,9 +1176,9 @@ metaSave.addEventListener("click", async () => {
       metaStatus.textContent = `Error al guardar metadata: ${writeData.error}`;
     } else {
       metaStatus.textContent = "Cambios guardados exitosamente";
-      metaEditor.classList.add("hidden");
+      if (metaEditor) metaEditor.classList.add("hidden");
       // Reload file list
-      metaLoad.click();
+      if (metaLoad) metaLoad.click();
     }
   } catch (e) {
     metaStatus.textContent = `Error: ${e.message}`;
@@ -1308,35 +1341,93 @@ function resetBpmButtons() {
 
 // ==================== SETTINGS FUNCTIONALITY ====================
 
-// Load settings on startup
-async function loadSettings() {
-  try {
-    const res = await fetch("/api/settings");
-    const data = await res.json();
-    if (data.ok) {
-      const settings = data.settings;
-      document.getElementById("cfg-spotify-id").value = settings.spotifyClientId || "";
-      document.getElementById("cfg-spotify-secret").value = settings.spotifyClientSecret || "";
-      document.getElementById("cfg-lastfm-key").value = settings.lastfmApiKey || "";
-      document.getElementById("cfg-language").value = settings.language || "es";
-    }
-  } catch (error) {
-    console.error("Error loading settings:", error);
+function applySettingsToUi(settings) {
+  document.getElementById("cfg-spotify-id").value = settings.spotifyClientId || "";
+  document.getElementById("cfg-spotify-secret").value = settings.spotifyClientSecret || "";
+  document.getElementById("cfg-lastfm-key").value = settings.lastfmApiKey || "";
+  document.getElementById("cfg-language").value = settings.language || "es";
+
+  const cfgDefaultOutput = document.getElementById("cfg-output-dir");
+  AppState.settings.defaultOutputDir = (settings.defaultOutputDir || "output").trim() || "output";
+  if (cfgDefaultOutput) {
+    cfgDefaultOutput.value = AppState.settings.defaultOutputDir;
   }
-  
-  // Load FFmpeg status after settings
-  initFFmpegStatus();
+
+  applyGlobalOutputDefaults();
+}
+
+async function fetchFfmpegReadyOnce() {
+  try {
+    if (window.electronAPI?.checkFFmpeg) {
+      return await window.electronAPI.checkFFmpeg();
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const res = await fetch("/api/ffmpeg-status", { signal: controller.signal });
+    clearTimeout(timeoutId);
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.installed === true;
+  } catch (error) {
+    console.log("FFmpeg status check:", error.message);
+    return null;
+  }
+}
+
+async function initAppState() {
+  try {
+    const [settingsRes, ffmpegReady] = await Promise.all([
+      fetch("/api/settings"),
+      fetchFfmpegReadyOnce()
+    ]);
+
+    const settingsData = await settingsRes.json();
+    if (settingsData.ok) {
+      applySettingsToUi(settingsData.settings);
+    }
+
+    setFfmpegReady(ffmpegReady);
+  } catch (error) {
+    console.error("Error initializing app state:", error);
+    setFfmpegReady(null);
+  }
 }
 
 // Save settings
 const cfgSave = document.getElementById("cfg-save");
+const cfgDefaultOutput = document.getElementById("cfg-output-dir");
+const cfgDefaultOutputBrowse = document.getElementById("cfg-output-dir-browse");
+const cfgLastfmKey = document.getElementById("cfg-lastfm-key");
+const cfgLastfmToggle = document.getElementById("cfg-lastfm-toggle");
+let cfgStatusTimer = null;
+
+if (cfgLastfmToggle && cfgLastfmKey) cfgLastfmToggle.addEventListener("click", () => {
+  const isHidden = cfgLastfmKey.type === "password";
+  cfgLastfmKey.type = isHidden ? "text" : "password";
+  cfgLastfmToggle.innerHTML = isHidden
+    ? '<span class="iconify" data-icon="mdi:eye-off-outline"></span>'
+    : '<span class="iconify" data-icon="mdi:eye-outline"></span>';
+});
+
+if (cfgDefaultOutputBrowse) cfgDefaultOutputBrowse.addEventListener("click", async () => {
+  if (!cfgDefaultOutput) return;
+  const selected = await selectDirectory("Selecciona carpeta de salida por defecto");
+  if (selected) {
+    cfgDefaultOutput.value = selected;
+    cfgDefaultOutput.dataset.pathLabel = displayPathLabel(selected);
+  }
+});
+
 cfgSave.addEventListener("click", async () => {
   const status = document.getElementById("cfg-status");
   const settings = {
     spotifyClientId: document.getElementById("cfg-spotify-id").value.trim(),
     spotifyClientSecret: document.getElementById("cfg-spotify-secret").value.trim(),
     lastfmApiKey: document.getElementById("cfg-lastfm-key").value.trim(),
-    language: document.getElementById("cfg-language").value
+    language: document.getElementById("cfg-language").value,
+    defaultOutputDir: (cfgDefaultOutput?.value || "").trim() || "output"
   };
   
   status.textContent = "Guardando...";
@@ -1352,48 +1443,52 @@ cfgSave.addEventListener("click", async () => {
     if (data.ok) {
       status.textContent = "Configuracion guardada correctamente.";
       status.style.color = "var(--accent-2)";
+      showToast("Configuracion guardada correctamente.", "success", 2500);
       
       // Apply language change
       applyLanguage(settings.language);
+      AppState.settings.defaultOutputDir = settings.defaultOutputDir;
+      applyGlobalOutputDefaults();
+      if (cfgStatusTimer) clearTimeout(cfgStatusTimer);
+      cfgStatusTimer = setTimeout(() => {
+        status.textContent = "";
+      }, 3000);
     } else {
       status.textContent = `Error: ${data.error}`;
       status.style.color = "var(--accent)";
+      if (cfgStatusTimer) clearTimeout(cfgStatusTimer);
     }
   } catch (error) {
     status.textContent = `Error: ${error.message}`;
     status.style.color = "var(--accent)";
+    if (cfgStatusTimer) clearTimeout(cfgStatusTimer);
   }
 });
+
+function applyGlobalOutputDefaults() {
+  const defaultOutputDir = (AppState.settings.defaultOutputDir || "output").trim() || "output";
+  const setOutput = document.getElementById("set-output");
+  const convOutput = document.getElementById("conv-output");
+
+  if (setOutput && !setOutput.value.trim()) {
+    setOutput.value = defaultOutputDir;
+    setOutput.dataset.pathLabel = displayPathLabel(defaultOutputDir);
+  }
+
+  if (convOutput && !convOutput.value.trim()) {
+    convOutput.value = defaultOutputDir;
+    convOutput.dataset.pathLabel = displayPathLabel(defaultOutputDir);
+  }
+}
 
 // FFmpeg check button
 const ffmpegCheck = document.getElementById("ffmpeg-check");
 ffmpegCheck.addEventListener("click", async () => {
   const statusText = document.getElementById("ffmpeg-status-text");
   statusText.textContent = "Verificando...";
-  
-  let isInstalled = false;
-  
-  // Try Electron API first
-  if (window.electronAPI && window.electronAPI.checkFFmpeg) {
-    isInstalled = await window.electronAPI.checkFFmpeg();
-  } else {
-    // Fallback to server API
-    try {
-      const res = await fetch("/api/ffmpeg-status");
-      const data = await res.json();
-      isInstalled = data.installed;
-    } catch (e) {
-      console.error("Error checking FFmpeg:", e);
-    }
-  }
-  
-  if (isInstalled) {
-    statusText.textContent = "Instalado";
-    statusText.className = "ffmpeg-value ok";
-  } else {
-    statusText.textContent = "No instalado";
-    statusText.className = "ffmpeg-value error";
-  }
+
+  const isInstalled = await fetchFfmpegReadyOnce();
+  setFfmpegReady(isInstalled);
 });
 
 // FFmpeg install button
@@ -1408,6 +1503,7 @@ ffmpegInstall.addEventListener("click", async () => {
     const result = await window.electronAPI.installFFmpeg();
     statusText.textContent = result.message;
     statusText.className = result.success ? "ffmpeg-value ok" : "ffmpeg-value error";
+    setFfmpegReady(result.success ? true : false);
   } else {
     statusText.textContent = "Instalacion solo disponible en app de escritorio";
     statusText.className = "ffmpeg-value error";
@@ -1437,58 +1533,26 @@ function applyLanguage(lang) {
   localStorage.setItem("musickind-lang", lang);
 }
 
-// Initialize
-loadGenres();
-loadSettings();
-
-// Check and display FFmpeg status on load
-async function initFFmpegStatus() {
+function onFfmpegStateChangeRender(ready) {
   const statusText = document.getElementById("ffmpeg-status-text");
-  
-  // Default: assume FFmpeg is installed (don't block UI)
-  let isInstalled = true;
-  
-  try {
-    // Add timeout to prevent indefinite loading
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    
-    const res = await fetch("/api/ffmpeg-status", { signal: controller.signal });
-    clearTimeout(timeoutId);
-    
-    if (res.ok) {
-      const data = await res.json();
-      isInstalled = data.installed === true;
-    }
-  } catch (e) {
-    console.log("FFmpeg status check:", e.message);
-    // Keep isInstalled = true to not block UI
-    // Default "Instalado" will show
-  }
-  
-  // Update settings panel
   if (statusText) {
-    if (isInstalled) {
+    if (ready === true) {
       statusText.textContent = "Instalado";
       statusText.className = "ffmpeg-value ok";
-    } else {
+    } else if (ready === false) {
       statusText.textContent = "No instalado";
       statusText.className = "ffmpeg-value error";
+    } else {
+      statusText.textContent = "Desconocido";
+      statusText.className = "ffmpeg-value";
     }
   }
-  
-  // Show/hide warnings based on FFmpeg status
-  // Only show warnings if FFmpeg is confirmed NOT installed
-  const warnings = ["cls-ffmpeg-warning", "set-ffmpeg-warning", "conv-ffmpeg-warning"];
-  warnings.forEach(id => {
+
+  FFMPEG_WARNING_IDS.forEach(id => {
     const el = document.getElementById(id);
-    if (el) {
-      if (isInstalled) {
-        el.classList.add("hidden");
-      } else {
-        el.classList.remove("hidden");
-      }
-    }
+    if (!el) return;
+    if (ready === false) el.classList.remove("hidden");
+    else el.classList.add("hidden");
   });
 }
 
@@ -1547,5 +1611,7 @@ if (savedLang) {
   applyLanguage(savedLang);
 }
 
-initFFmpegStatus();
+onFfmpegStateChange(onFfmpegStateChangeRender);
+loadGenres();
+initAppState();
 setupFFmpegWarningButtons();

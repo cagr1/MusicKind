@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { DEFAULT_SUPPORTED_EXTENSIONS } from "./skills/audio-ingestion.js";
 
 export function normalizeTag(tag) {
   return tag
@@ -74,9 +75,12 @@ export function moveFile(src, dest, dryRun) {
 }
 
 export function listAudioFiles(rootDir) {
+  // Deprecated: prefer `discoverAudioFiles` from `src/services/audio-discovery.js`.
+  // Kept for transition with the existing CLI flow.
+  maybeWarnDeprecatedListAudioFiles();
   const files = [];
   const stack = [rootDir];
-  const exts = new Set([".mp3", ".wav", ".aif", ".aiff"]);
+  const exts = new Set(DEFAULT_SUPPORTED_EXTENSIONS);
   while (stack.length) {
     const current = stack.pop();
     const entries = fs.readdirSync(current, { withFileTypes: true });
@@ -95,6 +99,14 @@ export function listAudioFiles(rootDir) {
 
 export function listMp3Files(rootDir) {
   return listAudioFiles(rootDir);
+}
+
+let hasWarnedDeprecatedListAudioFiles = false;
+
+function maybeWarnDeprecatedListAudioFiles() {
+  if (hasWarnedDeprecatedListAudioFiles) return;
+  hasWarnedDeprecatedListAudioFiles = true;
+  console.warn("[deprecated] utils.listAudioFiles() sera removida en una fase futura; usar src/services/audio-discovery.js");
 }
 
 export function writeCsv(rows, destPath, dryRun) {

@@ -7,8 +7,9 @@ import { JsonCache } from "./cache.js";
 import { SpotifyClient } from "./spotify.js";
 import { LastFmClient } from "./lastfm.js";
 import { classifyFromTags, classifyFromAudio } from "./classify.js";
-import { cleanTitle, ensureDir, listAudioFiles, moveFile, writeCsv, appendLog, parseArtistTitleFromFilename } from "./utils.js";
+import { cleanTitle, ensureDir, moveFile, writeCsv, appendLog, parseArtistTitleFromFilename } from "./utils.js";
 import { loadOverrides, classifyFromOverrides } from "./overrides.js";
+import { discoverAudioFiles } from "./services/audio-discovery.js";
 
 const args = parseArgs(process.argv.slice(2));
 
@@ -57,7 +58,15 @@ if (skipSpotify) {
 const allowedGenres = loadAllowedGenres();
 const genreFolders = new Set([...allowedGenres, "Unsorted"]);
 
-let files = listAudioFiles(inputDir).filter((filePath) => !isAlreadySorted(filePath, genreFolders));
+const discovery = await discoverAudioFiles({ target: inputDir, recursive: true });
+if (!discovery.ok && discovery.files.length === 0) {
+  const firstError = discovery.errors[0];
+  const message = firstError?.message || "No se pudo descubrir archivos de audio";
+  console.error(message);
+  process.exit(1);
+}
+
+let files = discovery.files.filter((filePath) => !isAlreadySorted(filePath, genreFolders));
 if (Number.isFinite(limit) && limit > 0) {
   files = files.slice(0, limit);
 }

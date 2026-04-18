@@ -3,9 +3,11 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
-import { readMetadata, listAudioFiles, renameFile, writeMetadata, generateFilename, identifyAndTag } from "./metadata_editor.js";
+import { readMetadata, renameFile, writeMetadata, generateFilename, identifyAndTag } from "./metadata_editor.js";
 import { SpotifyClient } from "./spotify.js";
 import { JsonCache } from "./cache.js";
+import { discoverAudioFiles } from "./services/audio-discovery.js";
+import { buildMetadataListResponse } from "./services/metadata-list-api.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,8 +15,6 @@ const projectRoot = path.resolve(__dirname, "..");
 const uiRoot = path.join(projectRoot, "ui");
 const genresPath = path.join(projectRoot, "config", "genres.json");
 const settingsPath = path.join(projectRoot, "config", "settings.json");
-
-const AUDIO_EXTS = new Set([".aiff", ".aif", ".wav", ".mp3", ".flac"]);
 
 // Registry for running processes (for cancellation)
 const runningProcesses = new Map();
@@ -77,9 +77,20 @@ async function handleApi(req, res, url) {
     if (!inputPath) {
       return sendJson(res, { ok: false, error: "inputPath requerido" }, 400);
     }
-    
-    // Check FFmpeg availability
-    const ffmpegAvailable = await checkFFmpeg();
+
+    const settings = loadSettings();
+    const spotifyClientId = process.env.SPOTIFY_CLIENT_ID || settings.spotifyClientId;
+    const spotifyClientSecret = process.env.SPOTIFY_CLIENT_SECRET || settings.spotifyClientSecret;
+    if (!spotifyClientId || !spotifyClientSecret) {
+      return sendJson(
+        res,
+        {
+          ok: false,
+          error: "Faltan credenciales de Spotify. Configura Spotify Client ID y Spotify Client Secret en Settings para poder clasificar."
+        },
+        400
+      );
+    }
     
     const args = [path.join(projectRoot, "src", "cli.js"), "--input", inputPath];
     if (dryRun) args.push("--dry-run");
@@ -183,7 +194,8 @@ async function handleApi(req, res, url) {
       spotifyClientId: body.spotifyClientId ? String(body.spotifyClientId).trim() : "",
       spotifyClientSecret: body.spotifyClientSecret ? String(body.spotifyClientSecret).trim() : "",
       lastfmApiKey: body.lastfmApiKey ? String(body.lastfmApiKey).trim() : "",
-      language: body.language ? String(body.language).trim() : "es"
+      language: body.language ? String(body.language).trim() : "es",
+      defaultOutputDir: body.defaultOutputDir ? String(body.defaultOutputDir).trim() : "output"
     };
     saveSettings(settings);
     return sendJson(res, { ok: true, message: "Configuracion guardada" });
@@ -230,8 +242,11 @@ async function handleApi(req, res, url) {
       return sendJson(res, { ok: false, error: "dir parameter required" }, 400);
     }
     try {
-      const files = listAudioFiles(dirPath, recursive);
-      return sendJson(res, { ok: true, files });
+      const response = await buildMetadataListResponse({ dirPath, recursive });
+      for (const line of response.logs) {
+        console.warn(line);
+      }
+      return sendJson(res, response.payload, response.status);
     } catch (error) {
       return sendJson(res, { ok: false, error: error.message }, 400);
     }
@@ -381,7 +396,8 @@ function loadSettings() {
     spotifyClientId: "",
     spotifyClientSecret: "",
     lastfmApiKey: "",
-    language: "es"
+    language: "es",
+    defaultOutputDir: "output"
   };
   if (!fs.existsSync(settingsPath)) return defaultSettings;
   try {
@@ -397,21 +413,16 @@ function saveSettings(settings) {
 }
 
 async function countAudioFiles(dirPath) {
-  try {
-    const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
-    let count = 0;
-    for (const entry of entries) {
-      const full = path.join(dirPath, entry.name);
-      if (entry.isDirectory()) {
-        count += await countAudioFiles(full);
-      } else if (AUDIO_EXTS.has(path.extname(entry.name).toLowerCase())) {
-        count += 1;
-      }
-    }
-    return count;
-  } catch {
+  const discovery = await discoverAudioFiles({
+    target: dirPath,
+    recursive: true
+  });
+
+  if (!discovery.ok) {
     return 0;
   }
+
+  return discovery.files.length;
 }
 
 function readJsonBody(req) {
@@ -487,40 +498,48 @@ function runProcessWithProgress(cmd, args, res, processId) {
     child.stdout.on("data", (data) => {
       output += data.toString();
       const text = data.toString();
-      
-      // Extract progress information from [PROGRESS:X/Y] format
-      const progressRegex = /\[PROGRESS:(\d+)\/(\d+)\]\s*Processing:\s*(.+)/;
-      const match = text.match(progressRegex);
-      
-      if (match) {
-        processedFiles = parseInt(match[1]);
-        totalFiles = parseInt(match[2]);
-        currentFile = match[3].trim();
-        
-        const percentage = totalFiles > 0 ? Math.round((processedFiles / totalFiles) * 100) : 0;
-        
-        // Send progress update
-        res.write(`data: ${JSON.stringify({ 
-          type: 'progress', 
-          current: currentFile,
-          processed: processedFiles,
-          total: totalFiles,
-          percentage: percentage,
-          message: `(${processedFiles}/${totalFiles}) ${currentFile}`
-        })}\n\n`);
-      } else if (text.includes('[PROGRESS:') && text.includes(']')) {
-        // Fallback for other progress formats
-        const lines = text.split('\n');
-        lines.forEach(line => {
-          if (line.includes('[') && line.includes(']')) {
-            res.write(`data: ${JSON.stringify({ type: 'progress', message: line.trim() })}\n\n`);
-          }
-        });
+
+      const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+      for (const line of lines) {
+        // Extract progress information from [PROGRESS:X/Y] format
+        const progressRegex = /\[PROGRESS:(\d+)\/(\d+)\]\s*Processing:\s*(.+)/;
+        const match = line.match(progressRegex);
+
+        if (match) {
+          processedFiles = parseInt(match[1]);
+          totalFiles = parseInt(match[2]);
+          currentFile = match[3].trim();
+
+          const percentage = totalFiles > 0 ? Math.round((processedFiles / totalFiles) * 100) : 0;
+
+          // Send progress update
+          res.write(`data: ${JSON.stringify({
+            type: "progress",
+            current: currentFile,
+            processed: processedFiles,
+            total: totalFiles,
+            percentage,
+            message: `(${processedFiles}/${totalFiles}) ${currentFile}`
+          })}\n\n`);
+          continue;
+        }
+
+        if (line.includes("[PROGRESS:") && line.includes("]")) {
+          res.write(`data: ${JSON.stringify({ type: "progress", message: line })}\n\n`);
+          continue;
+        }
+
+        res.write(`data: ${JSON.stringify({ type: "log", message: line })}\n\n`);
       }
     });
     
     child.stderr.on("data", (data) => {
       output += data.toString();
+      const text = data.toString();
+      const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+      for (const line of lines) {
+        res.write(`data: ${JSON.stringify({ type: "log", message: line, stream: "stderr" })}\n\n`);
+      }
     });
     
     child.on("close", (code) => {
@@ -531,7 +550,19 @@ function runProcessWithProgress(cmd, args, res, processId) {
       
       // Send completion signal
       if (!isKilled) {
-        res.write(`data: ${JSON.stringify({ type: 'complete', success: code === 0, processed: processedFiles, total: totalFiles, cancelled: isKilled })}\n\n`);
+        const completePayload = {
+          type: "complete",
+          success: code === 0,
+          processed: processedFiles,
+          total: totalFiles,
+          cancelled: isKilled
+        };
+        if (code !== 0) {
+          completePayload.error = (output || `Process failed with code ${code}`).trim().slice(-1200);
+        } else if (!processedFiles && output.trim()) {
+          completePayload.message = output.trim().slice(-400);
+        }
+        res.write(`data: ${JSON.stringify(completePayload)}\n\n`);
         res.end();
       }
       

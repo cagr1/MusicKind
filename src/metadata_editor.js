@@ -10,12 +10,13 @@ import path from "path";
 import { parseFile } from "music-metadata";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
+import { getAudioExtensions, discoverAudioFiles } from "./services/audio-discovery.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
 
-const SUPPORTED_EXTENSIONS = new Set([".mp3", ".wav", ".aiff", ".aif", ".flac", ".m4a"]);
+const SUPPORTED_EXTENSIONS = new Set(getAudioExtensions());
 
 /**
  * Read metadata from an audio file
@@ -64,59 +65,73 @@ export async function readMetadata(filePath) {
 /**
  * List audio files in a directory
  */
-export function listAudioFiles(dirPath, recursive = false) {
+export async function listAudioFiles(dirPath, recursive = false) {
   if (!fs.existsSync(dirPath)) {
     throw new Error(`Directory not found: ${dirPath}`);
   }
-  
-  const files = [];
-  
-  function scanDir(dir) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory() && recursive) {
-        scanDir(fullPath);
-      } else if (entry.isFile()) {
-        const ext = path.extname(entry.name).toLowerCase();
-        if (SUPPORTED_EXTENSIONS.has(ext)) {
-          files.push(fullPath);
-        }
-      }
-    }
+
+  const discovery = await discoverAudioFiles({
+    target: dirPath,
+    recursive
+  });
+
+  const structuralError = discovery.errors.find((error) =>
+    error.code === "INVALID_INPUT" ||
+    error.code === "TARGET_NOT_FOUND" ||
+    error.code === "TARGET_NOT_ACCESSIBLE"
+  );
+
+  if (structuralError) {
+    throw new Error(structuralError.message);
   }
-  
-  scanDir(dirPath);
-  return files;
+
+  return discovery.files;
 }
 
 /**
- * Rename a file
+ * Rename a file. newName may include or omit the extension — it will never be doubled.
  */
 export function renameFile(oldPath, newName) {
   if (!fs.existsSync(oldPath)) {
     throw new Error(`File not found: ${oldPath}`);
   }
-  
+  if (!newName || !newName.trim()) {
+    throw new Error(`Target filename cannot be empty`);
+  }
+  if (newName.includes("/") || newName.includes("\\")) {
+    throw new Error(`Invalid filename: path separators are not allowed`);
+  }
+
   const dir = path.dirname(oldPath);
-  const ext = path.extname(oldPath);
-  const newPath = path.join(dir, newName + ext);
-  
-  if (fs.existsSync(newPath) && oldPath !== newPath) {
+  const ext = path.extname(oldPath).toLowerCase();
+
+  // Avoid doubling the extension if newName already ends with it (case-insensitive)
+  const newNameExt = path.extname(newName).toLowerCase();
+  const finalName = newNameExt === ext ? newName : newName + ext;
+
+  const newPath = path.join(dir, finalName);
+
+  if (fs.existsSync(newPath) && path.resolve(oldPath) !== path.resolve(newPath)) {
     throw new Error(`Target file already exists: ${newPath}`);
   }
-  
+
   fs.renameSync(oldPath, newPath);
   return newPath;
 }
 
 /**
- * Write metadata to a file using FFmpeg
+ * Write metadata to a file using FFmpeg.
+ * Resolves with { ok: true, newPath: string, metadataWritten: boolean }.
+ * The file path does not change; newPath === filePath on success.
  */
 export function writeMetadata(filePath, metadata) {
   return new Promise((resolve, reject) => {
+    if (!fs.existsSync(filePath)) {
+      return reject(new Error(`File not found: ${filePath}`));
+    }
+
     const args = ["-y", "-i", filePath];
-    
+
     // Copy to temp file first to avoid issues
     const ext = path.extname(filePath);
     const tempPath = filePath + ".tmp";
@@ -144,7 +159,7 @@ export function writeMetadata(filePath, metadata) {
         // Replace original with temp
         fs.unlinkSync(filePath);
         fs.renameSync(tempPath, filePath);
-        resolve({ ok: true });
+        resolve({ ok: true, newPath: filePath, metadataWritten: true });
       } else {
         // Clean up temp if exists
         if (fs.existsSync(tempPath)) {
@@ -227,18 +242,19 @@ export async function identifyAndTag(filePath, spotifyClient) {
     track: spotifyTrack?.track_number || currentMeta.track
   };
   
-  // Step 5: Write metadata to file
+  // Step 5: Write metadata to file (path unchanged after this call)
   await writeMetadata(filePath, newMetadata);
-  
+
   // Step 6: Rename file to "Artist - Title.ext"
+  // generateFilename returns a name without extension; renameFile appends it.
   const newFilename = generateFilename(newMetadata);
   const newPath = renameFile(filePath, newFilename);
-  
+
   return {
     ok: true,
     original: currentData.file.name,
     result: `${newMetadata.artist} - ${newMetadata.title}`,
-    newFilename: newFilename + currentData.file.ext,
+    newFilename: path.basename(newPath),
     newPath: newPath,
     metadata: newMetadata
   };
