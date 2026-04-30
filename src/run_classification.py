@@ -140,7 +140,7 @@ def main():
         best = min(scores, key=scores.get)
         out_files[best].write(str(track) + "\n")
         out_files[best].flush()
-        print(f"[{idx}/{total}] {track.name} -> {best}")
+        print(f"[PROGRESS:{idx}/{total}] Processing: {track.name}", flush=True)
 
     for f in out_files.values():
         f.close()

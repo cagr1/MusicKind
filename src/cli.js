@@ -66,7 +66,7 @@ if (!discovery.ok && discovery.files.length === 0) {
   process.exit(1);
 }
 
-let files = discovery.files.filter((filePath) => !isAlreadySorted(filePath, genreFolders));
+let files = discovery.files.filter((filePath) => !isAlreadySorted(filePath, genreFolders, inputDir));
 if (Number.isFinite(limit) && limit > 0) {
   files = files.slice(0, limit);
 }
@@ -139,6 +139,41 @@ for (const filePath of files) {
       });
       console.log(`${relative} -> ${genre}`);
       continue;
+    }
+
+    // Check embedded ID3/Vorbis genre tag before calling any API
+    const embeddedGenres = Array.isArray(metadata.common.genre)
+      ? metadata.common.genre
+      : metadata.common.genre
+      ? [metadata.common.genre]
+      : [];
+
+    if (embeddedGenres.length > 0) {
+      const id3Classification = classifyFromTags(embeddedGenres);
+      if (id3Classification && allowedGenres.has(id3Classification.genre)) {
+        const genre = id3Classification.genre;
+        const finalDir = path.join(inputDir, genre);
+        ensureDir(finalDir, dryRun);
+        const destPath = path.join(finalDir, path.basename(filePath));
+        if (!dryRun) {
+          if (fs.existsSync(destPath)) {
+            const unique = uniquePath(finalDir, path.basename(filePath));
+            moveFile(filePath, unique, dryRun);
+          } else {
+            moveFile(filePath, destPath, dryRun);
+          }
+        }
+        reportRows.push({
+          file: relative,
+          artist,
+          title,
+          cleanTitle: clean,
+          genre,
+          reason: `id3:${embeddedGenres[0]}`
+        });
+        console.log(`${relative} -> ${genre} [id3]`);
+        continue;
+      }
     }
 
     const trackTagsPromise = lastfm ? lastfm.getTrackTags(artist, clean).catch(() => []) : Promise.resolve([]);
@@ -332,8 +367,9 @@ function withTimeout(promise, ms) {
   return Promise.race([promise, timeout]);
 }
 
-function isAlreadySorted(filePath, genreFolders) {
-  const parts = filePath.split(path.sep);
+function isAlreadySorted(filePath, genreFolders, baseDir) {
+  const relative = path.relative(baseDir, filePath);
+  const parts = relative.split(path.sep);
   return parts.some((part) => genreFolders.has(part));
 }
 

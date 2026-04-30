@@ -415,8 +415,10 @@ genresSave.addEventListener("click", async () => {
 });
 
 const clsRun = document.getElementById("cls-run");
+const clsPause = document.getElementById("cls-pause");
 const clsCancel = document.getElementById("cls-cancel");
 let currentProcessId = null;
+let clsIsPaused = false;
 
 clsRun.addEventListener("click", async () => {
   const inputPath = document.getElementById("cls-input").value.trim();
@@ -445,7 +447,10 @@ clsRun.addEventListener("click", async () => {
   currentFile.textContent = "";
   
   clsRun.classList.add("hidden");
+  clsPause.classList.remove("hidden");
   clsCancel.classList.remove("hidden");
+  clsIsPaused = false;
+  clsPause.textContent = "⏸ Pausar";
 
   const res = await fetch("/api/genre-classify", {
     method: "POST",
@@ -459,7 +464,9 @@ clsRun.addEventListener("click", async () => {
     log.textContent = data.error || "";
     progressContainer.classList.add("hidden");
     clsRun.classList.remove("hidden");
+    clsPause.classList.add("hidden");
     clsCancel.classList.add("hidden");
+    clsIsPaused = false;
     return;
   }
 
@@ -516,22 +523,62 @@ clsRun.addEventListener("click", async () => {
   setTimeout(() => {
     progressContainer.classList.add("hidden");
     clsRun.classList.remove("hidden");
+    clsPause.classList.add("hidden");
     clsCancel.classList.add("hidden");
+    clsIsPaused = false;
     currentProcessId = null;
   }, 2000);
 });
 
 clsCancel.addEventListener("click", async () => {
   if (!currentProcessId) return;
-  
+  const confirmed = confirm("¿Estás seguro que deseas cancelar la clasificación?");
+  if (!confirmed) return;
   try {
+    if (clsIsPaused) {
+      await fetch("/api/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ processId: currentProcessId })
+      });
+    }
     await fetch("/api/cancel", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ processId: currentProcessId })
     });
+    clsIsPaused = false;
   } catch (e) {
     console.error('Error cancelling:', e);
+  }
+});
+
+clsPause.addEventListener("click", async () => {
+  if (!currentProcessId) return;
+  if (clsIsPaused) {
+    try {
+      await fetch("/api/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ processId: currentProcessId })
+      });
+      clsIsPaused = false;
+      clsPause.textContent = "⏸ Pausar";
+    } catch (e) {
+      console.error('Error resuming:', e);
+    }
+  } else {
+    try {
+      await fetch("/api/pause", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ processId: currentProcessId })
+      });
+      clsIsPaused = true;
+      clsPause.textContent = "▶ Reanudar";
+    } catch (e) {
+      console.error('Error pausing:', e);
+    }
   }
 });
 
@@ -835,17 +882,17 @@ const metaCurrentFile = document.getElementById("meta-current-file");
 const metaResults = document.getElementById("meta-results");
 const metaResultsList = document.getElementById("meta-results-list");
 const metaStatus = document.getElementById("meta-status");
-const metaEditor = null;
-const metaNewFilename = null;
-const metaCancelEdit = null;
-const metaSave = null;
-const metaPreviewName = null;
-const metaTitle = null;
-const metaArtist = null;
-const metaAlbum = null;
-const metaYear = null;
-const metaGenre = null;
-const metaTrack = null;
+const metaEditor = document.getElementById("meta-editor");
+const metaNewFilename = document.getElementById("meta-new-filename");
+const metaCancelEdit = document.getElementById("meta-cancel-edit");
+const metaSave = document.getElementById("meta-save");
+const metaPreviewName = document.getElementById("meta-preview-name");
+const metaTitle = document.getElementById("meta-title");
+const metaArtist = document.getElementById("meta-artist");
+const metaAlbum = document.getElementById("meta-album");
+const metaYear = document.getElementById("meta-year");
+const metaGenre = document.getElementById("meta-genre");
+const metaTrack = document.getElementById("meta-track");
 
 let metaFiles = [];
 let metaProcessId = null;
@@ -935,6 +982,7 @@ function renderMetaFileList(files, showStatus = true) {
       <button class="file-item-remove" data-idx="${idx}" title="Quitar archivo">×</button>
       <span class="file-item-name">${fileName}</span>
       <span class="file-item-meta">${ext}</span>
+      <button class="file-item-edit btn" data-path="${filePath}" title="Editar metadatos">✎</button>
     `;
     metaFileList.appendChild(fileItem);
   });
@@ -945,6 +993,35 @@ function renderMetaFileList(files, showStatus = true) {
       e.stopPropagation();
       const idx = parseInt(e.target.dataset.idx);
       removeMetaFile(idx);
+    });
+  });
+
+  // Add click handlers for edit buttons
+  document.querySelectorAll(".file-item-edit").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const filePath = btn.dataset.path;
+      if (!filePath || !metaEditor) return;
+      try {
+        const res = await fetch(`/api/metadata?file=${encodeURIComponent(filePath)}`);
+        const data = await res.json();
+        if (!data.ok) return;
+        currentMetaFile = filePath;
+        currentMetaData = data.metadata;
+        if (metaTitle) metaTitle.value = data.metadata.title || "";
+        if (metaArtist) metaArtist.value = data.metadata.artist || "";
+        if (metaAlbum) metaAlbum.value = data.metadata.album || "";
+        if (metaYear) metaYear.value = data.metadata.year || "";
+        if (metaGenre) metaGenre.value = data.metadata.genre || "";
+        if (metaTrack) metaTrack.value = data.metadata.track || "";
+        const baseName = filePath.split("/").pop().replace(/\.[^.]+$/, "");
+        if (metaNewFilename) metaNewFilename.value = baseName;
+        updateMetaPreview();
+        metaEditor.classList.remove("hidden");
+        metaEditor.scrollIntoView({ behavior: "smooth" });
+      } catch (err) {
+        if (metaStatus) metaStatus.textContent = `Error al leer metadatos: ${err.message}`;
+      }
     });
   });
 }
@@ -1287,7 +1364,7 @@ bpmAnalyze.addEventListener("click", async () => {
               bpmProgressText.textContent = data.success ? "Completado" : "Cancelado";
               bpmProgressFill.style.width = data.success ? "100%" : "0%";
             } else if (data.type === 'result') {
-              bpmResults.push(data);
+              renderBpmResults(data.results || []);
             }
           } catch (e) {
             console.error('Error parsing SSE data:', e);
@@ -1295,17 +1372,6 @@ bpmAnalyze.addEventListener("click", async () => {
         }
       }
     }
-    
-    // Get final results
-    const finalRes = await fetch("/api/bpm/analyze", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        files: listData.files,
-        analysisSeconds,
-        processId: bpmProcessId
-      })
-    });
     
   } catch (e) {
     bpmStatus.textContent = `Error: ${e.message}`;
@@ -1337,6 +1403,35 @@ function resetBpmButtons() {
     bpmCancel.classList.add("hidden");
     bpmProcessId = null;
   }, 2000);
+}
+
+function renderBpmResults(results) {
+  if (!bpmTableBody) return;
+  bpmTableBody.innerHTML = "";
+  for (const r of results) {
+    const row = document.createElement("tr");
+    const name = r.file ? r.file.split(/[\\/]/).pop() : "—";
+    const cells = [
+      { text: name, title: r.file || "" },
+      { text: r.ok ? String(r.bpm) : "—" },
+      { text: r.ok ? r.key : "—" },
+      { text: r.ok ? "" : (r.error || "error"), error: !r.ok }
+    ];
+    for (const c of cells) {
+      const td = document.createElement("td");
+      if (c.title) td.title = c.title;
+      if (c.error) {
+        const span = document.createElement("span");
+        span.className = "error-text";
+        span.textContent = c.text;
+        td.appendChild(span);
+      } else {
+        td.textContent = c.text;
+      }
+      row.appendChild(td);
+    }
+    bpmTableBody.appendChild(row);
+  }
 }
 
 // ==================== SETTINGS FUNCTIONALITY ====================

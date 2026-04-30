@@ -59,7 +59,7 @@ def main():
         out_path = output_dir / rel
         out_path = out_path.with_suffix(f".{args.format}")
         convert_audio(file_path, out_path, args.format, args.bitrate)
-        print(f"[{idx}/{total}] {rel} -> {out_path.name}")
+        print(f"[PROGRESS:{idx}/{total}] Processing: {rel}", flush=True)
 
 
 if __name__ == "__main__":

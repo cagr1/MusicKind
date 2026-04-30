@@ -9,6 +9,7 @@ let mainWindow;
 let backendProcess = null;
 let backendOwnedByElectron = false;
 let shuttingDown = false;
+let startupDone = false;
 const SERVER_PORT = Number(process.env.PORT || 3030);
 const SERVER_ORIGIN = `http://127.0.0.1:${SERVER_PORT}`;
 const projectRoot = path.join(__dirname, '..');
@@ -64,6 +65,7 @@ app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return;
   await ensureBackendServerReady();
   createWindow();
+  startupDone = true;
 });
 
 app.on('second-instance', () => {
@@ -85,6 +87,7 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   if (!gotSingleInstanceLock) return;
+  if (!startupDone) return; // Don't race with whenReady during initial boot
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
@@ -111,7 +114,7 @@ function startBackendServer() {
   backendOwnedByElectron = true;
   backendProcess = spawn(process.execPath, [path.join(projectRoot, 'src', 'server.js')], {
     cwd: projectRoot,
-    env: { ...process.env, PORT: String(SERVER_PORT) },
+    env: { ...process.env, PORT: String(SERVER_PORT), ELECTRON_RUN_AS_NODE: '1' },
     stdio: ['ignore', 'pipe', 'pipe']
   });
 

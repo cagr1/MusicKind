@@ -1,7 +1,8 @@
 # MusicKind — Project State
 
-> Last updated: 2026-04-18
-> Purpose: persistent context for LLM sessions. Read this before any work on the codebase.
+> Last updated: 2026-04-30
+> Purpose: arquitectura y decisiones para LLMs. Leer antes de cualquier trabajo.
+> Para avance y tareas pendientes: ver **NEXT.md**.
 
 ---
 
@@ -14,7 +15,7 @@ MusicKind is a desktop-first DJ tool for:
 - **Metadata editing** and Spotify auto-tagging
 - **BPM/key analysis** via Python/librosa
 
-Primary target: macOS, Electron desktop app. Also runs as a local web dashboard at `localhost:3030`.
+Primary target: macOS, Electron desktop app. El servidor Node.js en puerto 3030 es el backend embebido que Electron arranca automáticamente — no se desarrolla como web dashboard independiente. `npm run dashboard` es solo para debug.
 
 ---
 
@@ -120,47 +121,27 @@ The `metaNewFilename`/metadata form references were crashing top-level execution
 
 ---
 
-### Genre Classifier — genres UI shows static text, not chips
+### Genre Classifier — genres UI shows static text, not chips (**RESOLVED**)
 
-`#genres-list` is empty (loadGenres never runs → crash). The `.genres-note` div has hardcoded HTML text: *"Géneros actuales: Afro House, Tech House..."* and *"Usa el botón × en cada género para eliminarlo."* The user sees this static text and believes the chip UI is that list — but there are no × buttons.
-
-**Fix:** Remove the static `.genres-note` content from index.html. Once the crash is fixed, chips render correctly from `renderGenres()`.
+Static placeholder text removed from `.genres-note` div. Chips render correctly from `renderGenres()` via `loadGenres()`.
 
 ---
 
-### Progress bars — Converter and Set Creator
+### Progress bars — Converter and Set Creator (**RESOLVED**)
 
-`convert_audio.py` (L62) and `run_classification.py` (L143) both print `[{idx}/{total}] file -> output`. The server's `runProcessWithProgress` parser only matches `[PROGRESS:X/Y] Processing: file`. No match → bars stay at 0% → jump to "Completado".
-
-**Fix:** One-line change per Python file:
-```python
-# convert_audio.py L62:
-print(f"[PROGRESS:{idx}/{total}] Processing: {rel}", flush=True)
-
-# run_classification.py L143:
-print(f"[PROGRESS:{i}/{total}] Processing: {track.name}", flush=True)
-```
+`convert_audio.py` (L62) and `run_classification.py` (L143) now print `[PROGRESS:X/Y] Processing: ...`. Matches server parser. Progress bars update correctly.
 
 ---
 
-### SSE endpoints — missing Content-Type header
+### SSE endpoints — missing Content-Type header (**RESOLVED**)
 
-`runProcessWithProgress()` calls `res.write()` without a prior `res.writeHead()`. Node.js sends HTTP 200 with no `Content-Type`. SSE requires `Content-Type: text/event-stream`.
-
-**Fix:** Add at top of `runProcessWithProgress`:
-```js
-res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
-```
+`runProcessWithProgress()` now calls `res.writeHead(200, SSE headers)` at the top.
 
 ---
 
-### BPM — results never displayed + double-fetch
+### BPM — results never displayed + double-fetch (**RESOLVED**)
 
-`bpm_analyzer.py` outputs `[PROGRESS:X/Y] Processing: file` during analysis (correct), then dumps a JSON blob at the end via `print(json.dumps(results))`. The server captures this in `output` but never emits it as an SSE event. app.js listens for `{ type: 'result' }` events that never arrive → `bpmTableBody` stays empty.
-
-Additionally, app.js lines 1267-1276 make a second identical POST to `/api/bpm/analyze` after the stream finishes ("Get final results") — spawning a second full Python analysis that also produces nothing in the UI.
-
-**Fix:** Server must parse the JSON stdout line and emit it as `{ type: 'result', results: [...] }`. Delete lines 1267-1276 from app.js. Add table rendering when `data.type === 'result'` is received.
+Server now parses JSON stdout from `bpm_analyzer.py` and emits `{ type: 'result', results: [...] }` before the `complete` event. `renderBpmResults()` renders into `bpmTableBody`. Double-fetch removed from app.js.
 
 ---
 
@@ -172,11 +153,9 @@ For genre classification, `runProcessWithProgress` now includes an `error` paylo
 
 ---
 
-### Cancel — `cancelled` flag always false
+### Cancel — `cancelled` flag always false (**RESOLVED**)
 
-`cancelProcess()` kills the child with SIGTERM but never updates `isKilled` (a local variable in `runProcessWithProgress`'s closure). The `complete` event is emitted with `cancelled: false` even after a user-triggered cancel.
-
-**Fix:** Set `child._killed = true` before `child.kill('SIGTERM')` in `cancelProcess()`. In `runProcessWithProgress`, read `isKilled = child._killed === true` inside `child.on("close")`.
+`cancelProcess()` now sets `child._killed = true` before `child.kill('SIGTERM')`. In `runProcessWithProgress`, `isKilled = child._killed === true` is read in the `close` handler.
 
 ---
 
@@ -221,7 +200,7 @@ app.js contains complete logic for manual metadata editing (lines 1082-1154): ti
 
 ---
 
-## 6. Recent Fixes (this session)
+## 6. Recent Fixes (cumulative)
 
 | fix | files changed | tests |
 |---|---|---|
@@ -232,11 +211,20 @@ app.js contains complete logic for manual metadata editing (lines 1082-1154): ti
 | `identifyAndTag()` — `newFilename` from `path.basename(newPath)` | `src/metadata_editor.js` | included above |
 | `npm run test:metadata-editor` script added | `package.json` | — |
 | audio-ingestion integrated via `services/audio-discovery.js` | `src/services/` | `tests/audio-ingestion.test.js` (4 pass) |
-| Electron backend autostart + loadURL + graceful shutdown | `electron/main.cjs` | manual verification pending |
-| Electron single-instance lock (prevent double app windows) | `electron/main.cjs` | manual verification pending |
-| Classifier API-key gate with explicit error message | `src/server.js` | manual verification pending |
-| Classifier UI now appends analyzed files and backend errors to log | `ui/app.js`, `src/server.js` | manual verification pending |
-| Last.fm key hidden by default + eye toggle | `ui/index.html`, `ui/app.js` | manual verification pending |
+| Electron backend autostart + loadURL + graceful shutdown | `electron/main.cjs` | ✅ verified |
+| Electron single-instance lock (prevent double app windows) | `electron/main.cjs` | ✅ verified |
+| Electron `activate` race condition fix — `startupDone` flag | `electron/main.cjs` | manual verify |
+| Classifier API-key gate with explicit error message | `src/server.js` | ✅ verified |
+| Classifier UI now appends analyzed files and backend errors to log | `ui/app.js`, `src/server.js` | ✅ verified |
+| Last.fm key hidden by default + eye toggle | `ui/index.html`, `ui/app.js` | ✅ verified |
+| SSE headers — `res.writeHead(200, SSE headers)` in `runProcessWithProgress` | `src/server.js` | manual verify |
+| Cancel flag — `child._killed = true` in `cancelProcess`, read in `close` handler | `src/server.js` | manual verify |
+| Progress format — `convert_audio.py` L62 | `src/convert_audio.py` | manual verify |
+| Progress format — `run_classification.py` L143 | `src/run_classification.py` | manual verify |
+| BPM results — parse JSON stdout, emit `{ type:'result' }` SSE event | `src/server.js` | manual verify |
+| BPM results — `renderBpmResults()` added to table in UI | `ui/app.js` | manual verify |
+| BPM double-fetch removed (app.js L1299-1308) | `ui/app.js` | manual verify |
+| Genres — static placeholder text removed from `index.html` | `ui/index.html` | manual verify |
 
 ---
 
@@ -256,29 +244,30 @@ Do not create new modules. Do not add features. Fix what exists.
 
 ## 8. Next Steps (ordered)
 
+Items 1-7 are resolved as of 2026-04-30. Remaining:
+
 ```
-1. VALIDATE DESKTOP STARTUP
-               Confirm Electron always starts exactly one app window and backend lifecycle is stable.
+8. META FORM   Add metadata editing HTML form to #tab-metadata in index.html.
+               app.js already has full logic (L1082-1154): title, artist, album, year, genre, track,
+               preview, save/cancel. Elements needed: #meta-editor, #meta-title, #meta-artist,
+               #meta-album, #meta-year, #meta-genre, #meta-track, #meta-preview-name, #meta-save, #meta-cancel.
 
-2. GENRES UI   Verify chips render correctly from server data and no static placeholder text confuses users.
+9. CLASSIFIER UX (minor)
+               Guard for empty inputPath before fetch (app.js ~L422) — non-critical, cosmetic.
+               cli.js L79 "Starting classification..." line doesn't match PROGRESS regex
+               — benign, falls through to generic log.
 
-3. SSE HEADERS Add res.writeHead(200, SSE headers) to runProcessWithProgress in server.js
+10. ERROR SURFACING (remaining tabs)
+               Converter, Set Creator, BPM tabs don't render data.error in their log/status
+               when success=false. Apply same pattern as Classifier tab.
 
-4. ERRORS      Propagate subprocess stderr to { type:'complete', error: ... } event
-               Render data.error in #cls-log when success=false
-
-5. CANCEL FLAG Fix isKilled flag in cancelProcess + runProcessWithProgress
-
-6. PROGRESS PY Change print format in convert_audio.py and run_classification.py (1 line each)
-
-7. BPM RESULTS Parse JSON stdout from bpm_analyzer.py, emit as SSE result event
-               Delete double-fetch in app.js lines 1267-1276
-               Add table rendering for { type:'result' } events
-
-8. CLASSIFIER UX
-               Keep explicit message when Spotify keys are missing; do not start classification without credentials.
-
-9. META FORM   Add metadata editing HTML form to #tab-metadata in index.html
+11. MANUAL END-TO-END TEST
+               Run each tab with real audio files in Electron:
+               - Genre classifier with Spotify keys set
+               - Converter (check progress bar)
+               - BPM (check table renders after analysis)
+               - Set creator (check progress bar)
+               - Metadata tab (list + identify)
 ```
 
 ---
@@ -294,4 +283,4 @@ Do not create new modules. Do not add features. Fix what exists.
 7. **Tests exist for metadata-editor and audio-ingestion.** Run them after changes to those modules.
 8. **Check line numbers.** app.js is 1551 lines. server.js is 575 lines. Specify exact locations.
 9. **Backend errors go to stderr.** Check `output` variable in server.js when debugging subprocess failures.
-10. **The crash at L1079 is the highest-priority issue.** Almost every "nothing happens" bug traces back to it.
+10. **El crash en L1079 está resuelto.** Variables de metadatos declaradas como `null` con guards en listeners.

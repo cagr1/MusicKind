@@ -2,7 +2,7 @@ import { normalizeTag } from "./utils.js";
 
 export function classifyFromTags(tags) {
   const normalized = tags.map(normalizeTag);
-  if (hasTag(normalized, "afro house")) return { genre: "Afro House", reason: "tag:afro house" };
+  if (hasTag(normalized, "afro house") || hasTag(normalized, "south african house") || hasTag(normalized, "amapiano") || hasTag(normalized, "organic house")) return { genre: "Afro House", reason: "tag:afro house" };
   if (hasTag(normalized, "tech house")) return { genre: "Tech House", reason: "tag:tech house" };
   if (hasTag(normalized, "deep house")) return { genre: "Deep House", reason: "tag:deep house" };
   if (hasTag(normalized, "latin house")) return { genre: "Latin House", reason: "tag:latin house" };
@@ -24,7 +24,7 @@ export function classifyFromTags(tags) {
   if (hasTag(normalized, "nu disco") || hasTag(normalized, "nu-disco") || hasTag(normalized, "disco")) {
     return { genre: "Nu Disco", reason: "tag:nu disco/disco" };
   }
-  if (hasTag(normalized, "melodic techno") || hasTag(normalized, "melodic house techno")) {
+  if (hasTag(normalized, "melodic techno") || hasTag(normalized, "melodic house techno") || hasTag(normalized, "organic techno") || hasTag(normalized, "minimal techno")) {
     return { genre: "Melodic Techno", reason: "tag:melodic techno" };
   }
   if (hasTag(normalized, "melodic house") || hasTag(normalized, "melodic")) {

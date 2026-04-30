@@ -218,6 +218,15 @@ async function handleApi(req, res, url) {
     return sendJson(res, { ok: true, cancelled });
   }
 
+  // Pause / Resume a running process (macOS/Linux — SIGSTOP / SIGCONT)
+  if (req.method === "POST" && (url.pathname === "/api/pause" || url.pathname === "/api/resume")) {
+    const body = await readJsonBody(req);
+    const processId = body.processId ? String(body.processId) : "";
+    if (!processId) return sendJson(res, { ok: false, error: "processId requerido" }, 400);
+    const signal = url.pathname === "/api/pause" ? "SIGSTOP" : "SIGCONT";
+    return signalProcess(processId, signal, res);
+  }
+
   // ==================== METADATA EDITOR API ====================
   
   // Get metadata for a single file
@@ -358,7 +367,7 @@ async function handleApi(req, res, url) {
     
     // Note: runProcessWithProgress handles response completion (res.end())
     // so no further response should be sent after this
-    await runProcessWithProgress("python3", args, res, processId);
+    await runProcessWithProgress("python3", args, res, processId, { parseJsonResult: true });
     return; // Response already sent by runProcessWithProgress
   }
 
@@ -481,15 +490,17 @@ async function checkFFmpeg() {
   });
 }
 
-function runProcessWithProgress(cmd, args, res, processId) {
+function runProcessWithProgress(cmd, args, res, processId, options = {}) {
+  const { parseJsonResult = false } = options;
   return new Promise((resolve) => {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
     const child = spawn(cmd, args, { cwd: projectRoot });
     let output = "";
     let currentFile = "";
     let totalFiles = 0;
     let processedFiles = 0;
     let isKilled = false;
-    
+
     // Register process for cancellation
     if (processId) {
       runningProcesses.set(processId, child);
@@ -543,19 +554,34 @@ function runProcessWithProgress(cmd, args, res, processId) {
     });
     
     child.on("close", (code) => {
+      isKilled = child._killed === true;
       // Remove from registry
       if (processId) {
         runningProcesses.delete(processId);
       }
-      
-      // Send completion signal
-      if (!isKilled) {
+
+      // Send completion signal — always close the SSE stream
+      if (isKilled) {
+        res.write(`data: ${JSON.stringify({ type: 'complete', success: false, cancelled: true })}\n\n`);
+      } else {
+        if (parseJsonResult && code === 0) {
+          try {
+            const lines = output.split('\n');
+            const jsonLineIdx = lines.findIndex(l => l.trim() === '[');
+            if (jsonLineIdx >= 0) {
+              const parsed = JSON.parse(lines.slice(jsonLineIdx).join('\n'));
+              res.write(`data: ${JSON.stringify({ type: 'result', results: parsed })}\n\n`);
+            }
+          } catch (e) {
+            // JSON not found or malformed — skip result event
+          }
+        }
         const completePayload = {
           type: "complete",
           success: code === 0,
           processed: processedFiles,
           total: totalFiles,
-          cancelled: isKilled
+          cancelled: false
         };
         if (code !== 0) {
           completePayload.error = (output || `Process failed with code ${code}`).trim().slice(-1200);
@@ -563,8 +589,8 @@ function runProcessWithProgress(cmd, args, res, processId) {
           completePayload.message = output.trim().slice(-400);
         }
         res.write(`data: ${JSON.stringify(completePayload)}\n\n`);
-        res.end();
       }
+      res.end();
       
       if (code === 0) {
         resolve({ ok: true, output });
@@ -579,11 +605,23 @@ function runProcessWithProgress(cmd, args, res, processId) {
 function cancelProcess(processId) {
   const child = runningProcesses.get(processId);
   if (child) {
+    child._killed = true;
     child.kill('SIGTERM');
     runningProcesses.delete(processId);
     return true;
   }
   return false;
+}
+
+function signalProcess(processId, signal, res) {
+  const child = runningProcesses.get(processId);
+  if (!child) return sendJson(res, { ok: false, error: "proceso no encontrado" }, 404);
+  try {
+    child.kill(signal);
+  } catch (e) {
+    return sendJson(res, { ok: false, error: e.message }, 500);
+  }
+  return sendJson(res, { ok: true });
 }
 
 function runProcess(cmd, args) {

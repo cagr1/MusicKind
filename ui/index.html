@@ -88,15 +88,13 @@
                 <input id="genres-input" type="text" placeholder="Agregar género" />
                 <button id="genres-add" class="btn">Agregar</button>
               </div>
-              <div class="genres-note">
-                <p>Géneros actuales: Afro House, Tech House, Deep House, Latin House, Minimal Deep Tech, Progressive House, etc.</p>
-                <p>Usa el botón × en cada género para eliminarlo.</p>
-              </div>
+              <div class="genres-note"></div>
             </div>
 
             <div class="actions">
               <button id="cls-run" class="btn primary">Clasificar ahora</button>
-              <button id="cls-cancel" class="btn danger hidden">Cancelar</button>
+              <button id="cls-pause" class="btn hidden">⏸ Pausar</button>
+              <button id="cls-cancel" class="btn danger hidden">✕ Cancelar</button>
             </div>
 
             <!-- Progress bar for classifier -->
@@ -528,6 +526,47 @@
             <div id="meta-results" class="meta-results hidden">
               <h3>Resultados:</h3>
               <div id="meta-results-list"></div>
+            </div>
+
+            <div id="meta-editor" class="metadata-editor hidden">
+              <h3>Editar metadatos</h3>
+              <div class="meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;">
+                <div class="field">
+                  <label for="meta-title">Título</label>
+                  <input id="meta-title" type="text" placeholder="Título" />
+                </div>
+                <div class="field">
+                  <label for="meta-artist">Artista</label>
+                  <input id="meta-artist" type="text" placeholder="Artista" />
+                </div>
+                <div class="field">
+                  <label for="meta-album">Álbum</label>
+                  <input id="meta-album" type="text" placeholder="Álbum" />
+                </div>
+                <div class="field">
+                  <label for="meta-year">Año</label>
+                  <input id="meta-year" type="number" placeholder="2024" />
+                </div>
+                <div class="field">
+                  <label for="meta-genre">Género</label>
+                  <input id="meta-genre" type="text" placeholder="Afro House" />
+                </div>
+                <div class="field">
+                  <label for="meta-track">Pista #</label>
+                  <input id="meta-track" type="number" placeholder="1" />
+                </div>
+                <div class="field" style="grid-column:1/-1;">
+                  <label for="meta-new-filename">Nombre de archivo</label>
+                  <input id="meta-new-filename" type="text" />
+                </div>
+              </div>
+              <div class="meta-preview">
+                Vista previa: <code id="meta-preview-name">nombre.mp3</code>
+              </div>
+              <div class="actions">
+                <button id="meta-save" class="btn primary">Guardar cambios</button>
+                <button id="meta-cancel-edit" class="btn">Cancelar</button>
+              </div>
             </div>
 
             <div class="status" id="meta-status"></div>
