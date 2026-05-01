@@ -9,278 +9,125 @@
 ## 1. Project Overview
 
 MusicKind is a desktop-first DJ tool for:
-- **Genre classification** of audio files using Spotify/Last.fm APIs
-- **DJ set creation** (warmup/peak/closing) scored against an existing collection
-- **Audio conversion** (MP3/WAV/AIFF/FLAC) via FFmpeg
+- **Genre classification** using Spotify/Last.fm plus local fallbacks
+- **Set analysis by section** (`warmup` / `peak` / `closing`) against a reference collection
+- **Audio conversion** via FFmpeg
 - **Metadata editing** and Spotify auto-tagging
 - **BPM/key analysis** via Python/librosa
+- **Stem separation** (vocals / instrumental) via demucs
 
-Primary target: macOS, Electron desktop app. El servidor Node.js en puerto 3030 es el backend embebido que Electron arranca automáticamente — no se desarrolla como web dashboard independiente. `npm run dashboard` es solo para debug.
+Primary target: macOS, Electron desktop app. The Node.js server on port `3030` is the embedded backend that Electron starts automatically. `npm run dashboard` remains useful mainly for debugging.
 
 ---
 
 ## 2. Current Architecture
 
-```
-electron/           Desktop shell (Electron 28). Native dialogs, FFmpeg installer.
-  main.cjs          IPC handlers: select-directory, select-files, check-ffmpeg, install-ffmpeg, is-electron.
-                    Starts backend automatically and enforces single-instance window behavior.
-  preload.cjs       Exposes electronAPI to renderer: openDirectory, openFiles, checkFFmpeg, installFFmpeg, isElectron
+```text
+electron/
+  main.cjs              Desktop shell, native dialogs, FFmpeg install, backend autostart
+  preload.cjs           Exposes electronAPI to the renderer
 
 src/
-  server.js         Node.js HTTP server on port 3030. All API endpoints. Spawns Python subprocesses.
-  cli.js            Genre classifier CLI. Called by server as a Node subprocess.
-  metadata_editor.js  Metadata read/write/rename/identify. ✅ Fixed in this session.
-  spotify.js        Spotify Web API client with retry and cache.
-  lastfm.js         Last.fm API client.
-  cache.js          JSON file cache for API responses.
-  utils.js          Legacy file discovery utilities. Partially superseded by audio-ingestion.
-  classify.js       Genre classification logic (Spotify + audio features fallback).
-
-  skills/
-    audio-ingestion/  ✅ Structured discovery with manifest, adapters, dry-run, deduplication.
-                      Integrated via services/audio-discovery.js. Tests pass.
+  server.js             HTTP API + SSE endpoints
+  cli.js                Genre classifier CLI
+  classify.js           Genre classification helpers and BPM fallback rules
+  spotify.js            Spotify Web API client
+  lastfm.js             Last.fm API client
+  metadata_editor.js    Metadata read/write/rename/identify
+  bpm_analyzer.py       BPM + key extraction
+  style_analyzer.py     Similarity engine; supports simple and multi-reference set modes
+  stem_separator.py     Demucs wrapper for vocals/instrumental extraction
+  run_classification.py Legacy set script kept for now, no longer the primary UI path
+  convert_audio.py      Audio conversion with progress
+  audio_features.py     Shared librosa feature extraction
 
   services/
-    audio-discovery.js       Wraps audio-ingestion for server use.
-    metadata-list-api.js     Builds /api/metadata/list response using discovery service.
+    audio-discovery.js
+    metadata-list-api.js
 
-  bpm_analyzer.py     BPM + key detection via librosa. Outputs [PROGRESS:X/Y] + JSON blob.
-  run_classification.py  Set creation scoring. ⚠ Uses wrong progress format (see §5).
-  convert_audio.py    Audio format conversion via FFmpeg. ⚠ Uses wrong progress format (see §5).
-  audio_features.py   Shared librosa feature extraction.
+  skills/
+    audio-ingestion/
 
 ui/
-  index.html        Single-page dashboard. Single Settings panel (no duplicated cfg-* IDs).
-  app.js            All frontend logic. Metadata null-guards applied (critical crash resolved).
-  styles.css        Dashboard styles.
+  index.html            Single-page dashboard
+  app.js                Frontend logic for all tabs
+  styles.css            Dashboard styles
 
 config/
-  genres.json       Active genre list (12 genres). Read by both server.js and cli.js.
-  settings.json     Spotify/LastFM credentials + language preference.
-                    Includes defaultOutputDir for global output defaults.
+  genres.json
+  settings.json
 
 tests/
-  audio-ingestion.test.js   ✅ 4 tests pass
-  metadata-editor.test.js   ✅ 11 tests pass
+  audio-ingestion.test.js
+  metadata-editor.test.js
+  server-metadata-list.test.js
 ```
 
-**FFmpeg usage:** required by set-create (optional), convert, metadata write. Frontend uses global `AppState.ffmpegReady` initialized once in `initAppState()`.
-
-**Python runtime:** `python3` must be in PATH. Dependencies: `librosa`, `numpy`. No virtual env enforced.
+Python runtime must be available as `python3`. Base dependencies include `librosa` and `numpy`. Stem separation additionally requires `demucs`.
 
 ---
 
-## 3. Key Decisions (already made, do not revisit)
+## 3. Key Decisions
 
 | decision | rationale |
 |---|---|
-| **Desktop-first (Electron)** | `showDirectoryPicker()` (browser File System API) cannot return real OS paths — the server needs paths to spawn processes. Electron dialogs return real paths. Browser mode = text input only. |
-| **No `showDirectoryPicker()`** | Returns `FileSystemDirectoryHandle`, not a path string. Assigning to `input.value` produces `"[object FileSystemDirectoryHandle]"`. Dead end. |
-| **`Runtime` object for context detection** | Single `const Runtime = { isElectron: Boolean(window.electronAPI?.openDirectory) }` evaluated once. Not per-function detection. |
-| **`AppState` for FFmpeg** | Single `AppState.ffmpegReady` populated once at startup via `initAppState()`. All tabs subscribe with `onFfmpegStateChange()`. Replaces 4+ independent checks. |
-| **`defaultOutputDir` in Settings** | Global output directory stored in `config/settings.json`. Tabs read it as default, can override per operation. |
-| **Spotify keys are mandatory for classification** | If `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` are missing, `/api/genre-classify` must return a clear user-facing error and not start classification. |
-| **audio-ingestion as canonical discovery** | `utils.listAudioFiles()` and inline discovery in `server.js` are superseded. All file discovery goes through `services/audio-discovery.js → audio-ingestion`. |
-| **`safePath()` for all path inputs** | Server must validate all path parameters from requests: `path.resolve()` + optional `mustExist` check. Blocks path traversal. Not yet implemented. |
+| **Desktop-first (Electron)** | Native dialogs return real filesystem paths; browser handles do not. |
+| **Single `Runtime` object** | Renderer detects Electron once and branches from a stable flag. |
+| **Single `AppState` store** | Shared settings/FFmpeg state across tabs reduces duplicated checks. |
+| **Global `defaultOutputDir`** | Output directory now comes from Settings instead of per-tab duplication. |
+| **audio-ingestion is canonical discovery** | File discovery should go through structured discovery services. |
+| **Set Creator absorbed Style Matcher** | The user-facing question changed from “does it fit my taste?” to “where in my set does it fit?”. |
+| **Legacy `/api/set-create` kept temporarily** | It remains available while the new set-analysis flow stabilizes. |
 
 ---
 
-## 4. What is Working
+## 4. What Is Working
 
 | module | status | notes |
 |---|---|---|
-| Genre classifier — backend | ✅ | `cli.js` emits correct `[PROGRESS:X/Y] Processing:` format. Server parses it. Progress bar updates in UI. |
-| Genre classifier — API key validation | ✅ | `/api/genre-classify` now blocks execution with HTTP 400 + clear message when Spotify keys are missing. |
-| Genre classifier — run/cancel buttons | ✅ | `clsRun` and `clsCancel` handlers are attached before the app.js crash. Buttons work. |
-| Set creator — scoring algorithm | ✅ | `run_classification.py` produces correct warmup/peak/closing sets. |
-| Set creator — counts check | ✅ | `/api/set-counts` works. |
-| Audio converter — conversion | ✅ | `convert_audio.py` converts correctly via FFmpeg when it runs. |
-| Metadata editor — `renameFile()` | ✅ FIXED | No longer doubles extension. Validates empty/traversal names. |
-| Metadata editor — `writeMetadata()` | ✅ FIXED | Returns `{ ok, newPath, metadataWritten }`. Checks file exists before FFmpeg. |
-| Metadata editor — `identifyAndTag()` | ✅ FIXED | `newFilename` derived from `path.basename(newPath)` not manual concat. |
-| audio-ingestion skill | ✅ | Manifest, deduplication, dry-run, adapters. Integrated into server via services/. |
-| `/api/metadata/list` | ✅ | Uses audio-ingestion via audio-discovery. Returns `{ ok, files, summary, ignored }`. |
-| Metadata tab — load/list/identify UI | ✅ | `metaLoad`, `metaIdentifyAll`, `metaCancel` buttons work (attached before crash). |
-| Electron — dialogs | ✅ | `openDirectory` and `openFiles` return real path strings. |
-| Electron — startup flow | ✅ | Starts backend automatically and waits for readiness before loading window. Single-instance lock enabled. |
-| Electron — FFmpeg install | ✅ | macOS (Homebrew), Windows (winget/choco). |
-| Language toggle (ES/EN) | ✅ | Sidebar button works. `applyLanguage()` is hoisted — available before crash. |
-| Settings — API (read/write) | ✅ | `/api/settings` GET and POST work correctly. |
-| Cache | ✅ | Spotify/LastFM responses cached in `.cache/api-cache.json`. |
+| Genre classifier | ✅ | UI + backend working, with pause/resume/cancel and clearer error output |
+| ID3-first classification | ✅ | Embedded genre tags are checked before external APIs |
+| Local BPM fallback | ✅ | Used when genre/tag/API classification is insufficient |
+| Set Creator (new flow) | ✅ | Uses `style_analyzer.py` in multi-reference mode through `/api/set-analyze` |
+| Style engine simple mode | ✅ | `--reference` + `--input` still works |
+| Converter | ✅ | Uses FFmpeg, reports progress |
+| Metadata editor | ✅ | Load/list/identify/edit/save flow active in UI |
+| BPM Analyzer | ✅ | Results render in table from SSE `result` payload |
+| Stem Separator | ✅ | New tab + SSE endpoint + Python demucs wrapper integrated |
+| Electron dialogs | ✅ | Real filesystem paths returned |
+| Settings API | ✅ | Reads/writes credentials, language and output directory |
+| Automated tests | ✅ | Metadata editor and audio-ingestion tests pass |
 
 ---
 
-## 5. What is Broken / Partial
+## 5. Current Gaps / Risks
 
-### Critical Bug #1 — app.js crash at metadata listeners (**RESOLVED**)
-
-The `metaNewFilename`/metadata form references were crashing top-level execution. This is now guarded with null declarations + `if (element)` listener checks, so the script no longer stops when metadata form DOM is absent.
-
-**Resolution applied:** metadata editor variables are declared defensively (`null`) and related listeners are guarded. This keeps app startup stable even without metadata form HTML.
-
----
-
-### Genre Classifier — genres UI shows static text, not chips (**RESOLVED**)
-
-Static placeholder text removed from `.genres-note` div. Chips render correctly from `renderGenres()` via `loadGenres()`.
-
----
-
-### Progress bars — Converter and Set Creator (**RESOLVED**)
-
-`convert_audio.py` (L62) and `run_classification.py` (L143) now print `[PROGRESS:X/Y] Processing: ...`. Matches server parser. Progress bars update correctly.
-
----
-
-### SSE endpoints — missing Content-Type header (**RESOLVED**)
-
-`runProcessWithProgress()` now calls `res.writeHead(200, SSE headers)` at the top.
-
----
-
-### BPM — results never displayed + double-fetch (**RESOLVED**)
-
-Server now parses JSON stdout from `bpm_analyzer.py` and emits `{ type: 'result', results: [...] }` before the `complete` event. `renderBpmResults()` renders into `bpmTableBody`. Double-fetch removed from app.js.
-
----
-
-### Error messages from classifier subprocess (**PARTIALLY RESOLVED**)
-
-For genre classification, `runProcessWithProgress` now includes an `error` payload on non-zero exit and UI appends it to `#cls-log`. This makes missing-credentials and runtime failures visible to users.
-
-**Remaining:** apply equivalent error surfacing consistency for all tabs/processes.
-
----
-
-### Cancel — `cancelled` flag always false (**RESOLVED**)
-
-`cancelProcess()` now sets `child._killed = true` before `child.kill('SIGTERM')`. In `runProcessWithProgress`, `isKilled = child._killed === true` is read in the `close` handler.
-
----
-
-### Runtime — browser mode path handling (**RESOLVED FOR MAIN FLOW**)
-
-In browser (non-Electron), `selectDirectory()` calls `showDirectoryPicker()` which returns a `FileSystemDirectoryHandle`. This gets assigned to `input.value` → `"[object FileSystemDirectoryHandle]"` → all API calls fail.
-
-`isValidDirectoryHandle()` and `getFilesFromHandle()` exist in app.js (L65-81) but are **never called** — dead code from an incomplete implementation.
-
-`f.path` in drag-and-drop (L151, L179) is `undefined` in browsers — falls back to `f.name` (filename only, no directory). Server receives `"track01.mp3"` and cannot find the file.
-
-**Status:** main flow already uses Electron-first dialogs with `prompt()` fallback (no handles as paths).
-
----
-
-### index.html — Settings panel duplicated (**RESOLVED**)
-
-`id="cfg-save"`, `id="cfg-spotify-id"`, `id="cfg-spotify-secret"`, `id="cfg-lastfm-key"`, `id="cfg-language"` each appear **twice** in index.html. `getElementById` returns the first match; the second panel is visually rendered but silently inert.
-
-**Status:** single Settings panel remains with unique IDs.
-
----
-
-### Metadata editing form — missing from HTML
-
-app.js contains complete logic for manual metadata editing (lines 1082-1154): title, artist, album, year, genre, track fields, preview, save/cancel. The corresponding HTML elements (`#meta-editor`, `#meta-title`, `#meta-artist`, etc.) **do not exist in index.html**. This feature is fully coded but has no UI.
-
-**Fix:** Add the form HTML to `#tab-metadata`. This is required to make the edit-after-load flow work.
-
----
-
-### Other gaps
-
-| issue | location | status |
+| issue | area | notes |
 |---|---|---|
-| Spotify credentials missing | `/api/genre-classify` | Endpoint now returns explicit 400 with guidance; classification is blocked until keys are configured |
-| Spotify/Last.fm connectivity failures | Runtime/network | Classifier may continue but degrade to `Unsorted`; stdout/stderr logs are now streamed to UI for visibility |
-| Converter/Set feedback consistency | UI tabs | Some flows still need clearer end-user messages on subprocess failure/cancel |
-| `cli.js` first progress line format mismatch | cli.js L79 | `Starting classification...` doesn't match regex → bitmapped into generic fallback |
-| No guard for empty `inputPath` before fetch in classifier | app.js L422 | Makes unnecessary server round-trip (non-critical, works anyway) |
-| `config/genres.json` path in cli.js is `path.resolve("config/genres.json")` | cli.js L355 | Resolves correctly only when CWD=projectRoot (which it is when spawned from server) |
+| Legacy `/api/set-create` still present | server / Python | Kept intentionally, but no longer used by the main UI |
+| Classifier first progress line mismatch | `src/cli.js` | Initial “Starting classification...” line does not match the progress regex |
+| Empty classifier input guard | `ui/app.js` | Still causes an avoidable round-trip |
+| Error surfacing consistency | multiple tabs | Converter, stems, BPM and set analysis could align better on end-user messages |
+| Demucs first-run behavior | stems | Model download and performance need validation on target machines |
 
 ---
 
-## 6. Recent Fixes (cumulative)
+## 6. Recent Product-Level Changes
 
-| fix | files changed | tests |
-|---|---|---|
-| `renameFile()` — extension never doubled | `src/metadata_editor.js` | `tests/metadata-editor.test.js` (11 pass) |
-| `renameFile()` — validates empty name + path separators | `src/metadata_editor.js` | included above |
-| `writeMetadata()` — returns `{ ok, newPath, metadataWritten }` | `src/metadata_editor.js` | included above |
-| `writeMetadata()` — checks file exists before spawning FFmpeg | `src/metadata_editor.js` | included above |
-| `identifyAndTag()` — `newFilename` from `path.basename(newPath)` | `src/metadata_editor.js` | included above |
-| `npm run test:metadata-editor` script added | `package.json` | — |
-| audio-ingestion integrated via `services/audio-discovery.js` | `src/services/` | `tests/audio-ingestion.test.js` (4 pass) |
-| Electron backend autostart + loadURL + graceful shutdown | `electron/main.cjs` | ✅ verified |
-| Electron single-instance lock (prevent double app windows) | `electron/main.cjs` | ✅ verified |
-| Electron `activate` race condition fix — `startupDone` flag | `electron/main.cjs` | manual verify |
-| Classifier API-key gate with explicit error message | `src/server.js` | ✅ verified |
-| Classifier UI now appends analyzed files and backend errors to log | `ui/app.js`, `src/server.js` | ✅ verified |
-| Last.fm key hidden by default + eye toggle | `ui/index.html`, `ui/app.js` | ✅ verified |
-| SSE headers — `res.writeHead(200, SSE headers)` in `runProcessWithProgress` | `src/server.js` | manual verify |
-| Cancel flag — `child._killed = true` in `cancelProcess`, read in `close` handler | `src/server.js` | manual verify |
-| Progress format — `convert_audio.py` L62 | `src/convert_audio.py` | manual verify |
-| Progress format — `run_classification.py` L143 | `src/run_classification.py` | manual verify |
-| BPM results — parse JSON stdout, emit `{ type:'result' }` SSE event | `src/server.js` | manual verify |
-| BPM results — `renderBpmResults()` added to table in UI | `ui/app.js` | manual verify |
-| BPM double-fetch removed (app.js L1299-1308) | `ui/app.js` | manual verify |
-| Genres — static placeholder text removed from `index.html` | `ui/index.html` | manual verify |
+- Metadata edit form added to the dashboard and wired to backend metadata endpoints.
+- Classifier now supports pause/resume/cancel confirmation.
+- Classifier checks ID3/Vorbis genre before APIs and falls back to local BPM.
+- Style Matcher tab was removed and absorbed into Set Creator.
+- Set Creator now scores tracks against `warmup`, `peak` and `closing` references.
+- Stem Separator tab and backend were added using demucs.
+- Settings remain the single source of truth for output directory.
 
 ---
 
-## 7. Current Focus
+## 7. Working Rules For Future LLM Tasks
 
-Stabilizing the dashboard tab by tab. Order:
-
-1. **Genre Classifier** — first, because it's the core feature and most of its backend already works
-2. **Converter** — one-line Python fix for progress
-3. **BPM Analyzer** — needs result rendering + remove double-fetch
-4. **Metadata Editor** — needs HTML form + Runtime fix for file selection
-5. **Set Creator** — one-line Python fix for progress; TempAudio stub is a known bug, non-blocking
-
-Do not create new modules. Do not add features. Fix what exists.
-
----
-
-## 8. Next Steps (ordered)
-
-Items 1-7 are resolved as of 2026-04-30. Remaining:
-
-```
-8. META FORM   Add metadata editing HTML form to #tab-metadata in index.html.
-               app.js already has full logic (L1082-1154): title, artist, album, year, genre, track,
-               preview, save/cancel. Elements needed: #meta-editor, #meta-title, #meta-artist,
-               #meta-album, #meta-year, #meta-genre, #meta-track, #meta-preview-name, #meta-save, #meta-cancel.
-
-9. CLASSIFIER UX (minor)
-               Guard for empty inputPath before fetch (app.js ~L422) — non-critical, cosmetic.
-               cli.js L79 "Starting classification..." line doesn't match PROGRESS regex
-               — benign, falls through to generic log.
-
-10. ERROR SURFACING (remaining tabs)
-               Converter, Set Creator, BPM tabs don't render data.error in their log/status
-               when success=false. Apply same pattern as Classifier tab.
-
-11. MANUAL END-TO-END TEST
-               Run each tab with real audio files in Electron:
-               - Genre classifier with Spotify keys set
-               - Converter (check progress bar)
-               - BPM (check table renders after analysis)
-               - Set creator (check progress bar)
-               - Metadata tab (list + identify)
-```
-
----
-
-## 9. Rules for Working with LLMs
-
-1. **Read this file first.** Do not ask for project context that is already here.
-2. **One problem at a time.** Fix the crash first. Don't touch BPM before crash is fixed.
-3. **Read before writing.** Any edit to app.js requires reading the affected lines first.
-4. **No new modules.** The architecture is sufficient. Add to existing files.
-5. **No new features.** Fix what exists. The product is feature-complete for MVP.
-6. **Validate manually after each change.** Run the relevant test suite. Check in browser/Electron.
-7. **Tests exist for metadata-editor and audio-ingestion.** Run them after changes to those modules.
-8. **Check line numbers.** app.js is 1551 lines. server.js is 575 lines. Specify exact locations.
-9. **Backend errors go to stderr.** Check `output` variable in server.js when debugging subprocess failures.
-10. **El crash en L1079 está resuelto.** Variables de metadatos declaradas como `null` con guards en listeners.
+1. Read this file first, then `NEXT.md` if you need pending work.
+2. Preserve the desktop-first assumption unless explicitly changing architecture.
+3. Prefer editing existing modules over creating new abstractions.
+4. Validate syntax and run the relevant tests after backend/frontend changes.
+5. Treat `run_classification.py` as legacy unless a task explicitly revives it.

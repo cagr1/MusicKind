@@ -37,3 +37,7 @@ data/dj_tracks/
 # Test outputs
 tests/output/
 *.log
+
+# Local task docs / generated Python cache
+CODEX_TASK_*.md
+src/__pycache__/

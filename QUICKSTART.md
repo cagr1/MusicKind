@@ -1,86 +1,58 @@
-# MusicKind - Guía Rápida de Empezar
+# MusicKind - Guía Rápida
 
-## 🚀 Empezar en 3 Pasos
+## Inicio rápido
 
-### 1. Instalar FFmpeg (Recomendado)
-```bash
-./install_ffmpeg.sh
-```
-
-### 2. Instalar Dependencias
+### 1. Instala dependencias
 ```bash
 npm install
 pip3 install -r requirements.txt
 ```
 
-### 3. Iniciar la Aplicación
-
-**Opción A: Dashboard Web**
+### 2. Instala extras recomendados
 ```bash
-npm run dashboard
-# Abre: http://localhost:3030
+./install_ffmpeg.sh
+pip3 install demucs
 ```
 
-**Opción B: App de Escritorio (Electron)**
+### 3. Abre la app
 ```bash
 npm run electron
 ```
 
-## 🎯 Características Principales
+## Módulos disponibles
+- Clasificador por género
+- Creador de Sets por secciones (`warmup`, `peak`, `closing`)
+- Convertidor de audio
+- Editor de metadata
+- BPM Analyzer
+- Stem Separator
 
-### ✨ Mejoras Nuevas
-- 📁 **Selección de carpetas** con dialogos visuales
-- 🎬 **Instalación automática** de FFmpeg
-- ⚡ **Progreso en tiempo real** para todos los procesos
-- 🖥️ **App de escritorio** con Electron
-- 🧪 **Tests automatizados**
+## Configuración mínima
+Completa en `Settings`:
+- `Spotify Client ID`
+- `Spotify Client Secret`
+- `Last.fm API Key` opcional
+- Carpeta de salida por defecto
 
-### 🎵 Usos Principales
-1. **Clasificar música** por género (Afro House, Tech House, etc.)
-2. **Crear sets** profesionales (warmup/peak/closing)
-3. **Convertir audio** entre formatos
-
-## 🔧 Configuración Rápida
-
-### Spotify/Last.fm (Opcional)
+También puedes usar variables de entorno:
 ```bash
 export SPOTIFY_CLIENT_ID=tu_client_id
 export SPOTIFY_CLIENT_SECRET=tu_client_secret
+export LASTFM_API_KEY=tu_lastfm_key
 ```
 
-### Géneros Personalizados
-Edita `config/genres.json` para añadir/quitar géneros.
-
-## 🧪 Verificar Instalación
+## Validación rápida
 ```bash
-./run_tests.sh
+npm run test:metadata-editor
+npm run test:audio-ingestion
 ```
 
-## 📱 Interfaz Mejorada
+## Si algo falla
+- FFmpeg: ejecuta `./install_ffmpeg.sh`
+- Stems: instala `demucs` con `pip3 install demucs`
+- App: prueba `npm run electron-dev`
 
-- **📁 Botón "Examinar"** para seleccionar carpetas
-- **⚡ Barra de progreso** en tiempo real
-- **⚠️ Advertencias** claras de tiempo de procesamiento
-- **🎯 Asistente** de instalación de FFmpeg
-
-## 🆘 Problemas Comunes
-
-**FFmpeg no encontrado:**
-```bash
-./install_ffmpeg.sh
-```
-
-**App no inicia:**
-```bash
-npm install
-npm run electron-dev
-```
-
-**Tests fallan:**
-```bash
-./run_tests.sh
-```
-
-## 📄 Documentación Completa
-
-Para detalles completos, características avanzadas y troubleshooting, vea [README_improved.md](./README_improved.md).
+## Más documentación
+- [README.md](./README.md)
+- [MANUAL_USUARIO.md](./MANUAL_USUARIO.md)
+- [PROJECT_STATE.md](./PROJECT_STATE.md)

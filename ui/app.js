@@ -8,6 +8,7 @@ const translations = {
     converter: "Convertidor",
     metadata: "Auto-Tag",
     bpm: "Editor BPM",
+    stems: "Stem Separator",
     settings: "Configuracion",
     dashboard: "Dashboard",
     sidebarNote: "Panel de control para DJs"
@@ -20,6 +21,7 @@ const translations = {
     converter: "Converter",
     metadata: "Auto-Tag",
     bpm: "BPM Editor",
+    stems: "Stem Separator",
     settings: "Settings",
     dashboard: "Dashboard",
     sidebarNote: "Control panel for DJs"
@@ -198,38 +200,36 @@ document.getElementById('cls-browse').addEventListener('click', async () => {
   }
 });
 
-document.getElementById('set-base-browse').addEventListener('click', async () => {
-  const path = await selectDirectory('Selecciona carpeta base DJ');
-  if (path) {
-    const input = document.getElementById('set-base');
-    input.value = path;
-    input.dataset.pathLabel = displayPathLabel(path);
-  }
+// ==================== SET CREATOR ====================
+
+document.getElementById('set-warmup-browse').addEventListener('click', async () => {
+  const dir = Runtime.isElectron ? await window.electronAPI.openDirectory() : null;
+  if (dir) document.getElementById('set-warmup').value = dir;
+});
+
+document.getElementById('set-peak-browse').addEventListener('click', async () => {
+  const dir = Runtime.isElectron ? await window.electronAPI.openDirectory() : null;
+  if (dir) document.getElementById('set-peak').value = dir;
+});
+
+document.getElementById('set-closing-browse').addEventListener('click', async () => {
+  const dir = Runtime.isElectron ? await window.electronAPI.openDirectory() : null;
+  if (dir) document.getElementById('set-closing').value = dir;
 });
 
 document.getElementById('set-pack-browse').addEventListener('click', async () => {
-  const path = await selectDirectory('Selecciona pack nuevo');
-  if (path) {
-    const input = document.getElementById('set-pack');
-    input.value = path;
-    input.dataset.pathLabel = displayPathLabel(path);
-  }
+  const dir = Runtime.isElectron ? await window.electronAPI.openDirectory() : null;
+  if (dir) document.getElementById('set-pack').value = dir;
 });
 
-document.getElementById('set-output-browse').addEventListener('click', async () => {
-  const path = await selectDirectory('Selecciona carpeta de salida');
-  if (path) {
-    const input = document.getElementById('set-output');
-    input.value = path;
-    input.dataset.pathLabel = displayPathLabel(path);
-  }
+document.getElementById('set-seconds').addEventListener('input', () => {
+  document.getElementById('set-seconds-value').textContent =
+    `${document.getElementById('set-seconds').value}s`;
 });
 
 // Converter drop zones
 const convInputDrop = document.getElementById("conv-input-drop");
-const convOutputDrop = document.getElementById("conv-output-drop");
 const convInput = document.getElementById("conv-input");
-const convOutput = document.getElementById("conv-output");
 
 // Setup drag & drop for converter input
 setupDragDrop(convInputDrop, async (files) => {
@@ -250,28 +250,6 @@ convInputDrop.addEventListener("click", async () => {
     convInput.dataset.pathLabel = displayPathLabel(path);
     convInput.classList.remove("hidden");
     convInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
-  }
-});
-
-// Setup drag & drop for converter output
-setupDragDrop(convOutputDrop, async (files) => {
-  if (files.length === 1) {
-    convOutput.value = files[0];
-    convOutput.dataset.pathLabel = displayPathLabel(files[0]);
-    convOutput.classList.remove("hidden");
-    convOutputDrop.querySelector(".conv-drop-content").classList.add("hidden");
-  } else {
-    showToast("Selecciona una carpeta", "info");
-  }
-});
-
-convOutputDrop.addEventListener("click", async () => {
-  const path = await selectDirectory("Selecciona carpeta de salida");
-  if (path) {
-    convOutput.value = path;
-    convOutput.dataset.pathLabel = displayPathLabel(path);
-    convOutput.classList.remove("hidden");
-    convOutputDrop.querySelector(".conv-drop-content").classList.add("hidden");
   }
 });
 
@@ -337,6 +315,7 @@ const panels = {
   converter: document.getElementById("tab-converter"),
   metadata: document.getElementById("tab-metadata"),
   bpm: document.getElementById("tab-bpm"),
+  stems: document.getElementById("tab-stems"),
   settings: document.getElementById("tab-settings")
 };
 
@@ -582,147 +561,96 @@ clsPause.addEventListener("click", async () => {
   }
 });
 
-const analysisSlider = document.getElementById("analysis-seconds");
-const analysisValue = document.getElementById("analysis-value");
-analysisSlider.addEventListener("input", () => {
-  analysisValue.textContent = `${analysisSlider.value}s`;
-});
-
-const setCountCheck = document.getElementById("set-count-check");
-setCountCheck.addEventListener("click", async () => {
-  const baseDj = document.getElementById("set-base").value.trim();
-  const status = document.getElementById("set-counts");
-  status.textContent = "Revisando...";
-  const res = await fetch("/api/set-counts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ baseDj })
-  });
-  const data = await res.json();
-  if (!data.ok) {
-    status.textContent = `Error: ${data.error}`;
-    return;
-  }
-  const { warmup, peak, closing, total } = data.counts;
-  const inRange = total >= 15 && total <= 25;
-  status.textContent = `Warmup ${warmup} | Peak ${peak} | Closing ${closing} | Total ${total} ${inRange ? "(OK)" : "(Fuera de rango)"}`;
-});
-
 const setRun = document.getElementById("set-run");
 const setCancel = document.getElementById("set-cancel");
 let setProcessId = null;
 
 setRun.addEventListener("click", async () => {
-  const baseDj = document.getElementById("set-base").value.trim();
-  const newPack = document.getElementById("set-pack").value.trim();
-  const outputDir = document.getElementById("set-output").value.trim();
-  const mode = document.querySelector("input[name='analysis-mode']:checked").value;
-  const analysisSeconds = mode === "seconds" ? Number(analysisSlider.value) : null;
-  const tempConvert = document.getElementById("temp-convert").checked;
-  const tempFormat = document.getElementById("temp-format").value;
-  const tempBitrate = document.getElementById("temp-bitrate").value;
-
+  const warmup = document.getElementById("set-warmup").value.trim();
+  const peak = document.getElementById("set-peak").value.trim();
+  const closing = document.getElementById("set-closing").value.trim();
+  const pack = document.getElementById("set-pack").value.trim();
   const status = document.getElementById("set-status");
-  const log = document.getElementById("set-log");
-  const spinner = document.getElementById("set-spinner");
-
-  // Progress elements
   const progressContainer = document.getElementById("set-progress-container");
   const progressText = document.getElementById("set-progress-text");
   const progressPercent = document.getElementById("set-progress-percent");
   const progressFill = document.getElementById("set-progress-fill");
   const currentFile = document.getElementById("set-current-file");
+  const tableBody = document.getElementById("set-table-body");
 
-  if (tempConvert && !tempFormat) {
-    status.textContent = "Selecciona un formato para la conversion temporal.";
+  if (!pack) {
+    status.textContent = "Selecciona el pack nuevo a evaluar.";
+    return;
+  }
+  if (!warmup && !peak && !closing) {
+    status.textContent = "Selecciona al menos una carpeta de referencia (Warmup, Peak o Closing).";
     return;
   }
 
-  // Generate unique process ID
   setProcessId = `set-${Date.now()}`;
-
-  spinner.classList.add("active");
-  status.textContent = "Analizando audio...";
-  log.textContent = "";
-
-  // Show progress bar and cancel button
   progressContainer.classList.remove("hidden");
-  progressText.textContent = "Analizando audio...";
-  progressPercent.textContent = "0%";
-  progressFill.style.width = "0%";
-  currentFile.textContent = "";
-
   setRun.classList.add("hidden");
   setCancel.classList.remove("hidden");
+  status.textContent = "Analizando...";
+  tableBody.innerHTML = '<tr><td colspan="5" class="empty-row">Analizando...</td></tr>';
 
-  const res = await fetch("/api/set-create", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      baseDj,
-      newPack,
-      outputDir,
-      analysisSeconds,
-      tempFormat: tempConvert ? tempFormat : "",
-      tempBitrate: tempConvert && tempFormat === "mp3" ? Number(tempBitrate) : null,
-      processId: setProcessId
-    })
-  });
+  try {
+    const body = { input: pack, processId: setProcessId, analysisSeconds: parseInt(document.getElementById("set-seconds").value) };
+    if (warmup) body.warmup = warmup;
+    if (peak) body.peak = peak;
+    if (closing) body.closing = closing;
 
-  if (!res.ok) {
-    const data = await res.json();
-    spinner.classList.remove("active");
-    status.textContent = `Error: ${data.error}`;
-    log.textContent = data.error || "";
-    progressContainer.classList.add("hidden");
-    setRun.classList.remove("hidden");
-    setCancel.classList.add("hidden");
-    return;
-  }
+    const res = await fetch("/api/set-analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
 
-  // Handle streaming response
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
+    if (!res.ok) {
+      const data = await res.json();
+      status.textContent = `Error: ${data.error}`;
+      resetSetButtons();
+      return;
+    }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
-
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
         try {
           const data = JSON.parse(line.slice(6));
-          if (data.type === 'progress') {
-            progressText.textContent = `Analizando archivo ${data.processed} de ${data.total}`;
+          if (data.type === "progress") {
+            progressText.textContent = `Analizando ${data.processed} de ${data.total}`;
             progressPercent.textContent = `${data.percentage}%`;
             progressFill.style.width = `${data.percentage}%`;
             currentFile.textContent = data.current || "";
-            status.textContent = data.message;
-          } else if (data.type === 'complete') {
-            spinner.classList.remove("active");
-            status.textContent = data.success ? "Analisis completado." : "Proceso cancelado o error.";
+            status.textContent = `(${data.processed}/${data.total}) ${data.current}`;
+          } else if (data.type === "complete") {
+            status.textContent = data.success ? "Análisis completado." : "Proceso cancelado o error.";
+            if (data.error) status.textContent += ` — ${data.error}`;
             progressText.textContent = data.success ? "Completado" : "Cancelado";
             progressFill.style.width = data.success ? "100%" : "0%";
+          } else if (data.type === "result") {
+            renderSetResults(data.results || [], tableBody);
           }
         } catch (e) {
-          console.error('Error parsing SSE data:', e);
+          console.error("Error parsing SSE data:", e);
         }
       }
     }
+  } catch (e) {
+    status.textContent = `Error: ${e.message}`;
   }
 
-  // Hide progress bar and restore buttons after delay
-  setTimeout(() => {
-    progressContainer.classList.add("hidden");
-    setRun.classList.remove("hidden");
-    setCancel.classList.add("hidden");
-    setProcessId = null;
-  }, 2000);
+  resetSetButtons();
 });
 
 setCancel.addEventListener("click", async () => {
@@ -739,20 +667,64 @@ setCancel.addEventListener("click", async () => {
   }
 });
 
+function resetSetButtons() {
+  setTimeout(() => {
+    document.getElementById("set-progress-container").classList.add("hidden");
+    setRun.classList.remove("hidden");
+    setCancel.classList.add("hidden");
+    setProcessId = null;
+  }, 2000);
+}
+
+function renderSetResults(results, tableBody) {
+  tableBody.innerHTML = "";
+  const SECTION_LABELS = { warmup: "★ Warmup", peak: "★ Peak", closing: "★ Closing" };
+  for (const r of results) {
+    const row = document.createElement("tr");
+    const name = r.file ? r.file.split(/[\\/]/).pop() : "—";
+
+    const nameTd = document.createElement("td");
+    nameTd.textContent = name;
+    nameTd.title = r.file || "";
+
+    const fmt = (v) => v !== null && v !== undefined ? `${v}%` : "—";
+    const scoreTd = (v, isBest) => {
+      const td = document.createElement("td");
+      td.textContent = fmt(v);
+      if (isBest && v !== null) td.style.fontWeight = "bold";
+      return td;
+    };
+
+    const best = r.best || null;
+    row.appendChild(nameTd);
+    row.appendChild(scoreTd(r.warmup, best === "warmup"));
+    row.appendChild(scoreTd(r.peak, best === "peak"));
+    row.appendChild(scoreTd(r.closing, best === "closing"));
+
+    const bestTd = document.createElement("td");
+    bestTd.textContent = best ? (SECTION_LABELS[best] || best) : "—";
+    if (r.error) {
+      bestTd.textContent = "Error";
+      bestTd.title = r.error;
+    }
+    row.appendChild(bestTd);
+
+    tableBody.appendChild(row);
+  }
+}
+
 const convRun = document.getElementById("conv-run");
 const convCancel = document.getElementById("conv-cancel");
 let convProcessId = null;
 
 // Converter drop zones - already declared above at line 130
 const convInputPath = document.getElementById("conv-input");
-const convOutputPath = document.getElementById("conv-output");
 
 // Ensure we have the correct elements (if they exist from new HTML structure)
 const convInputDropZone = document.getElementById("conv-input-drop");
-const convOutputDropZone = document.getElementById("conv-output-drop");
 convRun.addEventListener("click", async () => {
   const inputPath = convInputPath.value.trim();
-  const outputPath = convOutputPath.value.trim();
+  const outputPath = (AppState.settings.defaultOutputDir || "output").trim();
   const format = document.getElementById("conv-format").value;
   const bitrate = document.getElementById("conv-bitrate").value;
   const status = document.getElementById("conv-status");
@@ -835,6 +807,9 @@ convRun.addEventListener("click", async () => {
             if (progressContainer) {
               progressText.textContent = data.success ? "Completado" : "Cancelado";
               progressFill.style.width = data.success ? "100%" : "0%";
+            }
+            if (data.error) {
+              log.textContent += `${log.textContent ? "\n\n" : ""}Error:\n${data.error}`;
             }
           }
         } catch (e) {
@@ -1363,6 +1338,9 @@ bpmAnalyze.addEventListener("click", async () => {
               bpmStatus.textContent = data.success ? "Analisis completado." : "Proceso cancelado o error.";
               bpmProgressText.textContent = data.success ? "Completado" : "Cancelado";
               bpmProgressFill.style.width = data.success ? "100%" : "0%";
+              if (data.error) {
+                bpmStatus.textContent += ` — ${data.error}`;
+              }
             } else if (data.type === 'result') {
               renderBpmResults(data.results || []);
             }
@@ -1434,6 +1412,164 @@ function renderBpmResults(results) {
   }
 }
 
+// ==================== STEM SEPARATOR ====================
+
+const stemsInputDir = document.getElementById("stems-input-dir");
+const stemsInputBrowse = document.getElementById("stems-input-browse");
+const stemsRun = document.getElementById("stems-run");
+const stemsCancel = document.getElementById("stems-cancel");
+const stemsProgress = document.getElementById("stems-progress");
+const stemsProgressText = document.getElementById("stems-progress-text");
+const stemsProgressPercent = document.getElementById("stems-progress-percent");
+const stemsProgressFill = document.getElementById("stems-progress-fill");
+const stemsCurrentFile = document.getElementById("stems-current-file");
+const stemsTableBody = document.getElementById("stems-table-body");
+const stemsStatus = document.getElementById("stems-status");
+const stemsFormat = document.getElementById("stems-format");
+
+let stemsProcessId = null;
+
+stemsInputBrowse.addEventListener("click", async () => {
+  const dir = Runtime.isElectron
+    ? await window.electronAPI.openDirectory()
+    : null;
+  if (dir) stemsInputDir.value = dir;
+});
+
+stemsRun.addEventListener("click", async () => {
+  const inputDir = stemsInputDir.value.trim();
+  if (!inputDir) {
+    stemsStatus.textContent = "Selecciona una carpeta primero.";
+    return;
+  }
+
+  const stemsMode = document.querySelector('input[name="stems-mode"]:checked')?.value || "both";
+  const format = stemsFormat.value || "wav";
+  const outputDir = (AppState.settings.defaultOutputDir || "output").trim();
+
+  stemsProcessId = `stems-${Date.now()}`;
+  stemsProgress.classList.remove("hidden");
+  stemsRun.classList.add("hidden");
+  stemsCancel.classList.remove("hidden");
+  stemsStatus.textContent = "Separando stems...";
+
+  try {
+    const res = await fetch("/api/stem-separate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inputDir,
+        outputDir,
+        stems: stemsMode,
+        format,
+        processId: stemsProcessId
+      })
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      stemsStatus.textContent = `Error: ${data.error}`;
+      resetStemsButtons();
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === "progress") {
+            stemsProgressText.textContent = `Procesando ${data.processed} de ${data.total}`;
+            stemsProgressPercent.textContent = `${data.percentage}%`;
+            stemsProgressFill.style.width = `${data.percentage}%`;
+            stemsCurrentFile.textContent = data.current || "";
+            stemsStatus.textContent = `(${data.processed}/${data.total}) ${data.current}`;
+          } else if (data.type === "complete") {
+            stemsStatus.textContent = data.success ? "Separación completada." : "Proceso cancelado o error.";
+            stemsProgressText.textContent = data.success ? "Completado" : "Cancelado";
+            stemsProgressFill.style.width = data.success ? "100%" : "0%";
+            if (data.error) stemsStatus.textContent += ` — ${data.error}`;
+          } else if (data.type === "result") {
+            renderStemsResults(data.results || []);
+          }
+        } catch (e) {
+          console.error("Error parsing SSE data:", e);
+        }
+      }
+    }
+  } catch (e) {
+    stemsStatus.textContent = `Error: ${e.message}`;
+  }
+
+  resetStemsButtons();
+});
+
+stemsCancel.addEventListener("click", async () => {
+  if (!stemsProcessId) return;
+  try {
+    await fetch("/api/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ processId: stemsProcessId })
+    });
+  } catch (e) {
+    console.error("Error cancelling:", e);
+  }
+});
+
+function resetStemsButtons() {
+  setTimeout(() => {
+    stemsProgress.classList.add("hidden");
+    stemsRun.classList.remove("hidden");
+    stemsCancel.classList.add("hidden");
+    stemsProcessId = null;
+  }, 2000);
+}
+
+function renderStemsResults(results) {
+  if (!stemsTableBody) return;
+  stemsTableBody.innerHTML = "";
+  for (const r of results) {
+    const row = document.createElement("tr");
+    const name = r.file ? r.file.split(/[\\/]/).pop() : "—";
+
+    const nameTd = document.createElement("td");
+    nameTd.textContent = name;
+    nameTd.title = r.file || "";
+
+    const filesTd = document.createElement("td");
+    if (r.ok && r.files && r.files.length > 0) {
+      filesTd.textContent = r.files.map(f => f.split(/[\\/]/).pop()).join(", ");
+    } else {
+      filesTd.textContent = "—";
+    }
+
+    const statusTd = document.createElement("td");
+    if (!r.ok) {
+      const span = document.createElement("span");
+      span.className = "error-text";
+      span.textContent = r.error || "error";
+      statusTd.appendChild(span);
+    } else {
+      statusTd.textContent = "OK";
+    }
+
+    row.appendChild(nameTd);
+    row.appendChild(filesTd);
+    row.appendChild(statusTd);
+    stemsTableBody.appendChild(row);
+  }
+}
+
 // ==================== SETTINGS FUNCTIONALITY ====================
 
 function applySettingsToUi(settings) {
@@ -1447,8 +1583,6 @@ function applySettingsToUi(settings) {
   if (cfgDefaultOutput) {
     cfgDefaultOutput.value = AppState.settings.defaultOutputDir;
   }
-
-  applyGlobalOutputDefaults();
 }
 
 async function fetchFfmpegReadyOnce() {
@@ -1543,7 +1677,6 @@ cfgSave.addEventListener("click", async () => {
       // Apply language change
       applyLanguage(settings.language);
       AppState.settings.defaultOutputDir = settings.defaultOutputDir;
-      applyGlobalOutputDefaults();
       if (cfgStatusTimer) clearTimeout(cfgStatusTimer);
       cfgStatusTimer = setTimeout(() => {
         status.textContent = "";
@@ -1559,22 +1692,6 @@ cfgSave.addEventListener("click", async () => {
     if (cfgStatusTimer) clearTimeout(cfgStatusTimer);
   }
 });
-
-function applyGlobalOutputDefaults() {
-  const defaultOutputDir = (AppState.settings.defaultOutputDir || "output").trim() || "output";
-  const setOutput = document.getElementById("set-output");
-  const convOutput = document.getElementById("conv-output");
-
-  if (setOutput && !setOutput.value.trim()) {
-    setOutput.value = defaultOutputDir;
-    setOutput.dataset.pathLabel = displayPathLabel(defaultOutputDir);
-  }
-
-  if (convOutput && !convOutput.value.trim()) {
-    convOutput.value = defaultOutputDir;
-    convOutput.dataset.pathLabel = displayPathLabel(defaultOutputDir);
-  }
-}
 
 // FFmpeg check button
 const ffmpegCheck = document.getElementById("ffmpeg-check");
@@ -1607,23 +1724,21 @@ ffmpegInstall.addEventListener("click", async () => {
 
 function applyLanguage(lang) {
   const t = translations[lang] || translations.es;
-  
-  // Update navigation (5 tabs now)
-  const navBtns = document.querySelectorAll(".nav-btn");
-  if (navBtns[0]) navBtns[0].textContent = t.classifier;
-  if (navBtns[1]) navBtns[1].textContent = t.sets;
-  if (navBtns[2]) navBtns[2].textContent = t.converter;
-  if (navBtns[3]) navBtns[3].textContent = t.metadata;
-  if (navBtns[4]) navBtns[4].textContent = t.bpm;
-  if (navBtns[5]) navBtns[5].textContent = t.settings;
-  
+
+  // Select each nav button by its data-tab attribute — never by array index
+  const tabLabels = ["classifier", "sets", "converter", "metadata", "bpm", "style", "stems", "settings"];
+  for (const key of tabLabels) {
+    const btn = document.querySelector(`.nav-btn[data-tab='${key}']`);
+    if (btn && t[key]) btn.textContent = t[key];
+  }
+
   // Update hero
   document.querySelector(".hero h1").textContent = t.panelTitle;
   document.querySelector(".hero p").textContent = t.panelSubtitle;
-  
+
   // Update sidebar note
   document.querySelector(".sidebar-note").textContent = t.sidebarNote;
-  
+
   // Save language preference
   localStorage.setItem("musickind-lang", lang);
 }

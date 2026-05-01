@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 import fs from "fs";
 import path from "path";
+import { spawnSync } from "child_process";
+import { fileURLToPath } from "url";
 import { parseFile } from "music-metadata";
 import dotenv from "dotenv";
 import { JsonCache } from "./cache.js";
 import { SpotifyClient } from "./spotify.js";
 import { LastFmClient } from "./lastfm.js";
-import { classifyFromTags, classifyFromAudio } from "./classify.js";
+import { classifyFromTags, classifyFromAudio, classifyFromBpm } from "./classify.js";
 import { cleanTitle, ensureDir, moveFile, writeCsv, appendLog, parseArtistTitleFromFilename } from "./utils.js";
 import { loadOverrides, classifyFromOverrides } from "./overrides.js";
 import { discoverAudioFiles } from "./services/audio-discovery.js";
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const bpmAnalyzerPath = path.join(scriptDir, "bpm_analyzer.py");
 
 const args = parseArgs(process.argv.slice(2));
 
@@ -245,6 +250,29 @@ for (const filePath of files) {
         tempo: audioFeatures?.tempo,
         energy: audioFeatures?.energy
       });
+    }
+
+    if (!classification) {
+      // Spotify audio-features deprecated — fallback to local BPM via librosa
+      const bpmResult = spawnSync("python3", [bpmAnalyzerPath, "--files", filePath, "--analysis-seconds", "90"], {
+        encoding: "utf-8",
+        timeout: 30000
+      });
+      if (bpmResult.status === 0 && bpmResult.stdout) {
+        const lines = bpmResult.stdout.split("\n");
+        const jsonStart = lines.findIndex(l => l.trim() === "[");
+        if (jsonStart >= 0) {
+          try {
+            const bpmData = JSON.parse(lines.slice(jsonStart).join("\n"));
+            if (bpmData[0]?.ok) {
+              classification = classifyFromBpm(bpmData[0].bpm);
+              if (classification && debug) {
+                console.log(`  local bpm: ${bpmData[0].bpm} -> ${classification.genre}`);
+              }
+            }
+          } catch (_) { /* ignore parse errors */ }
+        }
+      }
     }
 
     if (!classification) {

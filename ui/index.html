@@ -26,6 +26,7 @@
           <button class="nav-btn" data-tab="converter">Convertidor</button>
           <button class="nav-btn" data-tab="metadata">Editor de Metadata</button>
           <button class="nav-btn" data-tab="bpm">Editor de BPM</button>
+          <button class="nav-btn" data-tab="stems">Stem Separator</button>
           <button class="nav-btn" data-tab="settings">Configuracion</button>
         </nav>
         <div class="sidebar-footer">
@@ -119,118 +120,68 @@
             <h2>Creador de Sets</h2>
             <span class="pill">Python</span>
           </div>
-          <div id="set-ffmpeg-warning" class="ffmpeg-warning hidden">
-            <span>⚠️ FFmpeg no está instalado. Para conversión temporal, instala FFmpeg.</span>
-            <button id="set-goto-settings" class="btn btn-small">Ir a Configuración</button>
-          </div>
           <div class="panel-body">
             <div class="sets-instructions">
-              <p>El creador de sets analiza tus pistas y organiza sets automáticos. Selecciona las carpetas necesarias a continuación.</p>
+              <p>Carga canciones que ya sabes que van en cada momento de tu set. La app aprende tu estilo por sección y evalúa cada track nuevo.</p>
               <p class="sets-formats"><strong>Formatos aceptados:</strong> MP3, WAV, AIFF, AIF, FLAC, M4A</p>
             </div>
-            
+
             <div class="form-grid">
               <label class="field">
-                <span>Ruta base (warmup/peak/closing)</span>
-                <div class="input-hint">Carpeta con subcarpetas: warmup/, peak/, closing/</div>
+                <span>Warmup — canciones de apertura</span>
+                <div class="input-hint">Tracks que ya usas para arrancar tu set</div>
                 <div class="input-group">
-                  <input id="set-base" type="text" placeholder="/ruta/data/dj_tracks" readonly />
-                  <button id="set-base-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                  <input id="set-warmup" type="text" placeholder="/ruta/warmup" readonly />
+                  <button id="set-warmup-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
                     <span class="iconify" data-icon="mdi:folder-open-outline"></span>
                   </button>
                 </div>
               </label>
               <label class="field">
-                <span>Ruta del pack nuevo</span>
-                <div class="input-hint">Carpeta con pistas sin clasificar</div>
+                <span>Peak — canciones de pico</span>
+                <div class="input-hint">Tracks de máxima energía</div>
                 <div class="input-group">
-                  <input id="set-pack" type="text" placeholder="/ruta/data/new_pack" readonly />
+                  <input id="set-peak" type="text" placeholder="/ruta/peak" readonly />
+                  <button id="set-peak-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                    <span class="iconify" data-icon="mdi:folder-open-outline"></span>
+                  </button>
+                </div>
+              </label>
+              <label class="field">
+                <span>Closing — canciones de cierre</span>
+                <div class="input-hint">Tracks para el final del set</div>
+                <div class="input-group">
+                  <input id="set-closing" type="text" placeholder="/ruta/closing" readonly />
+                  <button id="set-closing-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                    <span class="iconify" data-icon="mdi:folder-open-outline"></span>
+                  </button>
+                </div>
+              </label>
+              <label class="field">
+                <span>Pack nuevo a evaluar</span>
+                <div class="input-hint">Canciones sin clasificar que quieres ubicar</div>
+                <div class="input-group">
+                  <input id="set-pack" type="text" placeholder="/ruta/new_pack" readonly />
                   <button id="set-pack-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
                     <span class="iconify" data-icon="mdi:folder-open-outline"></span>
                   </button>
                 </div>
               </label>
-              <label class="field">
-                <span>Ruta de salida</span>
-                <div class="input-hint">Donde se guardarán los sets generados</div>
-                <div class="input-group">
-                  <input id="set-output" type="text" placeholder="/ruta/output" readonly />
-                  <button id="set-output-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
-                    <span class="iconify" data-icon="mdi:folder-open-outline"></span>
-                  </button>
-                </div>
-              </label>
             </div>
 
-            <div class="range-card">
-              <div class="range-title">Cantidad de tracks base</div>
-              <div class="range-body">
-                <div class="range-status" id="set-counts">Sin revisar</div>
-                <button id="set-count-check" class="btn ghost">Revisar cantidad</button>
+            <label class="field">
+              <span>Segundos a analizar por pista</span>
+              <div class="slider-wrap">
+                <input id="set-seconds" type="range" min="30" max="120" value="60" />
+                <div id="set-seconds-value">60s</div>
               </div>
-              <div class="range-hint">Recomendado: entre 15 y 25 tracks para mayor precision.</div>
-            </div>
-
-            <div class="analysis">
-              <div class="analysis-title">Analisis de audio</div>
-              <div class="analysis-options">
-                <label class="option">
-                  <input type="radio" name="analysis-mode" value="full" checked />
-                  <span>Toda la cancion</span>
-                </label>
-                <label class="option">
-                  <input type="radio" name="analysis-mode" value="seconds" />
-                  <span>Solo primeros segundos</span>
-                </label>
-                <div class="slider-wrap">
-                  <input id="analysis-seconds" type="range" min="60" max="120" value="90" />
-                  <div id="analysis-value">90s</div>
-                </div>
-              </div>
-              <div class="analysis-note">Menos segundos = mas rapido, pero puede perder precision.</div>
-            </div>
-
-            <div class="analysis">
-              <div class="analysis-title">Conversion temporal para acelerar</div>
-              <div class="analysis-options">
-                <label class="option">
-                  <input id="temp-convert" type="checkbox" />
-                  <span>Convertir temporalmente para analizar</span>
-                </label>
-                <select id="temp-format">
-                  <option value="">Formato</option>
-                  <option value="mp3">MP3</option>
-                  <option value="wav">WAV</option>
-                  <option value="aiff">AIFF</option>
-                </select>
-                <select id="temp-bitrate">
-                  <option value="">Bitrate MP3</option>
-                  <option value="128">128 kbps</option>
-                  <option value="256">256 kbps</option>
-                  <option value="320">320 kbps</option>
-                </select>
-              </div>
-              <div class="analysis-note">Los archivos convertidos se eliminan al terminar el analisis.</div>
-            </div>
-
-            <div class="analysis warning">
-              <div class="analysis-title">⚠️ Tiempo de procesamiento</div>
-              <div class="analysis-options">
-                <p>Si analizas carpetas muy pesadas, el proceso puede tardar varios minutos. Para acelerar, activa la conversión temporal.</p>
-              </div>
-              <div class="analysis-note">FFmpeg es requerido para la conversión temporal.</div>
-            </div>
+            </label>
 
             <div class="actions">
-              <button id="set-run" class="btn primary">Crear sets</button>
+              <button id="set-run" class="btn primary">Analizar pack</button>
               <button id="set-cancel" class="btn danger hidden">Cancelar</button>
-              <div class="spinner" id="set-spinner">
-                <div class="disc"></div>
-                <div>Analizando audio…</div>
-              </div>
             </div>
 
-            <!-- Progress bar for set creator -->
             <div class="progress-container hidden" id="set-progress-container">
               <div class="progress-info">
                 <span id="set-progress-text">Analizando audio...</span>
@@ -242,8 +193,26 @@
               <div class="progress-file" id="set-current-file"></div>
             </div>
 
+            <div id="set-results" class="bpm-results">
+              <table class="bpm-table">
+                <thead>
+                  <tr>
+                    <th>Pista</th>
+                    <th>Warmup</th>
+                    <th>Peak</th>
+                    <th>Closing</th>
+                    <th>Mejor sección</th>
+                  </tr>
+                </thead>
+                <tbody id="set-table-body">
+                  <tr>
+                    <td colspan="5" class="empty-row">Carga las carpetas y presiona Analizar pack</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
             <div class="status" id="set-status"></div>
-            <pre class="log" id="set-log"></pre>
           </div>
         </section>
 
@@ -292,15 +261,6 @@
                   <option value="320">320 kbps</option>
                 </select>
               </label>
-            </div>
-
-            <div class="conv-drop-zone" id="conv-output-drop">
-              <div class="conv-drop-content">
-                <span class="iconify conv-drop-icon" data-icon="mdi:folder-outline"></span>
-                <span class="conv-drop-text">Carpeta de salida</span>
-                <span class="conv-drop-hint">Arrastra la carpeta de destino o haz clic para seleccionar</span>
-              </div>
-              <input id="conv-output" type="text" class="conv-path-input hidden" readonly />
             </div>
 
             <div class="actions">
@@ -384,6 +344,94 @@
             </div>
 
             <div class="status" id="bpm-status"></div>
+          </div>
+        </section>
+
+        <section class="panel hidden" id="tab-stems">
+          <div class="panel-header">
+            <h2>Stem Separator</h2>
+            <span class="pill">Python</span>
+          </div>
+          <div class="panel-body">
+            <div class="sets-instructions">
+              <p>Extrae la voz (acapella) o la pista instrumental de cualquier canción usando demucs.</p>
+              <p class="sets-formats"><strong>Requiere:</strong> <code>pip install demucs</code> — descarga ~300MB de modelos la primera vez.</p>
+            </div>
+
+            <div class="form-grid">
+              <label class="field">
+                <span>Carpeta de entrada</span>
+                <div class="input-hint">Archivos a separar</div>
+                <div class="input-group">
+                  <input id="stems-input-dir" type="text" placeholder="/ruta/canciones" readonly />
+                  <button id="stems-input-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                    <span class="iconify" data-icon="mdi:folder-open-outline"></span>
+                  </button>
+                </div>
+              </label>
+            </div>
+
+            <div class="form-grid">
+              <label class="field">
+                <span>Qué extraer</span>
+                <div class="analysis-options">
+                  <label class="option">
+                    <input type="radio" name="stems-mode" value="both" checked />
+                    <span>Acapella + Instrumental</span>
+                  </label>
+                  <label class="option">
+                    <input type="radio" name="stems-mode" value="vocals" />
+                    <span>Solo acapella (voz)</span>
+                  </label>
+                  <label class="option">
+                    <input type="radio" name="stems-mode" value="instrumental" />
+                    <span>Solo instrumental (sin voz)</span>
+                  </label>
+                </div>
+              </label>
+              <label class="field">
+                <span>Formato de salida</span>
+                <select id="stems-format">
+                  <option value="wav">WAV (mayor calidad)</option>
+                  <option value="mp3">MP3 (requiere FFmpeg)</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="actions">
+              <button id="stems-run" class="btn primary">Separar stems</button>
+              <button id="stems-cancel" class="btn danger hidden">Cancelar</button>
+            </div>
+
+            <div id="stems-progress" class="progress-container hidden">
+              <div class="progress-info">
+                <span id="stems-progress-text">Preparando...</span>
+                <span id="stems-progress-percent">0%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill" id="stems-progress-fill"></div>
+              </div>
+              <div class="progress-file" id="stems-current-file"></div>
+            </div>
+
+            <div id="stems-results" class="bpm-results">
+              <table class="bpm-table">
+                <thead>
+                  <tr>
+                    <th>Pista original</th>
+                    <th>Archivos generados</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="stems-table-body">
+                  <tr>
+                    <td colspan="3" class="empty-row">Selecciona una carpeta y presiona separar</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="status" id="stems-status"></div>
           </div>
         </section>
 

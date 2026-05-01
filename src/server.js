@@ -371,6 +371,64 @@ async function handleApi(req, res, url) {
     return; // Response already sent by runProcessWithProgress
   }
 
+  if (req.method === "POST" && url.pathname === "/api/set-analyze") {
+    const body = await readJsonBody(req);
+    const warmupDir = body.warmup ? String(body.warmup) : "";
+    const peakDir = body.peak ? String(body.peak) : "";
+    const closingDir = body.closing ? String(body.closing) : "";
+    const inputDir = body.input ? String(body.input) : "";
+    const analysisSeconds = body.analysisSeconds ? Number(body.analysisSeconds) : null;
+    const processId = body.processId || `set-${Date.now()}`;
+
+    if (!inputDir) {
+      return sendJson(res, { ok: false, error: "input (pack nuevo) requerido" }, 400);
+    }
+    if (!warmupDir && !peakDir && !closingDir) {
+      return sendJson(res, { ok: false, error: "Al menos una carpeta de referencia (warmup, peak o closing) es requerida" }, 400);
+    }
+
+    const args = [
+      path.join(projectRoot, "src", "style_analyzer.py"),
+      "--input", inputDir
+    ];
+    if (warmupDir) args.push("--warmup", warmupDir);
+    if (peakDir) args.push("--peak", peakDir);
+    if (closingDir) args.push("--closing", closingDir);
+    if (analysisSeconds) args.push("--analysis-seconds", String(analysisSeconds));
+
+    await runProcessWithProgress("python3", args, res, processId, { parseJsonResult: true });
+    return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/stem-separate") {
+    const body = await readJsonBody(req);
+    const files = Array.isArray(body.files) ? body.files.map(String) : [];
+    const inputDir = body.inputDir ? String(body.inputDir) : "";
+    const outputDir = body.outputDir ? String(body.outputDir) : "output";
+    const stems = ["vocals", "instrumental", "both"].includes(body.stems) ? body.stems : "both";
+    const format = ["wav", "mp3"].includes(body.format) ? body.format : "wav";
+    const processId = body.processId || `stems-${Date.now()}`;
+
+    if (files.length === 0 && !inputDir) {
+      return sendJson(res, { ok: false, error: "files o inputDir requerido" }, 400);
+    }
+
+    const args = [
+      path.join(projectRoot, "src", "stem_separator.py"),
+      "--output", outputDir,
+      "--stems", stems,
+      "--format", format
+    ];
+    if (files.length > 0) {
+      args.push("--files", ...files);
+    } else {
+      args.push("--input", inputDir);
+    }
+
+    await runProcessWithProgress("python3", args, res, processId, { parseJsonResult: true });
+    return;
+  }
+
   res.writeHead(404);
   res.end("Not found");
 }

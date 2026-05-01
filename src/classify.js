@@ -56,3 +56,12 @@ function hasTag(tags, phrase) {
   const target = normalizeTag(phrase);
   return tags.some((t) => t === target || t.includes(target));
 }
+
+export function classifyFromBpm(bpm) {
+  if (!bpm) return null;
+  if (bpm >= 108 && bpm <= 126) return { genre: "Afro House", reason: `local:bpm=${bpm.toFixed(1)}` };
+  if (bpm >= 123 && bpm <= 132) return { genre: "Tech House", reason: `local:bpm=${bpm.toFixed(1)}` };
+  if (bpm >= 118 && bpm <= 136) return { genre: "Melodic Techno", reason: `local:bpm=${bpm.toFixed(1)}` };
+  if (bpm >= 115 && bpm <= 132) return { genre: "Melodic House & Techno", reason: `local:bpm=${bpm.toFixed(1)}` };
+  return null;
+}

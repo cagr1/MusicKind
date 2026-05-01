@@ -1,172 +1,100 @@
-# MusicKind 🎵
+# MusicKind
 
-**¡Ver la documentación mejorada en [README_improved.md](./README_improved.md)!**
+MusicKind es una app desktop-first para DJs. Corre sobre Electron y reúne en una sola interfaz clasificación por género, análisis de set por secciones, conversión de audio, edición de metadata, análisis BPM/key y separación de stems.
 
-Este repo contiene **dos herramientas** distintas:
+## Qué hace hoy
+- Clasificador por género con overrides, tags embebidos, Spotify/Last.fm y fallback local por BPM.
+- Creador de sets por secciones, comparando un pack nuevo contra referencias `warmup`, `peak` y `closing`.
+- Convertidor de audio con FFmpeg.
+- Editor de metadata con carga por carpeta, identificación automática y edición manual.
+- BPM/Key analyzer por lotes.
+- Stem Separator con `demucs` para extraer voz e instrumental.
 
-1. **Clasificador de música por género** (Node.js + Spotify/Last.fm).
-2. **Creador de sets** (Python + audio features) que sugiere `warmup/peak/closing` según el gusto del DJ.
+## Requisitos
+- Node.js 18+
+- Python 3.9+
+- Dependencias Python base: `librosa`, `numpy`
+- FFmpeg
+- `demucs` para el módulo Stem Separator
 
-## 🚀 Novedades en la Versión Actual
-
-- ✅ **Dialogos nativos** para seleccionar carpetas (escribe rutas manualmente)
-- ✅ **Instalación automática de FFmpeg** desde la app
-- ✅ **Soporte multiplataforma** (macOS y Windows)
-- ✅ **Progreso en tiempo real** para todos los procesos
-- ✅ **App de escritorio** compilable como ejecutable
-- ✅ **Tests automatizados**
-- ✅ **Mejoras UX** y advertencias contextuales
-
-## 🎮 Empezar Rápido
-
+## Instalación
 ```bash
-# Instalar dependencias
 npm install
+pip3 install -r requirements.txt
+pip3 install demucs
+```
 
-# Opción 1: App de escritorio (recomendado)
+## Ejecución
+```bash
+# Recomendado
 npm run electron
 
-# Opción 2: Dashboard web
+# Backend + UI en navegador, útil para debug
 npm run dashboard
 ```
 
-**Con la app de escritorio:**
-- Selecciona carpetas con dialogos nativos
-- FFmpeg se instala automáticamente si no lo tienes
-- Ejecutable compilable: `npm run build`
-
-Para documentación completa, características y detalles de instalación, consulta [README_improved.md](./README_improved.md).
-
----
-
-**Dashboard (Interfaz Web)**
-
-Para usar el clasificador, el creador de sets y el convertidor sin comandos:
-
+## Scripts útiles
 ```bash
-node src/server.js
+npm run test:metadata-editor
+npm run test:audio-ingestion
+npm run test:metadata-endpoint
+npm run build
 ```
 
-Luego abre `http://localhost:3030` en tu navegador.
-
----
-
-**Clasificador por género (CLI Node.js)**
-
-Clasifica archivos de música electrónica en subgéneros usando Spotify y Last.fm.
-
-**Requisitos**
-- Node.js 18+
-- Credenciales de Spotify (Client ID/Secret)
-- API key de Last.fm (opcional)
-
-**Configuración**
-Exporta las variables en tu shell:
+## Configuración
+Las credenciales de Spotify y Last.fm pueden guardarse desde el tab de `Settings` o definirse como variables de entorno:
 
 ```bash
 export SPOTIFY_CLIENT_ID=...
 export SPOTIFY_CLIENT_SECRET=...
-export LASTFM_API_KEY=... # opcional
+export LASTFM_API_KEY=...
 ```
 
-**Uso**
+Spotify sigue siendo obligatorio para el flujo principal del clasificador. Last.fm es opcional.
 
-```bash
-node src/cli.js --input "/ruta/a/tu/carpeta" --dry-run
+## Módulos principales
+
+### Clasificador
+- Clasifica archivos por género en subcarpetas dentro de la carpeta de entrada.
+- Prioriza override manual, luego género embebido, luego tags/APIs y finalmente BPM local.
+- Soporta pausa, reanudación y cancelación desde la UI.
+
+### Creador de Sets
+- Aprende perfiles separados para `warmup`, `peak` y `closing`.
+- Evalúa cada pista nueva y devuelve en qué parte del set encaja mejor.
+- Muestra scores por sección en una tabla.
+
+### Convertidor
+- Convierte lotes de audio usando FFmpeg.
+- Usa la carpeta de salida por defecto definida en `Settings`.
+
+### Editor de Metadata
+- Lista archivos por carpeta.
+- Identifica metadata automáticamente.
+- Permite editar tags y nombre de archivo desde formulario.
+
+### BPM Analyzer
+- Extrae BPM y tonalidad para colecciones completas.
+
+### Stem Separator
+- Usa `demucs` para extraer `vocals`, `instrumental` o ambos.
+- La primera ejecución descarga modelos adicionales.
+
+## Estructura relevante
+```text
+electron/             Shell de escritorio e IPC
+src/server.js         Backend HTTP + endpoints SSE
+src/cli.js            Clasificador por género
+src/style_analyzer.py Analizador de similitud / perfiles de set
+src/stem_separator.py Separación de stems con demucs
+src/classify.js       Reglas de clasificación
+src/metadata_editor.js Lectura/escritura metadata
+ui/                   Interfaz principal
+config/               Settings, géneros y overrides
+tests/                Pruebas automatizadas
 ```
 
-Ejecutar de verdad (mueve archivos):
-
-```bash
-node src/cli.js --input "/ruta/a/tu/carpeta"
-```
-
-**Opciones**
-- `--dry-run` No mueve archivos.
-- `--report <csv>` Ruta para el reporte CSV.
-- `--log <file>` Ruta para el log de no clasificados.
-
-**Carpetas de salida**
-- `Afro House`
-- `Tech House`
-- `Melodic Techno`
-- `Unsorted`
-
-Se crean dentro de la carpeta de entrada.
-
-**Cache**
-Respuestas de APIs se guardan en `.cache/api-cache.json`.
-
-**Overrides Manuales**
-Si Spotify no devuelve género, puedes forzar clasificación editando `config/overrides.json`.
-
-Ejemplo:
-
-```json
-{
-  "artists": {
-    "16bl": "Melodic Techno"
-  },
-  "labels": {
-    "anjunadeep": "Melodic Techno"
-  },
-  "keywords": {
-    "afro house": "Afro House"
-  }
-}
-```
-
-**Géneros activos**
-Edita `config/genres.json` para habilitar o desactivar géneros que quieras usar en el clasificador.
-
----
-
-**Creador de sets (Python)**
-
-Genera tres listas `warmup/peak/closing` a partir de:
-- Tracks base del DJ (ya clasificados manualmente).
-- Un pack nuevo que quieres evaluar.
-
-**Requisitos**
-- Python 3.9+
-- `librosa` y `numpy` instalados en tu entorno.
-
-**Estructura de carpetas esperada**
-- `data/dj_tracks/warmup`
-- `data/dj_tracks/peak`
-- `data/dj_tracks/closing`
-- `output/` (salida)
-
-**Cómo usarlo**
-
-1. Coloca los tracks base del DJ en `data/dj_tracks/warmup`, `data/dj_tracks/peak` y `data/dj_tracks/closing`.
-2. Ejecuta (o pasa tus rutas con flags):
-
-```bash
-python3 src/run_classification.py
-```
-
-Ejemplo con rutas:
-
-```bash
-python3 src/run_classification.py --base-dj "/ruta/dj_tracks" --new-pack "/ruta/new_pack" --output "/ruta/output"
-```
-
-**Opciones**
-- `--base-dj` Ruta base con `warmup/peak/closing`.
-- `--new-pack` Ruta del pack nuevo.
-- `--output` Ruta de salida.
-- `--analysis-seconds` Analiza solo los primeros N segundos.
-- `--temp-format` Convierte temporalmente a `mp3`, `wav` o `aiff` para acelerar.
-- `--temp-bitrate` Bitrate kbps para MP3 temporal.
-
-**Salida**
-Genera:
-- `output/warmup.txt`
-- `output/peak.txt`
-- `output/closing.txt`
-
-Cada archivo contiene una lista de rutas de archivos sugeridos para ese momento del set.
-
-**Notas de performance**
-El script carga cada archivo completo para extraer features (BPM, energía, brillo, etc.). En colecciones muy grandes o formatos sin compresión (por ejemplo `.aiff`), el tiempo de análisis puede ser alto. Si activas conversión temporal, se requiere FFmpeg instalado.
+## Documentación adicional
+- [QUICKSTART.md](./QUICKSTART.md)
+- [MANUAL_USUARIO.md](./MANUAL_USUARIO.md)
+- [PROJECT_STATE.md](./PROJECT_STATE.md)
