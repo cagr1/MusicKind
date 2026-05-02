@@ -23,17 +23,17 @@
           </div>
         </div>
         <nav class="nav">
-          <button class="nav-btn active" data-tab="classifier">Clasificador</button>
-          <button class="nav-btn" data-tab="sets">Creador de Sets</button>
-          <button class="nav-btn" data-tab="converter">Convertidor</button>
-          <button class="nav-btn" data-tab="metadata">Editor de Metadata</button>
-          <button class="nav-btn" data-tab="bpm">Editor de BPM</button>
-          <button class="nav-btn" data-tab="stems">Stem Separator</button>
-          <button class="nav-btn" data-tab="settings">Configuracion</button>
+          <button class="nav-btn active" data-tab="classifier" data-i18n="nav.classifier">Clasificador</button>
+          <button class="nav-btn" data-tab="sets" data-i18n="nav.sets">Creador de Sets</button>
+          <button class="nav-btn" data-tab="converter" data-i18n="nav.converter">Convertidor</button>
+          <button class="nav-btn" data-tab="metadata" data-i18n="nav.metadata">Editor de Metadata</button>
+          <button class="nav-btn" data-tab="bpm" data-i18n="nav.bpm">Editor de BPM</button>
+          <button class="nav-btn" data-tab="stems" data-i18n="nav.stems">Stem Separator</button>
+          <button class="nav-btn" data-tab="settings" data-i18n="nav.settings">Configuracion</button>
         </nav>
         <div class="sidebar-footer">
           <div class="lang-switch">
-            <span class="lang-label">Idioma:</span>
+            <span class="lang-label" data-i18n="sidebar.language">Idioma:</span>
             <button id="lang-toggle" class="lang-btn">
               <span id="lang-active">ES</span>
               <span class="lang-sep">|</span>
@@ -42,14 +42,14 @@
           </div>
         </div>
         <div class="sidebar-note">
-          Panel de control para DJs
+          <span data-i18n="sidebar.note">Panel de control para DJs</span>
         </div>
       </aside>
 
       <main class="content">
         <header class="hero">
-          <h1>Panel de Control</h1>
-          <p>Clasifica por genero, crea sets y convierte audio sin escribir comandos.</p>
+          <h1 data-i18n="hero.title">Panel de Control</h1>
+          <p data-i18n="hero.subtitle">Clasifica por genero, crea sets y convierte audio sin escribir comandos.</p>
         </header>
 
         <section class="panel" id="tab-classifier">
@@ -66,8 +66,8 @@
               <label class="field">
                 <span>Ruta de la carpeta a clasificar</span>
                 <div class="input-group">
-                  <input id="cls-input" type="text" placeholder="/ruta/a/tu/carpeta" readonly />
-                  <button id="cls-browse" class="btn browse-btn">Examinar</button>
+                  <input id="cls-input" type="text" placeholder="/ruta/a/tu/carpeta" data-i18n-placeholder="dialog.enterPath" readonly />
+                  <button id="cls-browse" class="btn browse-btn" data-i18n="common.browse">Examinar</button>
                 </div>
               </label>
 
@@ -84,26 +84,26 @@
             <div class="genres">
               <div class="genres-header">
                 <h3>Géneros activos</h3>
-                <button id="genres-save" class="btn ghost">Guardar</button>
+                <button id="genres-save" class="btn ghost" data-i18n="common.save">Guardar</button>
               </div>
               <div id="genres-list" class="chip-list"></div>
               <div class="genres-add">
-                <input id="genres-input" type="text" placeholder="Agregar género" />
-                <button id="genres-add" class="btn">Agregar</button>
+                <input id="genres-input" type="text" placeholder="Agregar género" data-i18n-placeholder="common.add" />
+                <button id="genres-add" class="btn" data-i18n="common.add">Agregar</button>
               </div>
               <div class="genres-note"></div>
             </div>
 
             <div class="actions">
               <button id="cls-run" class="btn primary">Clasificar ahora</button>
-              <button id="cls-pause" class="btn hidden">⏸ Pausar</button>
-              <button id="cls-cancel" class="btn danger hidden">✕ Cancelar</button>
+              <button id="cls-pause" class="btn hidden" data-i18n="classifier.pause">⏸ Pausar</button>
+              <button id="cls-cancel" class="btn danger hidden" data-i18n="common.cancel">✕ Cancelar</button>
             </div>
 
             <!-- Progress bar for classifier -->
             <div class="progress-container hidden" id="cls-progress-container">
               <div class="progress-info">
-                <span id="cls-progress-text">Preparando...</span>
+                <span id="cls-progress-text" data-i18n="common.preparing">Preparando...</span>
                 <span id="cls-progress-percent">0%</span>
               </div>
               <div class="progress-bar">
@@ -181,12 +181,12 @@
 
             <div class="actions">
               <button id="set-run" class="btn primary">Analizar pack</button>
-              <button id="set-cancel" class="btn danger hidden">Cancelar</button>
+              <button id="set-cancel" class="btn danger hidden" data-i18n="common.cancel">Cancelar</button>
             </div>
 
             <div class="progress-container hidden" id="set-progress-container">
               <div class="progress-info">
-                <span id="set-progress-text">Analizando audio...</span>
+                <span id="set-progress-text" data-i18n="sets.emptyAnalyzing">Analizando audio...</span>
                 <span id="set-progress-percent">0%</span>
               </div>
               <div class="progress-bar">
@@ -267,13 +267,13 @@
 
             <div class="actions">
               <button id="conv-run" class="btn primary">Convertir</button>
-              <button id="conv-cancel" class="btn danger hidden">Cancelar</button>
+              <button id="conv-cancel" class="btn danger hidden" data-i18n="common.cancel">Cancelar</button>
             </div>
 
             <!-- Progress bar for converter -->
             <div class="progress-container hidden" id="conv-progress-container">
               <div class="progress-info">
-                <span id="conv-progress-text">Preparando...</span>
+                <span id="conv-progress-text" data-i18n="common.preparing">Preparando...</span>
                 <span id="conv-progress-percent">0%</span>
               </div>
               <div class="progress-bar">
@@ -313,12 +313,12 @@
 
             <div class="actions">
               <button id="bpm-analyze" class="btn primary">Analizar BPM</button>
-              <button id="bpm-cancel" class="btn danger hidden">Cancelar</button>
+              <button id="bpm-cancel" class="btn danger hidden" data-i18n="common.cancel">Cancelar</button>
             </div>
 
             <div id="bpm-progress" class="progress-container hidden">
               <div class="progress-info">
-                <span id="bpm-progress-text">Preparando...</span>
+                <span id="bpm-progress-text" data-i18n="common.preparing">Preparando...</span>
                 <span id="bpm-progress-percent">0%</span>
               </div>
               <div class="progress-bar">
@@ -379,12 +379,12 @@
 
             <div class="actions">
               <button id="stems-run" class="btn primary">Separar stems</button>
-              <button id="stems-cancel" class="btn danger hidden">Cancelar</button>
+              <button id="stems-cancel" class="btn danger hidden" data-i18n="common.cancel">Cancelar</button>
             </div>
 
             <div id="stems-progress" class="progress-container hidden">
               <div class="progress-info">
-                <span id="stems-progress-text">Preparando...</span>
+                <span id="stems-progress-text" data-i18n="common.preparing">Preparando...</span>
                 <span id="stems-progress-percent">0%</span>
               </div>
               <div class="progress-bar">
@@ -398,12 +398,12 @@
                 <div class="stem-card" id="stems-card-vocals">
                   <div class="stem-card-icon">🎤</div>
                   <div class="stem-card-label">Voz (Acapella)</div>
-                  <button class="btn primary" id="stems-open-vocals">Abrir archivo</button>
+                  <button class="btn primary" id="stems-open-vocals" data-i18n="common.openFile">Abrir archivo</button>
                 </div>
                 <div class="stem-card" id="stems-card-instrumental">
                   <div class="stem-card-icon">🎵</div>
                   <div class="stem-card-label">Instrumental</div>
-                  <button class="btn primary" id="stems-open-instrumental">Abrir archivo</button>
+                  <button class="btn primary" id="stems-open-instrumental" data-i18n="common.openFile">Abrir archivo</button>
                 </div>
               </div>
               <div id="stems-output-path" class="analysis-note"></div>
@@ -531,12 +531,12 @@
             <div class="actions">
               <button id="meta-load" class="btn">Cargar archivos</button>
               <button id="meta-identify-all" class="btn primary">Identificar todos</button>
-              <button id="meta-cancel" class="btn danger hidden">Cancelar</button>
+              <button id="meta-cancel" class="btn danger hidden" data-i18n="common.cancel">Cancelar</button>
             </div>
 
             <div id="meta-progress" class="progress-container hidden">
               <div class="progress-info">
-                <span id="meta-progress-text">Preparando...</span>
+                <span id="meta-progress-text" data-i18n="common.preparing">Preparando...</span>
                 <span id="meta-progress-percent">0%</span>
               </div>
               <div class="progress-bar">
@@ -591,7 +591,7 @@
               </div>
               <div class="actions">
                 <button id="meta-save" class="btn primary">Guardar cambios</button>
-                <button id="meta-cancel-edit" class="btn">Cancelar</button>
+                <button id="meta-cancel-edit" class="btn" data-i18n="common.cancel">Cancelar</button>
               </div>
             </div>
 

@@ -3,6 +3,20 @@ const translations = {
   en: window.MK_LANG_EN
 };
 
+function getCurrentLang() {
+  return localStorage.getItem("musickind-lang") || "es";
+}
+
+function getTranslationsForLang(lang = getCurrentLang()) {
+  return translations[lang] || translations.es;
+}
+
+function tr(key, vars = {}, lang = getCurrentLang()) {
+  const t = getTranslationsForLang(lang);
+  const template = t[key] ?? key;
+  return template.replace(/\{(\w+)\}/g, (_, token) => String(vars[token] ?? `{${token}}`));
+}
+
 const Runtime = {
   isElectron: Boolean(window.electronAPI?.openDirectory)
 };
@@ -56,11 +70,11 @@ async function selectDirectory(title) {
       return result;
     }
 
-    const manualPath = prompt(`${title}\n\nIngresa la ruta completa:`);
+    const manualPath = prompt(`${title}\n\n${tr("dialog.enterPath")}`);
     return manualPath && manualPath.trim() ? manualPath.trim() : null;
   } catch (error) {
     console.error('Error selecting directory:', error);
-    showToast("Error al seleccionar carpeta: " + error.message, "error");
+    showToast(tr("error.selectFolder", { error: error.message }), "error");
     return null;
   }
 }
@@ -75,11 +89,11 @@ document.addEventListener("DOMContentLoaded", () => {
   
   if (langToggle && langActive && langInactive) {
     // Initialize active/inactive language display
-    const currentLang = localStorage.getItem("musickind-lang") || "es";
+    const currentLang = getCurrentLang();
     updateLangDisplay(currentLang);
     
     langToggle.addEventListener("click", () => {
-      const currentLang = localStorage.getItem("musickind-lang") || "es";
+      const currentLang = getCurrentLang();
       const newLang = currentLang === "es" ? "en" : "es";
       
       // Update language in settings select
@@ -95,7 +109,8 @@ document.addEventListener("DOMContentLoaded", () => {
       // Save to localStorage
       localStorage.setItem("musickind-lang", newLang);
       
-      showToast(`Idioma cambiado a ${newLang === "es" ? "Español" : "English"}`, "success");
+      const languageLabel = newLang === "es" ? "Español" : "English";
+      showToast(tr("toast.languageChanged", { language: languageLabel }, newLang), "success");
     });
   }
 });
@@ -125,8 +140,8 @@ async function selectFiles(title, multiple = false) {
     }
 
     const promptMessage = multiple
-      ? `${title}\n\nIngresa rutas separadas por coma:`
-      : `${title}\n\nIngresa la ruta completa del archivo:`;
+      ? `${title}\n\n${tr("dialog.enterCommaPaths")}`
+      : `${title}\n\n${tr("dialog.enterFilePath")}`;
     const raw = prompt(promptMessage);
     if (!raw || !raw.trim()) return multiple ? [] : null;
 
@@ -138,7 +153,7 @@ async function selectFiles(title, multiple = false) {
     return multiple ? values : values[0] || null;
   } catch (error) {
     console.error('Error selecting files:', error);
-    showToast("Error al seleccionar archivos", "error");
+    showToast(tr("error.selectFiles"), "error");
     return null;
   }
 }
@@ -167,7 +182,7 @@ function setupDragDrop(element, onFilesDropped) {
 
 // Browse button handlers
 document.getElementById('cls-browse').addEventListener('click', async () => {
-  const path = await selectDirectory('Selecciona carpeta a clasificar');
+  const path = await selectDirectory(tr("dialog.selectFolderToClassify"));
   if (path) {
     const input = document.getElementById('cls-input');
     input.value = path;
@@ -214,12 +229,12 @@ setupDragDrop(convInputDrop, async (files) => {
     convInput.classList.remove("hidden");
     convInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
   } else {
-    showToast("Selecciona una carpeta", "info");
+    showToast(tr("common.selectFolder"), "info");
   }
 });
 
 convInputDrop.addEventListener("click", async () => {
-  const path = await selectDirectory("Selecciona carpeta de entrada");
+  const path = await selectDirectory(tr("dialog.selectInputFolder"));
   if (path) {
     convInput.value = path;
     convInput.dataset.pathLabel = displayPathLabel(path);
@@ -240,12 +255,12 @@ setupDragDrop(bpmInputDrop, async (files) => {
     bpmInputPath.classList.remove("hidden");
     bpmInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
   } else {
-    showToast("Selecciona una carpeta", "info");
+    showToast(tr("common.selectFolder"), "info");
   }
 });
 
 bpmInputDrop.addEventListener("click", async () => {
-  const path = await selectDirectory("Selecciona carpeta con archivos de audio");
+  const path = await selectDirectory(tr("dialog.selectAudioFolder"));
   if (path) {
     bpmInputPath.value = path;
     bpmInputPath.dataset.pathLabel = displayPathLabel(path);
@@ -267,14 +282,14 @@ if (metaInputDrop && metaInputPath) {
       metaInputPath.classList.remove("hidden");
       metaInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
     } else {
-      showToast("Selecciona una carpeta", "info");
+      showToast(tr("common.selectFolder"), "info");
     }
   });
 }
 
 if (metaInputDrop) metaInputDrop.addEventListener("click", async () => {
   if (!metaInputPath) return;
-  const path = await selectDirectory("Selecciona carpeta con archivos de audio");
+  const path = await selectDirectory(tr("dialog.selectAudioFolder"));
   if (path) {
     metaInputPath.value = path;
     metaInputPath.dataset.pathLabel = displayPathLabel(path);
@@ -313,7 +328,7 @@ function renderGenres() {
   genresList.innerHTML = "";
   
   if (genres.length === 0) {
-    genresList.innerHTML = '<div class="genres-empty">No hay géneros definidos. Agrega uno para comenzar.</div>';
+    genresList.innerHTML = `<div class="genres-empty">${tr("classifier.noGenres")}</div>`;
     return;
   }
   
@@ -322,7 +337,7 @@ function renderGenres() {
     chip.className = "chip";
     chip.innerHTML = `
       <span>${genre}</span>
-      <button class="chip-remove" data-idx="${idx}" title="Eliminar género">×</button>
+      <button class="chip-remove" data-idx="${idx}" title="${tr("common.cancel")}">×</button>
     `;
     genresList.appendChild(chip);
   });
@@ -333,7 +348,7 @@ function renderGenres() {
       const idx = parseInt(e.target.dataset.idx);
       genres.splice(idx, 1);
       renderGenres();
-      showToast("Género eliminado", "info");
+      showToast(tr("toast.genreRemoved"), "info");
     });
   });
 }
@@ -365,7 +380,7 @@ genresSave.addEventListener("click", async () => {
   });
   const data = await res.json();
   const status = document.getElementById("cls-status");
-  status.textContent = data.ok ? "Generos guardados." : `Error: ${data.error}`;
+  status.textContent = data.ok ? tr("classifier.statusSaved") : `${tr("common.errorPrefix")}: ${data.error}`;
 });
 
 const clsRun = document.getElementById("cls-run");
@@ -390,12 +405,12 @@ clsRun.addEventListener("click", async () => {
   // Generate unique process ID
   currentProcessId = `cls-${Date.now()}`;
   
-  status.textContent = "Ejecutando clasificador...";
+  status.textContent = tr("classifier.running");
   log.textContent = "";
   
   // Show progress bar and cancel button
   progressContainer.classList.remove("hidden");
-  progressText.textContent = "Preparando...";
+  progressText.textContent = tr("common.preparing");
   progressPercent.textContent = "0%";
   progressFill.style.width = "0%";
   currentFile.textContent = "";
@@ -404,7 +419,7 @@ clsRun.addEventListener("click", async () => {
   clsPause.classList.remove("hidden");
   clsCancel.classList.remove("hidden");
   clsIsPaused = false;
-  clsPause.textContent = "⏸ Pausar";
+  clsPause.textContent = tr("classifier.pause");
 
   const res = await fetch("/api/genre-classify", {
     method: "POST",
@@ -414,7 +429,7 @@ clsRun.addEventListener("click", async () => {
   
   if (!res.ok) {
     const data = await res.json();
-    status.textContent = `Error: ${data.error}`;
+    status.textContent = `${tr("common.errorPrefix")}: ${data.error}`;
     log.textContent = data.error || "";
     progressContainer.classList.add("hidden");
     clsRun.classList.remove("hidden");
@@ -442,13 +457,13 @@ clsRun.addEventListener("click", async () => {
         try {
           const data = JSON.parse(line.slice(6));
           if (data.type === 'progress') {
-            progressText.textContent = `Procesando archivo ${data.processed} de ${data.total}`;
+            progressText.textContent = tr("classifier.progress", { processed: data.processed, total: data.total });
             progressPercent.textContent = `${data.percentage}%`;
             progressFill.style.width = `${data.percentage}%`;
             currentFile.textContent = data.current || "";
             status.textContent = `(${data.processed}/${data.total}) ${data.current}`;
             if (data.current) {
-              log.textContent += `${log.textContent ? "\n" : ""}[${data.processed}/${data.total}] Analizando: ${data.current}`;
+              log.textContent += `${log.textContent ? "\n" : ""}${tr("classifier.analyzing", { processed: data.processed, total: data.total, file: data.current })}`;
               log.scrollTop = log.scrollHeight;
             }
           } else if (data.type === 'log') {
@@ -457,11 +472,11 @@ clsRun.addEventListener("click", async () => {
               log.scrollTop = log.scrollHeight;
             }
           } else if (data.type === 'complete') {
-            status.textContent = data.success ? "Clasificacion completada." : "Proceso cancelado o error.";
-            progressText.textContent = data.success ? "Completado" : "Cancelado";
+            status.textContent = data.success ? tr("classifier.completed") : tr("classifier.failed");
+            progressText.textContent = data.success ? tr("common.completed") : tr("common.cancelled");
             progressFill.style.width = data.success ? "100%" : "0%";
             if (data.error) {
-              log.textContent += `${log.textContent ? "\n\n" : ""}Error:\n${data.error}`;
+              log.textContent += `${log.textContent ? "\n\n" : ""}${tr("common.errorPrefix")}:\n${data.error}`;
             } else if (data.message) {
               log.textContent += `${log.textContent ? "\n\n" : ""}${data.message}`;
             }
@@ -486,7 +501,7 @@ clsRun.addEventListener("click", async () => {
 
 clsCancel.addEventListener("click", async () => {
   if (!currentProcessId) return;
-  const confirmed = confirm("¿Estás seguro que deseas cancelar la clasificación?");
+  const confirmed = confirm(tr("confirm.cancelClassification"));
   if (!confirmed) return;
   try {
     if (clsIsPaused) {
@@ -517,7 +532,7 @@ clsPause.addEventListener("click", async () => {
         body: JSON.stringify({ processId: currentProcessId })
       });
       clsIsPaused = false;
-      clsPause.textContent = "⏸ Pausar";
+      clsPause.textContent = tr("classifier.pause");
     } catch (e) {
       console.error('Error resuming:', e);
     }
@@ -529,7 +544,7 @@ clsPause.addEventListener("click", async () => {
         body: JSON.stringify({ processId: currentProcessId })
       });
       clsIsPaused = true;
-      clsPause.textContent = "▶ Reanudar";
+      clsPause.textContent = tr("classifier.resume");
     } catch (e) {
       console.error('Error pausing:', e);
     }
@@ -554,11 +569,11 @@ setRun.addEventListener("click", async () => {
   const tableBody = document.getElementById("set-table-body");
 
   if (!pack) {
-    status.textContent = "Selecciona el pack nuevo a evaluar.";
+    status.textContent = tr("sets.selectPack");
     return;
   }
   if (!warmup && !peak && !closing) {
-    status.textContent = "Selecciona al menos una carpeta de referencia (Warmup, Peak o Closing).";
+    status.textContent = tr("sets.selectReference");
     return;
   }
 
@@ -566,8 +581,8 @@ setRun.addEventListener("click", async () => {
   progressContainer.classList.remove("hidden");
   setRun.classList.add("hidden");
   setCancel.classList.remove("hidden");
-  status.textContent = "Analizando...";
-  tableBody.innerHTML = '<tr><td colspan="5" class="empty-row">Analizando...</td></tr>';
+  status.textContent = tr("sets.analyzing");
+  tableBody.innerHTML = `<tr><td colspan="5" class="empty-row">${tr("sets.emptyAnalyzing")}</td></tr>`;
 
   try {
     const body = { input: pack, processId: setProcessId, analysisSeconds: parseInt(document.getElementById("set-seconds").value) };
@@ -583,7 +598,7 @@ setRun.addEventListener("click", async () => {
 
     if (!res.ok) {
       const data = await res.json();
-      status.textContent = `Error: ${data.error}`;
+      status.textContent = `${tr("common.errorPrefix")}: ${data.error}`;
       resetSetButtons();
       return;
     }
@@ -603,15 +618,15 @@ setRun.addEventListener("click", async () => {
         try {
           const data = JSON.parse(line.slice(6));
           if (data.type === "progress") {
-            progressText.textContent = `Analizando ${data.processed} de ${data.total}`;
+            progressText.textContent = tr("sets.progress", { processed: data.processed, total: data.total });
             progressPercent.textContent = `${data.percentage}%`;
             progressFill.style.width = `${data.percentage}%`;
             currentFile.textContent = data.current || "";
             status.textContent = `(${data.processed}/${data.total}) ${data.current}`;
           } else if (data.type === "complete") {
-            status.textContent = data.success ? "Análisis completado." : "Proceso cancelado o error.";
+            status.textContent = data.success ? tr("sets.completed") : tr("sets.failed");
             if (data.error) status.textContent += ` — ${data.error}`;
-            progressText.textContent = data.success ? "Completado" : "Cancelado";
+            progressText.textContent = data.success ? tr("common.completed") : tr("common.cancelled");
             progressFill.style.width = data.success ? "100%" : "0%";
           } else if (data.type === "result") {
             renderSetResults(data.results || [], tableBody);
@@ -622,7 +637,7 @@ setRun.addEventListener("click", async () => {
       }
     }
   } catch (e) {
-    status.textContent = `Error: ${e.message}`;
+    status.textContent = `${tr("common.errorPrefix")}: ${e.message}`;
   }
 
   resetSetButtons();
@@ -653,7 +668,7 @@ function resetSetButtons() {
 
 function renderSetResults(results, tableBody) {
   tableBody.innerHTML = "";
-  const SECTION_LABELS = { warmup: "★ Warmup", peak: "★ Peak", closing: "★ Closing" };
+  const SECTION_LABELS = { warmup: tr("sets.bestWarmup"), peak: tr("sets.bestPeak"), closing: tr("sets.bestClosing") };
   for (const r of results) {
     const row = document.createElement("tr");
     const name = r.file ? r.file.split(/[\\/]/).pop() : "—";
@@ -679,7 +694,7 @@ function renderSetResults(results, tableBody) {
     const bestTd = document.createElement("td");
     bestTd.textContent = best ? (SECTION_LABELS[best] || best) : "—";
     if (r.error) {
-      bestTd.textContent = "Error";
+      bestTd.textContent = tr("sets.error");
       bestTd.title = r.error;
     }
     row.appendChild(bestTd);
@@ -715,13 +730,13 @@ convRun.addEventListener("click", async () => {
   // Generate unique process ID
   convProcessId = `conv-${Date.now()}`;
 
-  status.textContent = "Convirtiendo...";
+  status.textContent = tr("converter.running");
   log.textContent = "";
 
   // Show progress bar and cancel button
   if (progressContainer) {
     progressContainer.classList.remove("hidden");
-    progressText.textContent = "Preparando...";
+    progressText.textContent = tr("common.preparing");
     progressPercent.textContent = "0%";
     progressFill.style.width = "0%";
     currentFile.textContent = "";
@@ -744,7 +759,7 @@ convRun.addEventListener("click", async () => {
 
   if (!res.ok) {
     const data = await res.json();
-    status.textContent = `Error: ${data.error}`;
+    status.textContent = `${tr("common.errorPrefix")}: ${data.error}`;
     log.textContent = data.error || "";
     if (progressContainer) progressContainer.classList.add("hidden");
     convRun.classList.remove("hidden");
@@ -771,20 +786,20 @@ convRun.addEventListener("click", async () => {
           const data = JSON.parse(line.slice(6));
           if (data.type === 'progress') {
             if (progressContainer) {
-              progressText.textContent = `Convirtiendo archivo ${data.processed} de ${data.total}`;
+              progressText.textContent = tr("converter.progress", { processed: data.processed, total: data.total });
               progressPercent.textContent = `${data.percentage}%`;
               progressFill.style.width = `${data.percentage}%`;
               currentFile.textContent = data.current || "";
             }
-            status.textContent = `Convirtiendo... ${data.message}`;
+            status.textContent = `${tr("converter.running")} ${data.message}`;
           } else if (data.type === 'complete') {
-            status.textContent = data.success ? "Conversion finalizada." : "Proceso cancelado o error.";
+            status.textContent = data.success ? tr("converter.completed") : tr("converter.failed");
             if (progressContainer) {
-              progressText.textContent = data.success ? "Completado" : "Cancelado";
+              progressText.textContent = data.success ? tr("common.completed") : tr("common.cancelled");
               progressFill.style.width = data.success ? "100%" : "0%";
             }
             if (data.error) {
-              log.textContent += `${log.textContent ? "\n\n" : ""}Error:\n${data.error}`;
+              log.textContent += `${log.textContent ? "\n\n" : ""}${tr("common.errorPrefix")}:\n${data.error}`;
             }
           }
         } catch (e) {
@@ -856,37 +871,37 @@ if (metaLoad) metaLoad.addEventListener("click", async () => {
 
   const dir = metaInput.value.trim();
   if (!dir) {
-    metaStatus.textContent = "Selecciona una carpeta primero.";
+    metaStatus.textContent = tr("common.selectFolderFirst");
     return;
   }
   
-  metaStatus.textContent = "Cargando archivos...";
-  metaFileList.innerHTML = '<div class="empty-state">Cargando...</div>';
+  metaStatus.textContent = tr("metadata.loadingFiles");
+  metaFileList.innerHTML = `<div class="empty-state">${tr("common.loading")}</div>`;
   
   try {
     const res = await fetch(`/api/metadata/list?dir=${encodeURIComponent(dir)}&recursive=false`);
     const data = await res.json();
     
     if (!data.ok) {
-      metaStatus.textContent = `Error: ${data.error}`;
-      metaFileList.innerHTML = '<div class="empty-state">Error al cargar</div>';
+      metaStatus.textContent = `${tr("common.errorPrefix")}: ${data.error}`;
+      metaFileList.innerHTML = `<div class="empty-state">${tr("metadata.errorLoading")}</div>`;
       return;
     }
     
     if (data.files.length === 0) {
-      metaStatus.textContent = "No se encontraron archivos de audio.";
-      metaFileList.innerHTML = '<div class="empty-state">No hay archivos de audio en esta carpeta</div>';
+      metaStatus.textContent = tr("metadata.noAudioFound");
+      metaFileList.innerHTML = `<div class="empty-state">${tr("metadata.noAudioFound")}</div>`;
       return;
     }
     
     metaFiles = data.files;
-    metaStatus.textContent = `${data.files.length} archivos encontrados. Presiona "Identificar todos" para comenzar.`;
+    metaStatus.textContent = tr("metadata.filesFound", { count: data.files.length });
     renderMetaFileList(data.files, false);
     metaResults.classList.add("hidden");
     metaResultsList.innerHTML = "";
   } catch (e) {
-    metaStatus.textContent = `Error: ${e.message}`;
-    metaFileList.innerHTML = '<div class="empty-state">Error de conexion</div>';
+    metaStatus.textContent = `${tr("common.errorPrefix")}: ${e.message}`;
+    metaFileList.innerHTML = `<div class="empty-state">${tr("metadata.errorConnection")}</div>`;
   }
 });
 
@@ -911,11 +926,11 @@ function renderMetaFileList(files, showStatus = true) {
   const rejectedCount = files.length - audioFiles.length;
   
   if (rejectedCount > 0) {
-    metaFileList.innerHTML = `<div class="file-rejected">${rejectedCount} archivo(s) no válido(s) ignorado(s)</div>`;
+    metaFileList.innerHTML = `<div class="file-rejected">${tr("metadata.invalidIgnored", { count: rejectedCount })}</div>`;
   }
   
   if (audioFiles.length === 0) {
-    metaFileList.innerHTML += '<div class="empty-state">No se encontraron archivos de audio válidos</div>';
+    metaFileList.innerHTML += `<div class="empty-state">${tr("metadata.noValidAudio")}</div>`;
     return;
   }
   
@@ -929,10 +944,10 @@ function renderMetaFileList(files, showStatus = true) {
     fileItem.dataset.path = filePath;
     fileItem.dataset.idx = idx;
     fileItem.innerHTML = `
-      <button class="file-item-remove" data-idx="${idx}" title="Quitar archivo">×</button>
+      <button class="file-item-remove" data-idx="${idx}" title="${tr("common.cancel")}">×</button>
       <span class="file-item-name">${fileName}</span>
       <span class="file-item-meta">${ext}</span>
-      <button class="file-item-edit btn" data-path="${filePath}" title="Editar metadatos">✎</button>
+      <button class="file-item-edit btn" data-path="${filePath}" title="${tr("nav.metadata")}">✎</button>
     `;
     metaFileList.appendChild(fileItem);
   });
@@ -970,7 +985,7 @@ function renderMetaFileList(files, showStatus = true) {
         metaEditor.classList.remove("hidden");
         metaEditor.scrollIntoView({ behavior: "smooth" });
       } catch (err) {
-        if (metaStatus) metaStatus.textContent = `Error al leer metadatos: ${err.message}`;
+        if (metaStatus) metaStatus.textContent = `${tr("common.errorPrefix")}: ${err.message}`;
       }
     });
   });
@@ -987,11 +1002,11 @@ function removeMetaFile(idx) {
     renderMetaFileList(metaFiles, false);
     container.scrollTop = currentScroll;
     
-    showToast(`"${removedFile}" removido`, "info");
+    showToast(`"${removedFile}" ${tr("toast.genreRemoved").toLowerCase()}`, "info");
     
     // If no files left, show original empty state
     if (metaFiles.length === 0) {
-      metaFileList.innerHTML = '<div class="empty-state">Selecciona una carpeta para ver los archivos</div>';
+      metaFileList.innerHTML = `<div class="empty-state">${tr("metadata.emptyFolder")}</div>`;
     }
   }
 }
@@ -1001,7 +1016,7 @@ if (metaIdentifyAll) metaIdentifyAll.addEventListener("click", async () => {
   if (!metaStatus || !metaProgress || !metaCancel || !metaProgressText || !metaProgressPercent || !metaProgressFill || !metaCurrentFile || !metaFileList || !metaResults || !metaResultsList) return;
 
   if (metaFiles.length === 0) {
-    metaStatus.textContent = "Carga archivos primero.";
+    metaStatus.textContent = tr("metadata.loadFilesFirst");
     return;
   }
   
@@ -1012,7 +1027,7 @@ if (metaIdentifyAll) metaIdentifyAll.addEventListener("click", async () => {
   metaProgress.classList.remove("hidden");
   metaIdentifyAll.classList.add("hidden");
   metaCancel.classList.remove("hidden");
-  metaStatus.textContent = "Identificando canciones...";
+  metaStatus.textContent = tr("metadata.identifyingSongs");
   
   const total = metaFiles.length;
   let processed = 0;
@@ -1020,7 +1035,7 @@ if (metaIdentifyAll) metaIdentifyAll.addEventListener("click", async () => {
   for (const filePath of metaFiles) {
     const fileName = filePath.split("/").pop();
     
-    metaProgressText.textContent = `Identificando archivo ${processed + 1} de ${total}`;
+    metaProgressText.textContent = tr("metadata.identifyingFile", { processed: processed + 1, total });
     metaProgressPercent.textContent = `${Math.round((processed / total) * 100)}%`;
     metaProgressFill.style.width = `${(processed / total) * 100}%`;
     metaCurrentFile.textContent = fileName;
@@ -1053,7 +1068,7 @@ if (metaIdentifyAll) metaIdentifyAll.addEventListener("click", async () => {
       } else {
         metaResultsData.push({
           original: fileName,
-          result: data.error || "Error desconocido",
+          result: data.error || tr("metadata.unknownError"),
           success: false
         });
         
@@ -1074,10 +1089,10 @@ if (metaIdentifyAll) metaIdentifyAll.addEventListener("click", async () => {
   }
   
   // Show final results
-  metaProgressText.textContent = "Completado";
+  metaProgressText.textContent = tr("common.completed");
   metaProgressPercent.textContent = "100%";
   metaProgressFill.style.width = "100%";
-  metaStatus.textContent = `Identificados ${metaResultsData.filter(r => r.success).length} de ${total} archivos`;
+  metaStatus.textContent = tr("metadata.identifiedCount", { count: metaResultsData.filter(r => r.success).length, total });
   
   // Show results panel
   renderMetaResults();
@@ -1126,7 +1141,7 @@ function renderMetaResults() {
 // Update filename preview
 function updateMetaPreview() {
   if (!metaNewFilename || !metaPreviewName) return;
-  const newName = metaNewFilename.value || "Nuevo nombre";
+  const newName = metaNewFilename.value || tr("metadata.newNamePlaceholder");
   const ext = currentMetaFile ? "." + currentMetaFile.split(".").pop() : "";
   metaPreviewName.textContent = newName + ext;
 }
@@ -1141,7 +1156,7 @@ if (metaCancelEdit) metaCancelEdit.addEventListener("click", () => {
   if (metaEditor) metaEditor.classList.add("hidden");
   currentMetaFile = null;
   currentMetaData = null;
-  if (metaStatus) metaStatus.textContent = "Edicion cancelada";
+  if (metaStatus) metaStatus.textContent = tr("metadata.cancelEdit");
 });
 
 // Save metadata changes
@@ -1149,17 +1164,17 @@ if (metaSave) metaSave.addEventListener("click", async () => {
   if (!metaStatus || !metaNewFilename || !metaTitle || !metaArtist || !metaAlbum || !metaYear || !metaGenre || !metaTrack) return;
 
   if (!currentMetaFile) {
-    metaStatus.textContent = "No hay archivo seleccionado";
+    metaStatus.textContent = tr("metadata.noFileSelected");
     return;
   }
   
   const newName = metaNewFilename.value.trim();
   if (!newName) {
-    metaStatus.textContent = "El nombre no puede estar vacio";
+    metaStatus.textContent = tr("metadata.emptyName");
     return;
   }
   
-  metaStatus.textContent = "Guardando cambios...";
+  metaStatus.textContent = tr("metadata.savingChanges");
   metaSave.disabled = true;
   
   try {
@@ -1174,7 +1189,7 @@ if (metaSave) metaSave.addEventListener("click", async () => {
       const renameData = await renameRes.json();
       
       if (!renameData.ok) {
-        metaStatus.textContent = `Error al renombrar: ${renameData.error}`;
+        metaStatus.textContent = tr("metadata.renameError", { error: renameData.error });
         metaSave.disabled = false;
         return;
       }
@@ -1200,15 +1215,15 @@ if (metaSave) metaSave.addEventListener("click", async () => {
     const writeData = await writeRes.json();
     
     if (!writeData.ok) {
-      metaStatus.textContent = `Error al guardar metadata: ${writeData.error}`;
+      metaStatus.textContent = tr("metadata.writeError", { error: writeData.error });
     } else {
-      metaStatus.textContent = "Cambios guardados exitosamente";
+      metaStatus.textContent = tr("metadata.saved");
       if (metaEditor) metaEditor.classList.add("hidden");
       // Reload file list
       if (metaLoad) metaLoad.click();
     }
   } catch (e) {
-    metaStatus.textContent = `Error: ${e.message}`;
+    metaStatus.textContent = `${tr("common.errorPrefix")}: ${e.message}`;
   }
   
   metaSave.disabled = false;
@@ -1242,7 +1257,7 @@ bpmSeconds.addEventListener("input", () => {
 bpmAnalyze.addEventListener("click", async () => {
   const dir = bpmInput.value.trim();
   if (!dir) {
-    bpmStatus.textContent = "Selecciona una carpeta primero.";
+    bpmStatus.textContent = tr("common.selectFolderFirst");
     return;
   }
   
@@ -1252,7 +1267,7 @@ bpmAnalyze.addEventListener("click", async () => {
   bpmProgress.classList.remove("hidden");
   bpmAnalyze.classList.add("hidden");
   bpmCancel.classList.remove("hidden");
-  bpmStatus.textContent = "Analizando BPM...";
+  bpmStatus.textContent = tr("bpm.running");
   bpmResults = [];
   
   // Get file list first
@@ -1261,7 +1276,7 @@ bpmAnalyze.addEventListener("click", async () => {
     const listData = await listRes.json();
     
     if (!listData.ok || listData.files.length === 0) {
-      bpmStatus.textContent = listData.error || "No se encontraron archivos";
+      bpmStatus.textContent = listData.error || tr("bpm.noFiles");
       resetBpmButtons();
       return;
     }
@@ -1281,7 +1296,7 @@ bpmAnalyze.addEventListener("click", async () => {
     
     if (!res.ok) {
       const data = await res.json();
-      bpmStatus.textContent = `Error: ${data.error}`;
+      bpmStatus.textContent = `${tr("common.errorPrefix")}: ${data.error}`;
       resetBpmButtons();
       return;
     }
@@ -1304,14 +1319,14 @@ bpmAnalyze.addEventListener("click", async () => {
           try {
             const data = JSON.parse(line.slice(6));
             if (data.type === 'progress') {
-              bpmProgressText.textContent = `Analizando archivo ${data.processed} de ${data.total}`;
+              bpmProgressText.textContent = tr("bpm.progress", { processed: data.processed, total: data.total });
               bpmProgressPercent.textContent = `${data.percentage}%`;
               bpmProgressFill.style.width = `${data.percentage}%`;
               bpmCurrentFile.textContent = data.current || "";
               bpmStatus.textContent = `(${data.processed}/${data.total}) ${data.current}`;
             } else if (data.type === 'complete') {
-              bpmStatus.textContent = data.success ? "Analisis completado." : "Proceso cancelado o error.";
-              bpmProgressText.textContent = data.success ? "Completado" : "Cancelado";
+              bpmStatus.textContent = data.success ? tr("bpm.completed") : tr("bpm.failed");
+              bpmProgressText.textContent = data.success ? tr("common.completed") : tr("common.cancelled");
               bpmProgressFill.style.width = data.success ? "100%" : "0%";
               if (data.error) {
                 bpmStatus.textContent += ` — ${data.error}`;
@@ -1327,7 +1342,7 @@ bpmAnalyze.addEventListener("click", async () => {
     }
     
   } catch (e) {
-    bpmStatus.textContent = `Error: ${e.message}`;
+    bpmStatus.textContent = `${tr("common.errorPrefix")}: ${e.message}`;
   }
   
   resetBpmButtons();
@@ -1410,7 +1425,7 @@ const stemsStatus = document.getElementById("stems-status");
 
 stemsFileDrop.addEventListener("click", async () => {
   const file = Runtime.isElectron
-    ? await window.electronAPI.openFiles("Selecciona una canción", false)
+    ? await window.electronAPI.openFiles(tr("dialog.selectSong"), false)
     : null;
   if (file) {
     stemsFilePath = file;
@@ -1438,7 +1453,7 @@ stemsFileDrop.addEventListener("drop", (e) => {
 
 stemsRun.addEventListener("click", async () => {
   if (!stemsFilePath) {
-    stemsStatus.textContent = "Selecciona una canción primero.";
+    stemsStatus.textContent = tr("stems.selectSongFirst");
     return;
   }
 
@@ -1450,7 +1465,7 @@ stemsRun.addEventListener("click", async () => {
   stemsResultCards.classList.add("hidden");
   stemsRun.classList.add("hidden");
   stemsCancel.classList.remove("hidden");
-  stemsStatus.textContent = "Separando stems...";
+  stemsStatus.textContent = tr("stems.separating");
 
   let vocalsPath = null;
   let instrumentalPath = null;
@@ -1470,7 +1485,7 @@ stemsRun.addEventListener("click", async () => {
 
     if (!res.ok) {
       const data = await res.json();
-      stemsStatus.textContent = `Error: ${data.error}`;
+      stemsStatus.textContent = `${tr("common.errorPrefix")}: ${data.error}`;
       resetStemsButtons();
       return;
     }
@@ -1490,15 +1505,15 @@ stemsRun.addEventListener("click", async () => {
         try {
           const data = JSON.parse(line.slice(6));
           if (data.type === "progress") {
-            stemsProgressText.textContent = `Separando: ${data.current || ""}`;
+            stemsProgressText.textContent = tr("stems.progress", { file: data.current || "" });
             stemsProgressPercent.textContent = `${data.percentage}%`;
             stemsProgressFill.style.width = `${data.percentage}%`;
             stemsCurrentFile.textContent = data.current || "";
-            stemsStatus.textContent = data.current || "Procesando...";
+            stemsStatus.textContent = data.current || tr("common.processing");
           } else if (data.type === "complete") {
-            stemsProgressText.textContent = data.success ? "Completado" : "Cancelado";
+            stemsProgressText.textContent = data.success ? tr("common.completed") : tr("common.cancelled");
             stemsProgressFill.style.width = data.success ? "100%" : "0%";
-            if (data.error) stemsStatus.textContent = `Error: ${data.error}`;
+            if (data.error) stemsStatus.textContent = `${tr("common.errorPrefix")}: ${data.error}`;
           } else if (data.type === "result") {
             const results = data.results || [];
             const first = results[0];
@@ -1516,13 +1531,13 @@ stemsRun.addEventListener("click", async () => {
       }
     }
   } catch (e) {
-    stemsStatus.textContent = `Error: ${e.message}`;
+    stemsStatus.textContent = `${tr("common.errorPrefix")}: ${e.message}`;
   }
 
   if (vocalsPath || instrumentalPath) {
-    stemsStatus.textContent = "Separación completada.";
+    stemsStatus.textContent = tr("stems.completed");
     stemsResultCards.classList.remove("hidden");
-    stemsOutputPath.textContent = `Guardados en: ${outputDir}`;
+    stemsOutputPath.textContent = tr("stems.savedIn", { path: outputDir });
 
     const cardVocals = document.getElementById("stems-card-vocals");
     const cardInstrumental = document.getElementById("stems-card-instrumental");
@@ -1643,7 +1658,7 @@ if (cfgLastfmToggle && cfgLastfmKey) cfgLastfmToggle.addEventListener("click", (
 
 if (cfgDefaultOutputBrowse) cfgDefaultOutputBrowse.addEventListener("click", async () => {
   if (!cfgDefaultOutput) return;
-  const selected = await selectDirectory("Selecciona carpeta de salida por defecto");
+  const selected = await selectDirectory(tr("dialog.selectOutputFolder"));
   if (selected) {
     cfgDefaultOutput.value = selected;
     cfgDefaultOutput.dataset.pathLabel = displayPathLabel(selected);
@@ -1660,7 +1675,7 @@ cfgSave.addEventListener("click", async () => {
     defaultOutputDir: (cfgDefaultOutput?.value || "").trim() || "output"
   };
   
-  status.textContent = "Guardando...";
+  status.textContent = tr("settings.saving");
   
   try {
     const res = await fetch("/api/settings", {
@@ -1671,9 +1686,9 @@ cfgSave.addEventListener("click", async () => {
     const data = await res.json();
     
     if (data.ok) {
-      status.textContent = "Configuracion guardada correctamente.";
+      status.textContent = tr("settings.saved");
       status.style.color = "var(--accent-2)";
-      showToast("Configuracion guardada correctamente.", "success", 2500);
+      showToast(tr("toast.settingsSaved"), "success", 2500);
       
       // Apply language change
       applyLanguage(settings.language);
@@ -1683,12 +1698,12 @@ cfgSave.addEventListener("click", async () => {
         status.textContent = "";
       }, 3000);
     } else {
-      status.textContent = `Error: ${data.error}`;
+      status.textContent = `${tr("common.errorPrefix")}: ${data.error}`;
       status.style.color = "var(--accent)";
       if (cfgStatusTimer) clearTimeout(cfgStatusTimer);
     }
   } catch (error) {
-    status.textContent = `Error: ${error.message}`;
+    status.textContent = `${tr("common.errorPrefix")}: ${error.message}`;
     status.style.color = "var(--accent)";
     if (cfgStatusTimer) clearTimeout(cfgStatusTimer);
   }
@@ -1698,7 +1713,7 @@ cfgSave.addEventListener("click", async () => {
 const ffmpegCheck = document.getElementById("ffmpeg-check");
 ffmpegCheck.addEventListener("click", async () => {
   const statusText = document.getElementById("ffmpeg-status-text");
-  statusText.textContent = "Verificando...";
+  statusText.textContent = tr("ffmpeg.checking");
 
   const isInstalled = await fetchFfmpegReadyOnce();
   setFfmpegReady(isInstalled);
@@ -1708,7 +1723,7 @@ ffmpegCheck.addEventListener("click", async () => {
 const ffmpegInstall = document.getElementById("ffmpeg-install");
 ffmpegInstall.addEventListener("click", async () => {
   const statusText = document.getElementById("ffmpeg-status-text");
-  statusText.textContent = "Instalando...";
+  statusText.textContent = tr("ffmpeg.installing");
   statusText.className = "ffmpeg-value";
   
   if (window.electronAPI && window.electronAPI.installFFmpeg) {
@@ -1718,29 +1733,25 @@ ffmpegInstall.addEventListener("click", async () => {
     statusText.className = result.success ? "ffmpeg-value ok" : "ffmpeg-value error";
     setFfmpegReady(result.success ? true : false);
   } else {
-    statusText.textContent = "Instalacion solo disponible en app de escritorio";
+    statusText.textContent = tr("ffmpeg.desktopOnly");
     statusText.className = "ffmpeg-value error";
   }
 });
 
 function applyLanguage(lang) {
-  const t = translations[lang] || translations.es;
-
-  // Select each nav button by its data-tab attribute — never by array index
-  const tabLabels = ["classifier", "sets", "converter", "metadata", "bpm", "style", "stems", "settings"];
-  for (const key of tabLabels) {
-    const btn = document.querySelector(`.nav-btn[data-tab='${key}']`);
-    if (btn && t[key]) btn.textContent = t[key];
-  }
-
-  // Update hero
-  document.querySelector(".hero h1").textContent = t.panelTitle;
-  document.querySelector(".hero p").textContent = t.panelSubtitle;
-
-  // Update sidebar note
-  document.querySelector(".sidebar-note").textContent = t.sidebarNote;
-
-  // Save language preference
+  const t = getTranslationsForLang(lang);
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.dataset.i18n;
+    if (key && t[key] !== undefined) el.textContent = t[key];
+  });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.dataset.i18nPlaceholder;
+    if (key && t[key] !== undefined) el.placeholder = t[key];
+  });
+  document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+    const key = el.dataset.i18nTitle;
+    if (key && t[key] !== undefined) el.title = t[key];
+  });
   localStorage.setItem("musickind-lang", lang);
 }
 
@@ -1748,13 +1759,13 @@ function onFfmpegStateChangeRender(ready) {
   const statusText = document.getElementById("ffmpeg-status-text");
   if (statusText) {
     if (ready === true) {
-      statusText.textContent = "Instalado";
+      statusText.textContent = tr("ffmpeg.installed");
       statusText.className = "ffmpeg-value ok";
     } else if (ready === false) {
-      statusText.textContent = "No instalado";
+      statusText.textContent = tr("ffmpeg.notInstalled");
       statusText.className = "ffmpeg-value error";
     } else {
-      statusText.textContent = "Desconocido";
+      statusText.textContent = tr("ffmpeg.unknown");
       statusText.className = "ffmpeg-value";
     }
   }

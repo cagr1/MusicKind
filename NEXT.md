@@ -1,6 +1,6 @@
 # MusicKind — Qué falta y qué ya está hecho
 
-> Última actualización: 2026-04-30 (rev 13)
+> Última actualización: 2026-05-02 (rev 14)
 > Este archivo es la fuente de verdad del avance. PROJECT_STATE.md tiene el contexto de arquitectura.
 
 ---
@@ -247,13 +247,15 @@ Un DJ tiene cientos de canciones. No sabe qué track meter en su warmup vs su pe
 ```
 COMPLETADO ✅              PENDIENTE (en orden)
 ──────────────────────     ──────────────────────────────────────────
-Genre Classifier           CODEX_12: UI redesign (violet/cyan DJ energy) ★ SIGUIENTE
-Converter                  CODEX_13: i18n completo (data-i18n en todo el HTML)
-BPM Analyzer               E2E manual en Electron (al final)
-Metadata Editor            
+Genre Classifier           CODEX_15: 🔒 Seguridad — config/settings.json fuera de git ★ PRIMERO
+Converter                  CODEX_14: i18n HTML — agregar data-i18n al resto del HTML
+BPM Analyzer               CODEX_16: Limpieza — eliminar archivos obsoletos del repo
+Metadata Editor            E2E manual en Electron (al final)
 Stem Separator             
 Set Creator evolucionado ✅
 i18n archivos separados ✅
+UI Redesign ✅ (CODEX_12)
+i18n infra ✅ (CODEX_13)
 
 ELIMINADO                  
 ──────────────────────     
@@ -271,10 +273,13 @@ Navegación (applyLanguage) ████████████ 100%  ✅ CODEX
 Set Creator evolucionado   ████████████ 100%  ✅ CODEX_09
 Stem Separator UX          ████████████ 100%  ✅ CODEX_10
 i18n archivos separados    ████████████ 100%  ✅ CODEX_11
-UI / Diseño                ░░░░░░░░░░░░   0%  ← CODEX_12
-i18n completo (toda la UI) ░░░░░░░░░░░░   0%  ← CODEX_13
+UI / Diseño                ████████████ 100%  ✅ CODEX_12
+i18n infra (tr/apply/files)████████████ 100%  ✅ CODEX_13
+Seguridad (settings.json)  ░░░░░░░░░░░░   0%  ← CODEX_15 (PRIORITARIO)
+i18n HTML (data-i18n markup)░░░░░░░░░░░   0%  ← CODEX_14
+Limpieza repo              ░░░░░░░░░░░░   0%  ← CODEX_16
 
-App lista para testear     █████████░░░  72%
+App lista para testear     █████████░░░  74%
 ```
 
 ---
