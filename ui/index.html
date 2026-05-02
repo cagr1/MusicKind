@@ -14,7 +14,9 @@
     <div class="app">
       <aside class="sidebar">
         <div class="brand">
-          <div class="logo">MK</div>
+          <div class="logo">
+            <img src="./assets/musickind-logo.png" alt="MusicKind logo" class="logo-image" />
+          </div>
           <div>
             <div class="brand-title">MusicKind</div>
             <div class="brand-sub">Dashboard</div>
@@ -354,49 +356,26 @@
           </div>
           <div class="panel-body">
             <div class="sets-instructions">
-              <p>Extrae la voz (acapella) o la pista instrumental de cualquier canción usando demucs.</p>
+              <p>Carga una canción y extrae la voz (acapella) y la pista instrumental por separado.</p>
               <p class="sets-formats"><strong>Requiere:</strong> <code>pip install demucs</code> — descarga ~300MB de modelos la primera vez.</p>
             </div>
 
-            <div class="form-grid">
-              <label class="field">
-                <span>Carpeta de entrada</span>
-                <div class="input-hint">Archivos a separar</div>
-                <div class="input-group">
-                  <input id="stems-input-dir" type="text" placeholder="/ruta/canciones" readonly />
-                  <button id="stems-input-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
-                    <span class="iconify" data-icon="mdi:folder-open-outline"></span>
-                  </button>
-                </div>
-              </label>
+            <div class="conv-drop-zone" id="stems-file-drop">
+              <div class="conv-drop-content">
+                <span class="iconify conv-drop-icon" data-icon="mdi:file-music-outline"></span>
+                <span class="conv-drop-text">Arrastra aquí una canción</span>
+                <span class="conv-drop-hint">o haz clic para seleccionar</span>
+              </div>
+              <div id="stems-file-name" class="conv-path-input hidden"></div>
             </div>
 
-            <div class="form-grid">
-              <label class="field">
-                <span>Qué extraer</span>
-                <div class="analysis-options">
-                  <label class="option">
-                    <input type="radio" name="stems-mode" value="both" checked />
-                    <span>Acapella + Instrumental</span>
-                  </label>
-                  <label class="option">
-                    <input type="radio" name="stems-mode" value="vocals" />
-                    <span>Solo acapella (voz)</span>
-                  </label>
-                  <label class="option">
-                    <input type="radio" name="stems-mode" value="instrumental" />
-                    <span>Solo instrumental (sin voz)</span>
-                  </label>
-                </div>
-              </label>
-              <label class="field">
-                <span>Formato de salida</span>
-                <select id="stems-format">
-                  <option value="wav">WAV (mayor calidad)</option>
-                  <option value="mp3">MP3 (requiere FFmpeg)</option>
-                </select>
-              </label>
-            </div>
+            <label class="field">
+              <span>Formato de salida</span>
+              <select id="stems-format">
+                <option value="wav">WAV (mayor calidad)</option>
+                <option value="mp3">MP3 (requiere FFmpeg)</option>
+              </select>
+            </label>
 
             <div class="actions">
               <button id="stems-run" class="btn primary">Separar stems</button>
@@ -414,21 +393,20 @@
               <div class="progress-file" id="stems-current-file"></div>
             </div>
 
-            <div id="stems-results" class="bpm-results">
-              <table class="bpm-table">
-                <thead>
-                  <tr>
-                    <th>Pista original</th>
-                    <th>Archivos generados</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody id="stems-table-body">
-                  <tr>
-                    <td colspan="3" class="empty-row">Selecciona una carpeta y presiona separar</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div id="stems-result-cards" class="hidden">
+              <div class="stems-cards">
+                <div class="stem-card" id="stems-card-vocals">
+                  <div class="stem-card-icon">🎤</div>
+                  <div class="stem-card-label">Voz (Acapella)</div>
+                  <button class="btn primary" id="stems-open-vocals">Abrir archivo</button>
+                </div>
+                <div class="stem-card" id="stems-card-instrumental">
+                  <div class="stem-card-icon">🎵</div>
+                  <div class="stem-card-label">Instrumental</div>
+                  <button class="btn primary" id="stems-open-instrumental">Abrir archivo</button>
+                </div>
+              </div>
+              <div id="stems-output-path" class="analysis-note"></div>
             </div>
 
             <div class="status" id="stems-status"></div>
@@ -625,6 +603,8 @@
       </main>
     </div>
 
+    <script src="./i18n/es.js"></script>
+    <script src="./i18n/en.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

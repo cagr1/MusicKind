@@ -1,31 +1,6 @@
-// Language translations - defined at top to avoid temporal dead zone issues
 const translations = {
-  es: {
-    panelTitle: "Panel de Control",
-    panelSubtitle: "Clasifica por genero, crea sets y convierte audio sin escribir comandos.",
-    classifier: "Clasificador",
-    sets: "Creador de Sets",
-    converter: "Convertidor",
-    metadata: "Auto-Tag",
-    bpm: "Editor BPM",
-    stems: "Stem Separator",
-    settings: "Configuracion",
-    dashboard: "Dashboard",
-    sidebarNote: "Panel de control para DJs"
-  },
-  en: {
-    panelTitle: "Dashboard",
-    panelSubtitle: "Classify by genre, create sets and convert audio without writing commands.",
-    classifier: "Classifier",
-    sets: "Set Creator",
-    converter: "Converter",
-    metadata: "Auto-Tag",
-    bpm: "BPM Editor",
-    stems: "Stem Separator",
-    settings: "Settings",
-    dashboard: "Dashboard",
-    sidebarNote: "Control panel for DJs"
-  }
+  es: window.MK_LANG_ES,
+  en: window.MK_LANG_EN
 };
 
 const Runtime = {
@@ -1414,8 +1389,11 @@ function renderBpmResults(results) {
 
 // ==================== STEM SEPARATOR ====================
 
-const stemsInputDir = document.getElementById("stems-input-dir");
-const stemsInputBrowse = document.getElementById("stems-input-browse");
+let stemsFilePath = null;
+let stemsProcessId = null;
+
+const stemsFileDrop = document.getElementById("stems-file-drop");
+const stemsFileName = document.getElementById("stems-file-name");
 const stemsRun = document.getElementById("stems-run");
 const stemsCancel = document.getElementById("stems-cancel");
 const stemsProgress = document.getElementById("stems-progress");
@@ -1423,44 +1401,68 @@ const stemsProgressText = document.getElementById("stems-progress-text");
 const stemsProgressPercent = document.getElementById("stems-progress-percent");
 const stemsProgressFill = document.getElementById("stems-progress-fill");
 const stemsCurrentFile = document.getElementById("stems-current-file");
-const stemsTableBody = document.getElementById("stems-table-body");
-const stemsStatus = document.getElementById("stems-status");
 const stemsFormat = document.getElementById("stems-format");
+const stemsResultCards = document.getElementById("stems-result-cards");
+const stemsOpenVocals = document.getElementById("stems-open-vocals");
+const stemsOpenInstrumental = document.getElementById("stems-open-instrumental");
+const stemsOutputPath = document.getElementById("stems-output-path");
+const stemsStatus = document.getElementById("stems-status");
 
-let stemsProcessId = null;
-
-stemsInputBrowse.addEventListener("click", async () => {
-  const dir = Runtime.isElectron
-    ? await window.electronAPI.openDirectory()
+stemsFileDrop.addEventListener("click", async () => {
+  const file = Runtime.isElectron
+    ? await window.electronAPI.openFiles("Selecciona una canción", false)
     : null;
-  if (dir) stemsInputDir.value = dir;
+  if (file) {
+    stemsFilePath = file;
+    stemsFileName.textContent = file.split(/[\\/]/).pop();
+    stemsFileName.classList.remove("hidden");
+    stemsFileDrop.querySelector(".conv-drop-text").textContent = stemsFileName.textContent;
+    stemsResultCards.classList.add("hidden");
+  }
+});
+
+stemsFileDrop.addEventListener("dragover", (e) => { e.preventDefault(); stemsFileDrop.classList.add("drag-over"); });
+stemsFileDrop.addEventListener("dragleave", () => { stemsFileDrop.classList.remove("drag-over"); });
+stemsFileDrop.addEventListener("drop", (e) => {
+  e.preventDefault();
+  stemsFileDrop.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file && file.path) {
+    stemsFilePath = file.path;
+    stemsFileName.textContent = file.name;
+    stemsFileName.classList.remove("hidden");
+    stemsFileDrop.querySelector(".conv-drop-text").textContent = file.name;
+    stemsResultCards.classList.add("hidden");
+  }
 });
 
 stemsRun.addEventListener("click", async () => {
-  const inputDir = stemsInputDir.value.trim();
-  if (!inputDir) {
-    stemsStatus.textContent = "Selecciona una carpeta primero.";
+  if (!stemsFilePath) {
+    stemsStatus.textContent = "Selecciona una canción primero.";
     return;
   }
 
-  const stemsMode = document.querySelector('input[name="stems-mode"]:checked')?.value || "both";
   const format = stemsFormat.value || "wav";
   const outputDir = (AppState.settings.defaultOutputDir || "output").trim();
 
   stemsProcessId = `stems-${Date.now()}`;
   stemsProgress.classList.remove("hidden");
+  stemsResultCards.classList.add("hidden");
   stemsRun.classList.add("hidden");
   stemsCancel.classList.remove("hidden");
   stemsStatus.textContent = "Separando stems...";
+
+  let vocalsPath = null;
+  let instrumentalPath = null;
 
   try {
     const res = await fetch("/api/stem-separate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        inputDir,
+        files: [stemsFilePath],
+        stems: "both",
         outputDir,
-        stems: stemsMode,
         format,
         processId: stemsProcessId
       })
@@ -1488,18 +1490,25 @@ stemsRun.addEventListener("click", async () => {
         try {
           const data = JSON.parse(line.slice(6));
           if (data.type === "progress") {
-            stemsProgressText.textContent = `Procesando ${data.processed} de ${data.total}`;
+            stemsProgressText.textContent = `Separando: ${data.current || ""}`;
             stemsProgressPercent.textContent = `${data.percentage}%`;
             stemsProgressFill.style.width = `${data.percentage}%`;
             stemsCurrentFile.textContent = data.current || "";
-            stemsStatus.textContent = `(${data.processed}/${data.total}) ${data.current}`;
+            stemsStatus.textContent = data.current || "Procesando...";
           } else if (data.type === "complete") {
-            stemsStatus.textContent = data.success ? "Separación completada." : "Proceso cancelado o error.";
             stemsProgressText.textContent = data.success ? "Completado" : "Cancelado";
             stemsProgressFill.style.width = data.success ? "100%" : "0%";
-            if (data.error) stemsStatus.textContent += ` — ${data.error}`;
+            if (data.error) stemsStatus.textContent = `Error: ${data.error}`;
           } else if (data.type === "result") {
-            renderStemsResults(data.results || []);
+            const results = data.results || [];
+            const first = results[0];
+            if (first && first.ok && first.files) {
+              for (const f of first.files) {
+                const lower = f.toLowerCase();
+                if (lower.includes("_vocals") || lower.includes("vocals.")) vocalsPath = f;
+                else if (lower.includes("_instrumental") || lower.includes("no_vocals")) instrumentalPath = f;
+              }
+            }
           }
         } catch (e) {
           console.error("Error parsing SSE data:", e);
@@ -1508,6 +1517,33 @@ stemsRun.addEventListener("click", async () => {
     }
   } catch (e) {
     stemsStatus.textContent = `Error: ${e.message}`;
+  }
+
+  if (vocalsPath || instrumentalPath) {
+    stemsStatus.textContent = "Separación completada.";
+    stemsResultCards.classList.remove("hidden");
+    stemsOutputPath.textContent = `Guardados en: ${outputDir}`;
+
+    const cardVocals = document.getElementById("stems-card-vocals");
+    const cardInstrumental = document.getElementById("stems-card-instrumental");
+
+    if (vocalsPath) {
+      cardVocals.classList.remove("hidden");
+      stemsOpenVocals.onclick = () => {
+        if (Runtime.isElectron) window.electronAPI.showInFolder(vocalsPath);
+      };
+    } else {
+      cardVocals.classList.add("hidden");
+    }
+
+    if (instrumentalPath) {
+      cardInstrumental.classList.remove("hidden");
+      stemsOpenInstrumental.onclick = () => {
+        if (Runtime.isElectron) window.electronAPI.showInFolder(instrumentalPath);
+      };
+    } else {
+      cardInstrumental.classList.add("hidden");
+    }
   }
 
   resetStemsButtons();
@@ -1533,41 +1569,6 @@ function resetStemsButtons() {
     stemsCancel.classList.add("hidden");
     stemsProcessId = null;
   }, 2000);
-}
-
-function renderStemsResults(results) {
-  if (!stemsTableBody) return;
-  stemsTableBody.innerHTML = "";
-  for (const r of results) {
-    const row = document.createElement("tr");
-    const name = r.file ? r.file.split(/[\\/]/).pop() : "—";
-
-    const nameTd = document.createElement("td");
-    nameTd.textContent = name;
-    nameTd.title = r.file || "";
-
-    const filesTd = document.createElement("td");
-    if (r.ok && r.files && r.files.length > 0) {
-      filesTd.textContent = r.files.map(f => f.split(/[\\/]/).pop()).join(", ");
-    } else {
-      filesTd.textContent = "—";
-    }
-
-    const statusTd = document.createElement("td");
-    if (!r.ok) {
-      const span = document.createElement("span");
-      span.className = "error-text";
-      span.textContent = r.error || "error";
-      statusTd.appendChild(span);
-    } else {
-      statusTd.textContent = "OK";
-    }
-
-    row.appendChild(nameTd);
-    row.appendChild(filesTd);
-    row.appendChild(statusTd);
-    stemsTableBody.appendChild(row);
-  }
 }
 
 // ==================== SETTINGS FUNCTIONALITY ====================

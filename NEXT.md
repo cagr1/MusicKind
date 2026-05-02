@@ -104,6 +104,7 @@ Un DJ tiene cientos de canciones. No sabe qué track meter en su warmup vs su pe
 | Stem Separator (stem_separator.py + /api/stem-separate + #tab-stems) | CODEX_TASK_07 | ✅ verificado |
 | Bug applyLanguage: selección por data-tab en vez de índice | CODEX_TASK_08 | ✅ verificado |
 | Absorber Style Matcher en Set Creator (3 perfiles + /api/set-analyze) | CODEX_TASK_09 | ✅ verificado 2026-04-30 |
+| Stem Separator UX: un archivo a la vez, dos botones resultado | CODEX_TASK_10 | ✅ verificado 2026-05-01 |
 
 ---
 
@@ -202,29 +203,42 @@ Un DJ tiene cientos de canciones. No sabe qué track meter en su warmup vs su pe
 
 ### REV-4 — UI Redesign: interfaz para amantes de la música `[CODEX_TASK_12]`
 
-**El problema:** La interfaz es funcional pero apagada. Para un DJ, la herramienta debería sentirse como parte de su mundo: energía, oscuridad elegante, colores vibrantes, movimiento.
+**Feedback del usuario (2026-05-01):**
+- Colores "muertos" — necesita energía de DJ (vibra, movimiento)
+- Settings tab: separación entre secciones muy pegada
+- Drop zones necesitan breathing animation al arrastrar
+- Progress bar sin vida — debe pulsar
 
-**Impacto arquitectónico:** Casi exclusivamente `styles.css`. El HTML solo necesita clases nuevas en casos puntuales.
+**Paleta nueva:** `--accent: #8b5cf6` (violet eléctrico) · `--accent-2: #22d3ee` (cyan) · `--accent-3: #f59e0b` (amber) · `--danger: #ef4444` (rojo para Cancel).
 
-**Dirección de diseño:**
+**Archivos:** `ui/styles.css` únicamente. Ver `CODEX_TASK_12.md` para spec completa.
 
-| Elemento | Propuesta |
-|---|---|
-| **Base de color** | Fondo muy oscuro (`#0a0a0f`), no negro puro. Cards con `#12121a` |
-| **Accent principal** | Violeta / morado eléctrico (`#7c3aed` → `#a78bfa`). Gradientes de acento |
-| **Accent secundario** | Cyan / teal (`#06b6d4`) para elementos activos / progreso |
-| **Tipografía** | Inter o similar. Weights 400/500/700. Jerarquía clara |
-| **Nav sidebar** | Hover con glow sutil del color accent. Item activo con borde izquierdo colored |
-| **Progress bar** | Animación de pulso mientras corre (`@keyframes pulse-glow`). Color accent |
-| **Cards / panels** | Bordes `1px solid rgba(255,255,255,0.06)`. Box shadow suave. Slight glassmorphism |
-| **Botones primarios** | Gradiente accent, hover con brillo aumentado. Transición 200ms |
-| **Drop zones** | Borde dashed con animación de breathing cuando dragging |
-| **Score badges (Style Matcher)** | Verde para ≥70%, amarillo para 40-69%, rojo para <40%. Pill con glow |
-| **Animaciones** | `fade-in` para resultados nuevos, `slide-up` para toasts, `spin` para loading |
+---
 
-**Referencia técnica:** Revisar [design.md de google-labs-code](https://github.com/google-labs-code/design.md) para principios de composición.
+### REV-5 — i18n completo: traducir TODA la UI `[CODEX_TASK_13]`
 
-**Archivos:** `ui/styles.css` (reescritura completa). Posibles nuevas clases en `index.html` para: `stem-result-cards`, `score-pill`, `drop-zone-active`.
+**El problema:** `applyLanguage()` solo cambia 9 strings (nav labels, hero, sidebar note). El resto de la app — botones, labels, placeholders, mensajes de estado — está hardcodeado en español. Al cambiar a EN, el 80% del texto queda en español.
+
+**Approach:**
+1. Agregar atributo `data-i18n="clave"` a cada elemento de texto en `ui/index.html`
+2. Agregar `data-i18n-placeholder="clave"` a los `<input>` con placeholder
+3. Expandir `ui/i18n/es.js` y `ui/i18n/en.js` con todas las claves nuevas
+4. Reescribir `applyLanguage()` en `app.js`:
+   ```js
+   function applyLanguage(lang) {
+     const t = translations[lang] || translations.es;
+     document.querySelectorAll('[data-i18n]').forEach(el => {
+       if (t[el.dataset.i18n]) el.textContent = t[el.dataset.i18n];
+     });
+     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+       if (t[el.dataset.i18nPlaceholder]) el.placeholder = t[el.dataset.i18nPlaceholder];
+     });
+     localStorage.setItem('musickind-lang', lang);
+   }
+   ```
+5. Los mensajes dinámicos en app.js (status, errors) también se traducen usando `t.clave` en cada `textContent =` hardcodeado.
+
+**Dependencia:** Después de CODEX_12 (no bloquea pero evita conflictos).
 
 ---
 
@@ -233,12 +247,13 @@ Un DJ tiene cientos de canciones. No sabe qué track meter en su warmup vs su pe
 ```
 COMPLETADO ✅              PENDIENTE (en orden)
 ──────────────────────     ──────────────────────────────────────────
-Genre Classifier           CODEX_10: Stem Separator UX (archivo por archivo) ★ SIGUIENTE
-Converter                  CODEX_11: i18n archivos separados
-BPM Analyzer               CODEX_12: UI redesign
-Metadata Editor            E2E manual en Electron (al final)
-Stem Separator
+Genre Classifier           CODEX_12: UI redesign (violet/cyan DJ energy) ★ SIGUIENTE
+Converter                  CODEX_13: i18n completo (data-i18n en todo el HTML)
+BPM Analyzer               E2E manual en Electron (al final)
+Metadata Editor            
+Stem Separator             
 Set Creator evolucionado ✅
+i18n archivos separados ✅
 
 ELIMINADO                  
 ──────────────────────     
@@ -254,11 +269,12 @@ Infraestructura Electron   ████████████ 100%
 SSE / Procesos             ████████████ 100%
 Navegación (applyLanguage) ████████████ 100%  ✅ CODEX_08
 Set Creator evolucionado   ████████████ 100%  ✅ CODEX_09
-Stem Separator UX          ████░░░░░░░░  30%  ← CODEX_10 PRIORIDAD MÁXIMA
-i18n separado              ░░░░░░░░░░░░   0%  ← CODEX_11
-UI / Diseño                ███░░░░░░░░░  20%  ← CODEX_12
+Stem Separator UX          ████████████ 100%  ✅ CODEX_10
+i18n archivos separados    ████████████ 100%  ✅ CODEX_11
+UI / Diseño                ░░░░░░░░░░░░   0%  ← CODEX_12
+i18n completo (toda la UI) ░░░░░░░░░░░░   0%  ← CODEX_13
 
-App lista para testear     █████████░░░  70%
+App lista para testear     █████████░░░  72%
 ```
 
 ---

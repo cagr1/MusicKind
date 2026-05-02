@@ -1,5 +1,5 @@
 // MusicKind Desktop App - Main Process (CommonJS)
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -13,6 +13,7 @@ let startupDone = false;
 const SERVER_PORT = Number(process.env.PORT || 3030);
 const SERVER_ORIGIN = `http://127.0.0.1:${SERVER_PORT}`;
 const projectRoot = path.join(__dirname, '..');
+const appIconPath = path.join(__dirname, 'assets', 'icon.png');
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
@@ -26,8 +27,8 @@ function createWindow() {
     return;
   }
 
-  const iconPath = fs.existsSync(path.join(__dirname, 'assets', 'icon.png')) 
-    ? path.join(__dirname, 'assets', 'icon.png') 
+  const iconPath = fs.existsSync(appIconPath)
+    ? appIconPath
     : null;
     
   mainWindow = new BrowserWindow({
@@ -63,6 +64,9 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return;
+  if (process.platform === 'darwin' && app.dock && fs.existsSync(appIconPath)) {
+    app.dock.setIcon(appIconPath);
+  }
   await ensureBackendServerReady();
   createWindow();
   startupDone = true;
@@ -334,4 +338,8 @@ ipcMain.handle('install-ffmpeg', async () => {
 // Check if running in Electron environment
 ipcMain.handle('is-electron', () => {
   return true;
+});
+
+ipcMain.handle('show-in-folder', (_event, filePath) => {
+  shell.showItemInFolder(filePath);
 });
