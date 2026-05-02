@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Stem Separator — extracts vocals and/or instrumental from audio files using demucs.
-Usage: python3 stem_separator.py --files <f1> <f2> ... --output <dir> --stems <vocals|instrumental|both> --format <wav|mp3>
+Usage: python stem_separator.py --files <f1> <f2> ... --output <dir> --stems <vocals|instrumental|both> --format <wav|mp3>
 Output per file: [PROGRESS:X/Y] Processing: filename
 Final output: JSON array with results.
 """
@@ -14,12 +14,13 @@ import tempfile
 from pathlib import Path
 
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.aiff', '.aif', '.flac', '.m4a'}
+PYTHON_CMD = sys.executable or "python"
 
 
 def check_demucs():
     try:
         result = subprocess.run(
-            ["python3", "-m", "demucs", "--help"],
+            [PYTHON_CMD, "-m", "demucs", "--help"],
             capture_output=True, text=True, timeout=10
         )
         return result.returncode == 0
@@ -48,7 +49,7 @@ def separate_file(file_path, output_dir, stems_mode, fmt):
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         args = [
-            "python3", "-m", "demucs",
+            PYTHON_CMD, "-m", "demucs",
             "--two-stems", "vocals",
             "-o", tmp_dir,
             file_path

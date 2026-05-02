@@ -1,2 +1,4 @@
 librosa>=0.10.0
 numpy>=1.21.0
+demucs>=4.0.0
+shazamio>=0.4.0

@@ -9,6 +9,50 @@
     <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
   </head>
   <body>
+    <!-- Setup Assistant Overlay -->
+    <div id="setup-overlay" class="setup-overlay hidden">
+      <div class="setup-card">
+        <div class="setup-logo">MusicKind</div>
+        <h2 data-i18n="setup.title">Configuración inicial</h2>
+        <p data-i18n="setup.subtitle">Verificando los componentes necesarios para usar la app...</p>
+
+        <div class="setup-checks">
+          <div class="setup-check" id="setup-check-python">
+            <span class="setup-check-icon">⏳</span>
+            <span class="setup-check-label" data-i18n="setup.checkPython">Python</span>
+            <span class="setup-check-status" id="setup-check-python-status"></span>
+          </div>
+          <div class="setup-check" id="setup-check-libs">
+            <span class="setup-check-icon">⏳</span>
+            <span class="setup-check-label" data-i18n="setup.checkLibs">Librerías de audio</span>
+            <span class="setup-check-status" id="setup-check-libs-status"></span>
+          </div>
+          <div class="setup-check" id="setup-check-ffmpeg">
+            <span class="setup-check-icon">⏳</span>
+            <span class="setup-check-label">FFmpeg</span>
+            <span class="setup-check-status" id="setup-check-ffmpeg-status"></span>
+          </div>
+        </div>
+
+        <div id="setup-log" class="setup-log hidden"></div>
+
+        <div id="setup-actions" class="setup-actions hidden">
+          <button id="setup-install-btn" class="btn primary hidden" data-i18n="setup.installBtn">Instalar automáticamente</button>
+          <button id="setup-skip-btn" class="btn ghost hidden" data-i18n="setup.skipBtn">Continuar de todas formas</button>
+        </div>
+
+        <div id="setup-python-missing" class="setup-error hidden">
+          <p data-i18n="setup.pythonMissing">Python no está instalado. Descárgalo e instálalo primero:</p>
+          <a id="setup-python-link" href="#" class="setup-link" data-i18n="setup.pythonDownload">Descargar Python 3.11</a>
+          <p class="setup-note" data-i18n="setup.pythonNote">En Windows: marca "Add Python to PATH" durante la instalación. Luego cierra y reabre MusicKind.</p>
+        </div>
+
+        <div id="setup-complete-msg" class="setup-complete hidden">
+          <span>✅</span> <span data-i18n="setup.complete">Todo listo. ¡A mezclar!</span>
+          <button id="setup-enter-btn" class="btn primary" data-i18n="setup.enterBtn">Abrir MusicKind</button>
+        </div>
+      </div>
+    </div>
     <div class="bg-glow"></div>
     <div id="toast-container" class="toast-container"></div>
     <div class="app">
@@ -24,11 +68,10 @@
         </div>
         <nav class="nav">
           <button class="nav-btn active" data-tab="classifier" data-i18n="nav.classifier">Clasificador</button>
-          <button class="nav-btn" data-tab="sets" data-i18n="nav.sets">Creador de Sets</button>
-          <button class="nav-btn" data-tab="converter" data-i18n="nav.converter">Convertidor</button>
-          <button class="nav-btn" data-tab="metadata" data-i18n="nav.metadata">Editor de Metadata</button>
-          <button class="nav-btn" data-tab="bpm" data-i18n="nav.bpm">Editor de BPM</button>
-          <button class="nav-btn" data-tab="stems" data-i18n="nav.stems">Stem Separator</button>
+          <button class="nav-btn" data-tab="sets" data-i18n="nav.sets">Creador</button>
+          <button class="nav-btn" data-tab="metadata" data-i18n="nav.metadata">Editor</button>
+          <button class="nav-btn" data-tab="bpm" data-i18n="nav.bpm">BPM</button>
+          <button class="nav-btn" data-tab="stems" data-i18n="nav.stems">Separator</button>
           <button class="nav-btn" data-tab="settings" data-i18n="nav.settings">Configuracion</button>
         </nav>
         <div class="sidebar-footer">
@@ -54,17 +97,17 @@
 
         <section class="panel" id="tab-classifier">
           <div class="panel-header">
-            <h2>Clasificador por Genero</h2>
+            <h2 data-i18n="classifier.title">Clasificador por Genero</h2>
             <span class="pill">Node.js</span>
           </div>
           <div id="cls-ffmpeg-warning" class="ffmpeg-warning hidden">
-            <span>⚠️ FFmpeg no está instalado. Algunas funciones no estarán disponibles.</span>
-            <button id="cls-goto-settings" class="btn btn-small">Ir a Configuración</button>
+            <span data-i18n="ffmpeg.warnClassifier">⚠️ FFmpeg no está instalado. Algunas funciones no estarán disponibles.</span>
+            <button id="cls-goto-settings" class="btn btn-small" data-i18n="common.gotoSettings">Ir a Configuración</button>
           </div>
           <div class="panel-body">
             <div class="form-grid">
               <label class="field">
-                <span>Ruta de la carpeta a clasificar</span>
+                <span data-i18n="classifier.folderLabel">Ruta de la carpeta a clasificar</span>
                 <div class="input-group">
                   <input id="cls-input" type="text" placeholder="/ruta/a/tu/carpeta" data-i18n-placeholder="dialog.enterPath" readonly />
                   <button id="cls-browse" class="btn browse-btn" data-i18n="common.browse">Examinar</button>
@@ -75,15 +118,15 @@
                 <input id="cls-dry" type="checkbox" />
                 <span class="switch-ui"></span>
                 <div>
-                  <div class="switch-title">Simulacion (no mueve archivos)</div>
-                  <div class="switch-sub">Equivale a --dry-run</div>
+                  <div class="switch-title" data-i18n="classifier.dryRunTitle">Simulacion (no mueve archivos)</div>
+                  <div class="switch-sub" data-i18n="classifier.dryRunSub">Equivale a --dry-run</div>
                 </div>
               </label>
             </div>
 
             <div class="genres">
               <div class="genres-header">
-                <h3>Géneros activos</h3>
+                <h3 data-i18n="classifier.activeGenres">Géneros activos</h3>
                 <button id="genres-save" class="btn ghost" data-i18n="common.save">Guardar</button>
               </div>
               <div id="genres-list" class="chip-list"></div>
@@ -95,7 +138,7 @@
             </div>
 
             <div class="actions">
-              <button id="cls-run" class="btn primary">Clasificar ahora</button>
+              <button id="cls-run" class="btn primary" data-i18n="classifier.runBtn">Clasificar ahora</button>
               <button id="cls-pause" class="btn hidden" data-i18n="classifier.pause">⏸ Pausar</button>
               <button id="cls-cancel" class="btn danger hidden" data-i18n="common.cancel">✕ Cancelar</button>
             </div>
@@ -119,52 +162,52 @@
 
         <section class="panel hidden" id="tab-sets">
           <div class="panel-header">
-            <h2>Creador de Sets</h2>
+            <h2 data-i18n="sets.title">Creador de Sets</h2>
             <span class="pill">Python</span>
           </div>
           <div class="panel-body">
             <div class="sets-instructions">
-              <p>Carga canciones que ya sabes que van en cada momento de tu set. La app aprende tu estilo por sección y evalúa cada track nuevo.</p>
+              <p data-i18n="sets.instructions">Carga canciones que ya sabes que van en cada momento de tu set. La app aprende tu estilo por sección y evalúa cada track nuevo.</p>
               <p class="sets-formats"><strong>Formatos aceptados:</strong> MP3, WAV, AIFF, AIF, FLAC, M4A</p>
             </div>
 
             <div class="form-grid">
               <label class="field">
-                <span>Warmup — canciones de apertura</span>
-                <div class="input-hint">Tracks que ya usas para arrancar tu set</div>
+                <span data-i18n="sets.warmupLabel">Warmup — canciones de apertura</span>
+                <div class="input-hint" data-i18n="sets.warmupHint">Tracks que ya usas para arrancar tu set</div>
                 <div class="input-group">
                   <input id="set-warmup" type="text" placeholder="/ruta/warmup" readonly />
-                  <button id="set-warmup-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                  <button id="set-warmup-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta" data-i18n-title="common.selectFolderTitle">
                     <span class="iconify" data-icon="mdi:folder-open-outline"></span>
                   </button>
                 </div>
               </label>
               <label class="field">
-                <span>Peak — canciones de pico</span>
-                <div class="input-hint">Tracks de máxima energía</div>
+                <span data-i18n="sets.peakLabel">Peak — canciones de pico</span>
+                <div class="input-hint" data-i18n="sets.peakHint">Tracks de máxima energía</div>
                 <div class="input-group">
                   <input id="set-peak" type="text" placeholder="/ruta/peak" readonly />
-                  <button id="set-peak-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                  <button id="set-peak-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta" data-i18n-title="common.selectFolderTitle">
                     <span class="iconify" data-icon="mdi:folder-open-outline"></span>
                   </button>
                 </div>
               </label>
               <label class="field">
-                <span>Closing — canciones de cierre</span>
-                <div class="input-hint">Tracks para el final del set</div>
+                <span data-i18n="sets.closingLabel">Closing — canciones de cierre</span>
+                <div class="input-hint" data-i18n="sets.closingHint">Tracks para el final del set</div>
                 <div class="input-group">
                   <input id="set-closing" type="text" placeholder="/ruta/closing" readonly />
-                  <button id="set-closing-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                  <button id="set-closing-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta" data-i18n-title="common.selectFolderTitle">
                     <span class="iconify" data-icon="mdi:folder-open-outline"></span>
                   </button>
                 </div>
               </label>
               <label class="field">
-                <span>Pack nuevo a evaluar</span>
-                <div class="input-hint">Canciones sin clasificar que quieres ubicar</div>
+                <span data-i18n="sets.packLabel">Pack nuevo a evaluar</span>
+                <div class="input-hint" data-i18n="sets.packHint">Canciones sin clasificar que quieres ubicar</div>
                 <div class="input-group">
                   <input id="set-pack" type="text" placeholder="/ruta/new_pack" readonly />
-                  <button id="set-pack-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                  <button id="set-pack-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta" data-i18n-title="common.selectFolderTitle">
                     <span class="iconify" data-icon="mdi:folder-open-outline"></span>
                   </button>
                 </div>
@@ -172,7 +215,7 @@
             </div>
 
             <label class="field">
-              <span>Segundos a analizar por pista</span>
+              <span data-i18n="sets.secondsLabel">Segundos a analizar por pista</span>
               <div class="slider-wrap">
                 <input id="set-seconds" type="range" min="30" max="120" value="60" />
                 <div id="set-seconds-value">60s</div>
@@ -180,7 +223,7 @@
             </label>
 
             <div class="actions">
-              <button id="set-run" class="btn primary">Analizar pack</button>
+              <button id="set-run" class="btn primary" data-i18n="sets.runBtn">Analizar pack</button>
               <button id="set-cancel" class="btn danger hidden" data-i18n="common.cancel">Cancelar</button>
             </div>
 
@@ -199,16 +242,16 @@
               <table class="bpm-table">
                 <thead>
                   <tr>
-                    <th>Pista</th>
+                    <th data-i18n="sets.colTrack">Pista</th>
                     <th>Warmup</th>
                     <th>Peak</th>
                     <th>Closing</th>
-                    <th>Mejor sección</th>
+                    <th data-i18n="sets.colBest">Mejor sección</th>
                   </tr>
                 </thead>
                 <tbody id="set-table-body">
                   <tr>
-                    <td colspan="5" class="empty-row">Carga las carpetas y presiona Analizar pack</td>
+                    <td colspan="5" class="empty-row" data-i18n="sets.emptyTable">Carga las carpetas y presiona Analizar pack</td>
                   </tr>
                 </tbody>
               </table>
@@ -220,12 +263,12 @@
 
         <section class="panel hidden" id="tab-converter">
           <div class="panel-header">
-            <h2>Convertidor de Audio</h2>
+            <h2 data-i18n="converter.title">Convertidor de Audio</h2>
             <span class="pill">FFmpeg</span>
           </div>
           <div id="conv-ffmpeg-warning" class="ffmpeg-warning hidden">
-            <span>⚠️ FFmpeg no está instalado. Instálalo para usar el convertidor.</span>
-            <button id="conv-goto-settings" class="btn btn-small">Ir a Configuración</button>
+            <span data-i18n="ffmpeg.warnConverter">⚠️ FFmpeg no está instalado. Instálalo para usar el convertidor.</span>
+            <button id="conv-goto-settings" class="btn btn-small" data-i18n="common.gotoSettings">Ir a Configuración</button>
           </div>
           <div class="panel-body">
             <div class="conv-instructions">
@@ -236,17 +279,17 @@
             <div class="conv-drop-zone" id="conv-input-drop">
               <div class="conv-drop-content">
                 <span class="iconify conv-drop-icon" data-icon="mdi:file-music-outline"></span>
-                <span class="conv-drop-text">Carpeta con archivos de audio</span>
-                <span class="conv-drop-hint">Arrastra la carpeta o haz clic para seleccionar</span>
+                <span class="conv-drop-text" data-i18n="converter.dropText">Carpeta con archivos de audio</span>
+                <span class="conv-drop-hint" data-i18n="converter.dropHint">Arrastra la carpeta o haz clic para seleccionar</span>
               </div>
               <input id="conv-input" type="text" class="conv-path-input hidden" readonly />
             </div>
 
             <div class="form-grid">
               <label class="field">
-                <span>Formato de salida</span>
+                <span data-i18n="converter.formatLabel">Formato de salida</span>
                 <select id="conv-format">
-                  <option value="">Elegir formato</option>
+                  <option value="" data-i18n="converter.formatPlaceholder">Elegir formato</option>
                   <option value="mp3">MP3</option>
                   <option value="wav">WAV</option>
                   <option value="aiff">AIFF</option>
@@ -255,9 +298,9 @@
                 </select>
               </label>
               <label class="field">
-                <span>Calidad MP3</span>
+                <span data-i18n="converter.qualityLabel">Calidad MP3</span>
                 <select id="conv-bitrate">
-                  <option value="">Opcional</option>
+                  <option value="" data-i18n="converter.qualityOptional">Opcional</option>
                   <option value="128">128 kbps</option>
                   <option value="256">256 kbps</option>
                   <option value="320">320 kbps</option>
@@ -266,7 +309,7 @@
             </div>
 
             <div class="actions">
-              <button id="conv-run" class="btn primary">Convertir</button>
+              <button id="conv-run" class="btn primary" data-i18n="converter.runBtn">Convertir</button>
               <button id="conv-cancel" class="btn danger hidden" data-i18n="common.cancel">Cancelar</button>
             </div>
 
@@ -284,27 +327,27 @@
 
             <div class="status" id="conv-status"></div>
             <pre class="log" id="conv-log"></pre>
-            <div class="analysis-note">Requiere FFmpeg instalado en el sistema.</div>
+            <div class="analysis-note" data-i18n="ffmpeg.required">Requiere FFmpeg instalado en el sistema.</div>
           </div>
         </section>
 
         <section class="panel hidden" id="tab-bpm">
           <div class="panel-header">
-            <h2>Editor de BPM</h2>
+            <h2 data-i18n="bpm.title">Editor de BPM</h2>
             <span class="pill">Análisis</span>
           </div>
           <div class="panel-body">
             <div class="conv-drop-zone" id="bpm-input-drop">
               <div class="conv-drop-content">
                 <span class="iconify conv-drop-icon" data-icon="mdi:folder-music-outline"></span>
-                <span class="conv-drop-text">Carpeta con archivos</span>
-                <span class="conv-drop-hint">Arrastra la carpeta o haz clic para seleccionar</span>
+                <span class="conv-drop-text" data-i18n="bpm.dropText">Carpeta con archivos</span>
+                <span class="conv-drop-hint" data-i18n="bpm.dropHint">Arrastra la carpeta o haz clic para seleccionar</span>
               </div>
               <input id="bpm-input" type="text" class="conv-path-input hidden" readonly />
             </div>
 
             <label class="field">
-              <span>Segundos a analizar</span>
+              <span data-i18n="bpm.secondsLabel">Segundos a analizar</span>
               <div class="slider-wrap">
                 <input id="bpm-seconds" type="range" min="30" max="120" value="60" />
                 <div id="bpm-seconds-value">60s</div>
@@ -312,7 +355,7 @@
             </label>
 
             <div class="actions">
-              <button id="bpm-analyze" class="btn primary">Analizar BPM</button>
+              <button id="bpm-analyze" class="btn primary" data-i18n="bpm.runBtn">Analizar BPM</button>
               <button id="bpm-cancel" class="btn danger hidden" data-i18n="common.cancel">Cancelar</button>
             </div>
 
@@ -331,15 +374,15 @@
               <table class="bpm-table">
                 <thead>
                   <tr>
-                    <th>Pista</th>
+                    <th data-i18n="bpm.colTrack">Pista</th>
                     <th>BPM</th>
                     <th>Key</th>
-                    <th>Acciones</th>
+                    <th data-i18n="bpm.colActions">Acciones</th>
                   </tr>
                 </thead>
                 <tbody id="bpm-table-body">
                   <tr>
-                    <td colspan="4" class="empty-row">Selecciona una carpeta y presiona analizar</td>
+                    <td colspan="4" class="empty-row" data-i18n="bpm.emptyTable">Selecciona una carpeta y presiona analizar</td>
                   </tr>
                 </tbody>
               </table>
@@ -356,29 +399,29 @@
           </div>
           <div class="panel-body">
             <div class="sets-instructions">
-              <p>Carga una canción y extrae la voz (acapella) y la pista instrumental por separado.</p>
+              <p data-i18n="stems.instructions">Carga una canción y extrae la voz (acapella) y la pista instrumental por separado.</p>
               <p class="sets-formats"><strong>Requiere:</strong> <code>pip install demucs</code> — descarga ~300MB de modelos la primera vez.</p>
             </div>
 
             <div class="conv-drop-zone" id="stems-file-drop">
               <div class="conv-drop-content">
                 <span class="iconify conv-drop-icon" data-icon="mdi:file-music-outline"></span>
-                <span class="conv-drop-text">Arrastra aquí una canción</span>
-                <span class="conv-drop-hint">o haz clic para seleccionar</span>
+                <span class="conv-drop-text" data-i18n="stems.dropText">Arrastra aquí una canción</span>
+                <span class="conv-drop-hint" data-i18n="stems.dropHint">o haz clic para seleccionar</span>
               </div>
               <div id="stems-file-name" class="conv-path-input hidden"></div>
             </div>
 
             <label class="field">
-              <span>Formato de salida</span>
+              <span data-i18n="stems.formatLabel">Formato de salida</span>
               <select id="stems-format">
-                <option value="wav">WAV (mayor calidad)</option>
-                <option value="mp3">MP3 (requiere FFmpeg)</option>
+                <option value="wav" data-i18n="stems.formatWav">WAV (mayor calidad)</option>
+                <option value="mp3" data-i18n="stems.formatMp3">MP3 (requiere FFmpeg)</option>
               </select>
             </label>
 
             <div class="actions">
-              <button id="stems-run" class="btn primary">Separar stems</button>
+              <button id="stems-run" class="btn primary" data-i18n="stems.runBtn">Separar stems</button>
               <button id="stems-cancel" class="btn danger hidden" data-i18n="common.cancel">Cancelar</button>
             </div>
 
@@ -397,12 +440,12 @@
               <div class="stems-cards">
                 <div class="stem-card" id="stems-card-vocals">
                   <div class="stem-card-icon">🎤</div>
-                  <div class="stem-card-label">Voz (Acapella)</div>
+                  <div class="stem-card-label" data-i18n="stems.vocalsLabel">Voz (Acapella)</div>
                   <button class="btn primary" id="stems-open-vocals" data-i18n="common.openFile">Abrir archivo</button>
                 </div>
                 <div class="stem-card" id="stems-card-instrumental">
                   <div class="stem-card-icon">🎵</div>
-                  <div class="stem-card-label">Instrumental</div>
+                  <div class="stem-card-label" data-i18n="stems.instrumentalLabel">Instrumental</div>
                   <button class="btn primary" id="stems-open-instrumental" data-i18n="common.openFile">Abrir archivo</button>
                 </div>
               </div>
@@ -415,13 +458,13 @@
 
         <section class="panel hidden" id="tab-settings">
           <div class="panel-header">
-            <h2>Configuracion</h2>
+            <h2 data-i18n="settings.title">Configuracion</h2>
             <span class="pill">Ajustes</span>
           </div>
           <div class="panel-body">
             <div class="settings-section">
-              <h3>API Keys</h3>
-              <p class="settings-desc">Ingresa tus credenciales para usar el clasificador de musica. Si no tienes claves, puedes obtenerlas gratuitamente en:</p>
+              <h3 data-i18n="settings.apiKeysTitle">API Keys</h3>
+              <p class="settings-desc" data-i18n="settings.apiKeysDesc">Ingresa tus credenciales para usar el clasificador de musica. Si no tienes claves, puedes obtenerlas gratuitamente en:</p>
               <ul class="settings-links">
                 <li><a href="https://developer.spotify.com/dashboard" target="_blank">Spotify Developer Dashboard</a></li>
                 <li><a href="https://www.last.fm/api" target="_blank">Last.fm API</a></li>
@@ -429,18 +472,18 @@
               
               <div class="form-grid">
                 <label class="field">
-                  <span>Spotify Client ID</span>
-                  <input id="cfg-spotify-id" type="text" placeholder="Tu Spotify Client ID" />
+                  <span data-i18n="settings.spotifyId">Spotify Client ID</span>
+                  <input id="cfg-spotify-id" type="text" placeholder="Tu Spotify Client ID" data-i18n-placeholder="settings.spotifyIdPlaceholder" />
                 </label>
                 <label class="field">
-                  <span>Spotify Client Secret</span>
-                  <input id="cfg-spotify-secret" type="password" placeholder="Tu Spotify Client Secret" />
+                  <span data-i18n="settings.spotifySecret">Spotify Client Secret</span>
+                  <input id="cfg-spotify-secret" type="password" placeholder="Tu Spotify Client Secret" data-i18n-placeholder="settings.spotifySecretPlaceholder" />
                 </label>
                 <label class="field">
-                  <span>Last.fm API Key</span>
+                  <span data-i18n="settings.lastfmKey">Last.fm API Key</span>
                   <div class="input-group">
-                    <input id="cfg-lastfm-key" type="password" placeholder="Tu Last.fm API Key" />
-                    <button id="cfg-lastfm-toggle" class="btn browse-btn icon-btn" type="button" title="Mostrar/Ocultar API Key">
+                    <input id="cfg-lastfm-key" type="password" placeholder="Tu Last.fm API Key" data-i18n-placeholder="settings.lastfmKeyPlaceholder" />
+                    <button id="cfg-lastfm-toggle" class="btn browse-btn icon-btn" type="button" title="Mostrar/Ocultar API Key" data-i18n-title="settings.toggleVisibility">
                       <span class="iconify" data-icon="mdi:eye-outline"></span>
                     </button>
                   </div>
@@ -449,10 +492,10 @@
             </div>
 
             <div class="settings-section">
-              <h3>Idioma / Idioma</h3>
+              <h3 data-i18n="settings.languageTitle">Idioma / Idioma</h3>
               <div class="form-grid">
                 <label class="field">
-                  <span>Seleccionar idioma</span>
+                  <span data-i18n="settings.languageLabel">Seleccionar idioma</span>
                   <select id="cfg-language">
                     <option value="es">Espanol</option>
                     <option value="en">English</option>
@@ -462,13 +505,13 @@
             </div>
 
             <div class="settings-section">
-              <h3>Output</h3>
+              <h3 data-i18n="settings.outputTitle">Output</h3>
               <div class="form-grid">
                 <label class="field field-inline">
-                  <span>Carpeta de salida por defecto</span>
+                  <span data-i18n="settings.outputLabel">Carpeta de salida por defecto</span>
                   <div class="input-inline">
                     <input id="cfg-output-dir" type="text" placeholder="/ruta/output" readonly />
-                    <button id="cfg-output-dir-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta">
+                    <button id="cfg-output-dir-browse" class="btn browse-btn icon-btn" title="Seleccionar carpeta" data-i18n-title="common.selectFolderTitle">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M3 7V5a2 2 0 012-2h5l2 2h7a2 2 0 012 2v2"></path>
                         <path d="M3 9h18l-2 11H5L3 9z"></path>
@@ -480,28 +523,28 @@
             </div>
 
             <div class="settings-section">
-              <h3>FFmpeg</h3>
+              <h3 data-i18n="settings.ffmpegTitle">FFmpeg</h3>
               <div class="ffmpeg-status" id="ffmpeg-status-card">
                 <div class="ffmpeg-info">
-                  <span class="ffmpeg-label">Estado:</span>
+                  <span class="ffmpeg-label" data-i18n="settings.ffmpegStatus">Estado:</span>
                   <span class="ffmpeg-value" id="ffmpeg-status-text">Verificando...</span>
                 </div>
-                <button id="ffmpeg-check" class="btn ghost">Verificar</button>
-                <button id="ffmpeg-install" class="btn">Instalar FFmpeg</button>
+                <button id="ffmpeg-check" class="btn ghost" data-i18n="settings.ffmpegCheck">Verificar</button>
+                <button id="ffmpeg-install" class="btn" data-i18n="settings.ffmpegInstall">Instalar FFmpeg</button>
               </div>
-              <div class="analysis-note">FFmpeg es necesario para el analisis de audio y conversion de archivos.</div>
+              <div class="analysis-note" data-i18n="ffmpeg.settingsNote">FFmpeg es necesario para el analisis de audio y conversion de archivos.</div>
             </div>
 
             <div class="settings-section">
-              <h3>Acerca de</h3>
+              <h3 data-i18n="settings.aboutTitle">Acerca de</h3>
               <div class="about-info">
                 <p><strong>MusicKind</strong> v1.0.0</p>
-                <p>Herramienta para DJs: clasificacion de musica por genero, creacion de sets y conversion de audio.</p>
+                <p data-i18n="settings.aboutDesc">Herramienta para DJs: clasificacion de musica por genero, creacion de sets y conversion de audio.</p>
               </div>
             </div>
 
             <div class="actions">
-              <button id="cfg-save" class="btn primary">Guardar configuracion</button>
+              <button id="cfg-save" class="btn primary" data-i18n="settings.saveBtn">Guardar configuracion</button>
             </div>
 
             <div class="status" id="cfg-status"></div>
@@ -510,27 +553,26 @@
 
         <section class="panel hidden" id="tab-metadata">
           <div class="panel-header">
-            <h2>Auto-Tag de Música</h2>
+            <h2 data-i18n="metadata.title">Auto-Tag de Música</h2>
             <span class="pill">Spotify</span>
           </div>
           <div class="panel-body">
             <p class="meta-description">
-              Selecciona archivos de audio y deja que Spotify identifique la canción automaticamente. 
-              Los tags serán escritos y el archivo renombrado a: <strong>"Artista - Canción.ext"</strong>
+              <span data-i18n="metadata.description">Selecciona archivos de audio y deja que Spotify identifique la canción automaticamente.</span>
+              <br>Los tags serán escritos y el archivo renombrado a: <strong>"Artista - Canción.ext"</strong>
             </p>
             
             <div class="conv-drop-zone" id="meta-input-drop">
               <div class="conv-drop-content">
-                <span class="iconify conv-drop-icon" data-icon="mdi:folder-music-outline"></span>
-                <span class="conv-drop-text">Carpeta con archivos</span>
-                <span class="conv-drop-hint">Arrastra la carpeta o haz clic para seleccionar</span>
+                <span class="iconify conv-drop-icon" data-icon="mdi:file-music-outline"></span>
+                <span class="conv-drop-text" data-i18n="metadata.dropText">Archivo o carpeta de audio</span>
+                <span class="conv-drop-hint" data-i18n="metadata.dropHint">Arrastra aquí o haz clic para seleccionar</span>
               </div>
               <input id="meta-input" type="text" class="conv-path-input hidden" readonly />
             </div>
 
             <div class="actions">
-              <button id="meta-load" class="btn">Cargar archivos</button>
-              <button id="meta-identify-all" class="btn primary">Identificar todos</button>
+              <button id="meta-identify-all" class="btn primary" data-i18n="metadata.identifyAllBtn">Identificar</button>
               <button id="meta-cancel" class="btn danger hidden" data-i18n="common.cancel">Cancelar</button>
             </div>
 
@@ -546,51 +588,51 @@
             </div>
 
             <div id="meta-file-list" class="file-list">
-              <div class="empty-state">Selecciona una carpeta para ver los archivos</div>
+              <div class="empty-state" data-i18n="metadata.emptyFolder">Selecciona una carpeta para ver los archivos</div>
             </div>
 
             <div id="meta-results" class="meta-results hidden">
-              <h3>Resultados:</h3>
+              <h3 data-i18n="metadata.resultsTitle">Resultados:</h3>
               <div id="meta-results-list"></div>
             </div>
 
             <div id="meta-editor" class="metadata-editor hidden">
-              <h3>Editar metadatos</h3>
+              <h3 data-i18n="metadata.editorTitle">Editar metadatos</h3>
               <div class="meta-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px;">
                 <div class="field">
-                  <label for="meta-title">Título</label>
-                  <input id="meta-title" type="text" placeholder="Título" />
+                  <label for="meta-title" data-i18n="metadata.fieldTitle">Título</label>
+                  <input id="meta-title" type="text" placeholder="Título" data-i18n-placeholder="metadata.fieldTitlePlaceholder" />
                 </div>
                 <div class="field">
-                  <label for="meta-artist">Artista</label>
-                  <input id="meta-artist" type="text" placeholder="Artista" />
+                  <label for="meta-artist" data-i18n="metadata.fieldArtist">Artista</label>
+                  <input id="meta-artist" type="text" placeholder="Artista" data-i18n-placeholder="metadata.fieldArtistPlaceholder" />
                 </div>
                 <div class="field">
-                  <label for="meta-album">Álbum</label>
-                  <input id="meta-album" type="text" placeholder="Álbum" />
+                  <label for="meta-album" data-i18n="metadata.fieldAlbum">Álbum</label>
+                  <input id="meta-album" type="text" placeholder="Álbum" data-i18n-placeholder="metadata.fieldAlbumPlaceholder" />
                 </div>
                 <div class="field">
-                  <label for="meta-year">Año</label>
+                  <label for="meta-year" data-i18n="metadata.fieldYear">Año</label>
                   <input id="meta-year" type="number" placeholder="2024" />
                 </div>
                 <div class="field">
-                  <label for="meta-genre">Género</label>
+                  <label for="meta-genre" data-i18n="metadata.fieldGenre">Género</label>
                   <input id="meta-genre" type="text" placeholder="Afro House" />
                 </div>
                 <div class="field">
-                  <label for="meta-track">Pista #</label>
+                  <label for="meta-track" data-i18n="metadata.fieldTrack">Pista #</label>
                   <input id="meta-track" type="number" placeholder="1" />
                 </div>
                 <div class="field" style="grid-column:1/-1;">
-                  <label for="meta-new-filename">Nombre de archivo</label>
+                  <label for="meta-new-filename" data-i18n="metadata.fieldFilename">Nombre de archivo</label>
                   <input id="meta-new-filename" type="text" />
                 </div>
               </div>
               <div class="meta-preview">
-                Vista previa: <code id="meta-preview-name">nombre.mp3</code>
+                <span data-i18n="metadata.previewLabel">Vista previa:</span> <code id="meta-preview-name">nombre.mp3</code>
               </div>
               <div class="actions">
-                <button id="meta-save" class="btn primary">Guardar cambios</button>
+                <button id="meta-save" class="btn primary" data-i18n="metadata.saveBtn">Guardar cambios</button>
                 <button id="meta-cancel-edit" class="btn" data-i18n="common.cancel">Cancelar</button>
               </div>
             </div>

@@ -132,9 +132,10 @@ export function writeMetadata(filePath, metadata) {
 
     const args = ["-y", "-i", filePath];
 
-    // Copy to temp file first to avoid issues
+    // Copy to temp file keeping the same extension so ffmpeg can detect the format
     const ext = path.extname(filePath);
-    const tempPath = filePath + ".tmp";
+    const base = filePath.slice(0, -ext.length);
+    const tempPath = base + ".__mk__" + ext;
     
     // Build FFmpeg metadata args
     if (metadata.title) args.push("-metadata", `title=${metadata.title}`);
@@ -192,61 +193,70 @@ export function generateFilename(metadata, format = "{artist} - {title}") {
   return filename;
 }
 
-/**
- * Identify track using Spotify and update metadata
- * Returns the result with artist - title format
- */
-export async function identifyAndTag(filePath, spotifyClient) {
-  // Step 1: Read current metadata
+export async function identifyAndTag(filePath, spotifyClient, shazamResult = null) {
   const currentData = await readMetadata(filePath);
   const currentMeta = currentData.metadata;
-  
-  // Step 2: Search Spotify using existing info or filename
+
   let spotifyTrack = null;
-  
-  // Try with existing metadata
-  if (currentMeta.title || currentMeta.artist) {
+
+  // 1. If Shazam already identified the song, try to enrich it with Spotify metadata.
+  if (shazamResult && shazamResult.artist && shazamResult.title && spotifyClient) {
     try {
-      spotifyTrack = await spotifyClient.searchTrack(
-        currentMeta.artist || "",
-        currentMeta.title || currentData.file.name.replace(/\.[^.]+$/, "")
-      );
+      spotifyTrack = await spotifyClient.searchTrack(shazamResult.artist, shazamResult.title);
     } catch (e) {
-      console.log("Spotify search failed:", e.message);
+      console.log("Spotify enrichment failed:", e.message);
     }
   }
-  
-  // Step 3: If no result, try with filename (without extension)
-  if (!spotifyTrack) {
-    const filename = currentData.file.name.replace(/\.[^.]+$/, "");
-    // Try to parse "Artist - Title" format from filename
-    const parts = filename.split(" - ");
-    if (parts.length >= 2) {
-      const artistFromFile = parts.slice(0, -1).join(" - ");
-      const titleFromFile = parts[parts.length - 1];
+
+  // 2. Fallback: Spotify text search using existing tags or "Artist - Title" filename pattern.
+  if (!shazamResult && !spotifyTrack && spotifyClient) {
+    if (currentMeta.title || currentMeta.artist) {
       try {
-        spotifyTrack = await spotifyClient.searchTrack(artistFromFile, titleFromFile);
+        spotifyTrack = await spotifyClient.searchTrack(
+          currentMeta.artist || "",
+          currentMeta.title || currentData.file.name.replace(/\.[^.]+$/, "")
+        );
       } catch (e) {
-        console.log("Spotify search from filename failed:", e.message);
+        console.log("Spotify search by tags failed:", e.message);
+      }
+    }
+
+    if (!spotifyTrack) {
+      const filename = currentData.file.name.replace(/\.[^.]+$/, "");
+      const parts = filename.split(" - ");
+      if (parts.length >= 2) {
+        const artistFromFile = parts.slice(0, -1).join(" - ");
+        const titleFromFile = parts[parts.length - 1];
+        try {
+          spotifyTrack = await spotifyClient.searchTrack(artistFromFile, titleFromFile);
+        } catch (e) {
+          console.log("Spotify search by filename failed:", e.message);
+        }
       }
     }
   }
-  
-  // Step 4: Prepare new metadata
+
+  // 3. Build final metadata.
   const newMetadata = {
-    title: spotifyTrack?.name || currentMeta.title,
-    artist: spotifyTrack?.artists?.[0]?.name || currentMeta.artist,
-    album: spotifyTrack?.album?.name || currentMeta.album,
-    year: spotifyTrack?.album?.release_date ? new Date(spotifyTrack.album.release_date).getFullYear() : currentMeta.year,
-    genre: "", // Spotify doesn't provide genre in track info
+    title: spotifyTrack?.name || shazamResult?.title || currentMeta.title,
+    artist: spotifyTrack?.artists?.[0]?.name || shazamResult?.artist || currentMeta.artist,
+    album: spotifyTrack?.album?.name || shazamResult?.album || currentMeta.album,
+    year: spotifyTrack?.album?.release_date
+      ? new Date(spotifyTrack.album.release_date).getFullYear()
+      : (shazamResult?.year || currentMeta.year),
+    genre: "",
     track: spotifyTrack?.track_number || currentMeta.track
   };
-  
-  // Step 5: Write metadata to file (path unchanged after this call)
-  await writeMetadata(filePath, newMetadata);
 
-  // Step 6: Rename file to "Artist - Title.ext"
-  // generateFilename returns a name without extension; renameFile appends it.
+  // 4. If nothing was identified, fail explicitly.
+  if (!newMetadata.artist && !newMetadata.title) {
+    throw new Error(
+      "No se pudo identificar la canción. Asegúrate de que shazamio esté instalado (pip install shazamio)."
+    );
+  }
+
+  // 5. Write tags and rename file.
+  await writeMetadata(filePath, newMetadata);
   const newFilename = generateFilename(newMetadata);
   const newPath = renameFile(filePath, newFilename);
 

@@ -1293,3 +1293,126 @@ body {
 .score-high { color: #4ade80; background: rgba(74, 222, 128, 0.12); border-radius: 99px; padding: 2px 8px; font-size: 13px; font-weight: 600; }
 .score-mid  { color: #fbbf24; background: rgba(251, 191, 36, 0.12); border-radius: 99px; padding: 2px 8px; font-size: 13px; font-weight: 600; }
 .score-low  { color: #f87171; background: rgba(248, 113, 113, 0.12); border-radius: 99px; padding: 2px 8px; font-size: 13px; font-weight: 600; }
+
+/* Setup overlay */
+.setup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg, #0f0f17);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.setup-overlay.hidden {
+  display: none;
+}
+
+.setup-card {
+  background: var(--panel, #1a1a2e);
+  border: 1px solid var(--stroke, #2a2a40);
+  border-radius: 20px;
+  padding: 40px 48px;
+  max-width: 520px;
+  width: min(100% - 32px, 520px);
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.setup-logo {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: 0.04em;
+}
+
+.setup-card h2 {
+  margin-bottom: 8px;
+}
+
+.setup-card > p {
+  color: var(--muted, #888);
+  margin-bottom: 24px;
+}
+
+.setup-checks {
+  text-align: left;
+  margin-bottom: 24px;
+}
+
+.setup-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--stroke, #2a2a40);
+}
+
+.setup-check:last-child {
+  border-bottom: none;
+}
+
+.setup-check-icon {
+  font-size: 1.2rem;
+  width: 24px;
+  text-align: center;
+}
+
+.setup-check-label {
+  flex: 1;
+  font-weight: 500;
+}
+
+.setup-check-status {
+  font-size: 0.85rem;
+  color: var(--muted, #888);
+  text-align: right;
+}
+
+.setup-log {
+  background: #0d0d1a;
+  border-radius: 8px;
+  padding: 12px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: #aaa;
+  max-height: 140px;
+  overflow-y: auto;
+  text-align: left;
+  margin-bottom: 16px;
+  white-space: pre-wrap;
+}
+
+.setup-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.setup-error {
+  color: var(--danger, #ef4444);
+  margin-bottom: 16px;
+}
+
+.setup-link {
+  color: var(--accent, #8b5cf6);
+  text-decoration: underline;
+  cursor: pointer;
+  display: block;
+  margin: 8px 0;
+}
+
+.setup-note {
+  font-size: 0.8rem;
+  color: var(--muted, #888);
+  margin-top: 8px;
+}
+
+.setup-complete {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}

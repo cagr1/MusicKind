@@ -28,6 +28,168 @@ const AppState = {
   ffmpegReady: null
 };
 
+const SETUP_DONE_KEY = "musickind-setup-done";
+const PIP_PACKAGES = ["librosa", "numpy", "demucs"];
+
+function completeSetup() {
+  localStorage.setItem(SETUP_DONE_KEY, "1");
+  const overlay = document.getElementById("setup-overlay");
+  if (overlay) overlay.classList.add("hidden");
+}
+
+function showSetupComplete() {
+  const completeMsg = document.getElementById("setup-complete-msg");
+  const enterBtn = document.getElementById("setup-enter-btn");
+  if (completeMsg) completeMsg.classList.remove("hidden");
+  if (enterBtn && !enterBtn.dataset.bound) {
+    enterBtn.dataset.bound = "1";
+    enterBtn.addEventListener("click", () => completeSetup());
+  }
+}
+
+async function checkFfmpegForSetup() {
+  const setIcon = (id, icon) => {
+    const el = document.querySelector(`#${id} .setup-check-icon`);
+    if (el) el.textContent = icon;
+  };
+  const setStatus = (id, text) => {
+    const el = document.getElementById(`${id}-status`);
+    if (el) el.textContent = text;
+  };
+
+  setStatus("setup-check-ffmpeg", tr("setup.checking"));
+  const ready = await fetchFfmpegReadyOnce();
+  setFfmpegReady(ready);
+  if (ready) {
+    setIcon("setup-check-ffmpeg", "✅");
+    setStatus("setup-check-ffmpeg", tr("setup.installed"));
+  } else {
+    setIcon("setup-check-ffmpeg", "⚠️");
+    setStatus("setup-check-ffmpeg", tr("setup.ffmpegNote"));
+  }
+}
+
+async function runSetupAssistant() {
+  if (localStorage.getItem(SETUP_DONE_KEY) === "1") return;
+  if (!Runtime.isElectron || !window.electronAPI?.checkPython) return;
+
+  const overlay = document.getElementById("setup-overlay");
+  if (!overlay) return;
+  overlay.classList.remove("hidden");
+
+  const actions = document.getElementById("setup-actions");
+  const installBtn = document.getElementById("setup-install-btn");
+  const skipBtn = document.getElementById("setup-skip-btn");
+  const pythonMissing = document.getElementById("setup-python-missing");
+  const pythonLink = document.getElementById("setup-python-link");
+  const setupLog = document.getElementById("setup-log");
+
+  const setIcon = (id, icon) => {
+    const el = document.querySelector(`#${id} .setup-check-icon`);
+    if (el) el.textContent = icon;
+  };
+  const setStatus = (id, text) => {
+    const el = document.getElementById(`${id}-status`);
+    if (el) el.textContent = text;
+  };
+  const showActions = ({ showInstall = false, showSkip = false } = {}) => {
+    if (actions) actions.classList.remove("hidden");
+    if (installBtn) installBtn.classList.toggle("hidden", !showInstall);
+    if (skipBtn) skipBtn.classList.toggle("hidden", !showSkip);
+  };
+  const bindSkip = () => {
+    if (skipBtn && !skipBtn.dataset.bound) {
+      skipBtn.dataset.bound = "1";
+      skipBtn.addEventListener("click", () => completeSetup());
+    }
+  };
+
+  const pythonResult = await window.electronAPI.checkPython();
+  if (!pythonResult.found) {
+    setIcon("setup-check-python", "❌");
+    setStatus("setup-check-python", tr("setup.notFound"));
+    if (pythonMissing) pythonMissing.classList.remove("hidden");
+    if (pythonLink && !pythonLink.dataset.bound) {
+      pythonLink.dataset.bound = "1";
+      pythonLink.href = "https://www.python.org/downloads/";
+      pythonLink.addEventListener("click", async (event) => {
+        event.preventDefault();
+        if (window.electronAPI?.openExternal) {
+          await window.electronAPI.openExternal("https://www.python.org/downloads/");
+        }
+      });
+    }
+    showActions({ showSkip: true });
+    bindSkip();
+    return;
+  }
+
+  setIcon("setup-check-python", "✅");
+  setStatus("setup-check-python", pythonResult.version || pythonResult.cmd || tr("setup.installed"));
+
+  setStatus("setup-check-libs", tr("setup.checking"));
+  const missingPkgs = [];
+  for (const pkg of PIP_PACKAGES) {
+    const result = await window.electronAPI.checkPipPackage(pkg);
+    if (!result.installed) missingPkgs.push(pkg);
+  }
+
+  if (missingPkgs.length > 0) {
+    setIcon("setup-check-libs", "⚠️");
+    setStatus("setup-check-libs", tr("setup.missing", { count: missingPkgs.length }));
+    showActions({ showInstall: true, showSkip: true });
+    bindSkip();
+
+    if (installBtn && !installBtn.dataset.bound) {
+      installBtn.dataset.bound = "1";
+      installBtn.addEventListener("click", async () => {
+        installBtn.disabled = true;
+        installBtn.textContent = tr("setup.installing");
+        if (setupLog) {
+          setupLog.classList.remove("hidden");
+          setupLog.textContent = "";
+        }
+        setStatus("setup-check-libs", tr("setup.installing"));
+        setIcon("setup-check-libs", "⏳");
+
+        let unsubscribe = null;
+        if (window.electronAPI?.onPipInstallProgress) {
+          unsubscribe = window.electronAPI.onPipInstallProgress((data) => {
+            if (!setupLog) return;
+            setupLog.textContent += data;
+            setupLog.scrollTop = setupLog.scrollHeight;
+          });
+        }
+
+        const result = await window.electronAPI.installPipPackages(missingPkgs);
+        if (typeof unsubscribe === "function") unsubscribe();
+
+        installBtn.disabled = false;
+        installBtn.textContent = tr("setup.installBtn");
+
+        if (result.success) {
+          setIcon("setup-check-libs", "✅");
+          setStatus("setup-check-libs", tr("setup.installed"));
+          if (actions) actions.classList.add("hidden");
+          await checkFfmpegForSetup();
+          showSetupComplete();
+        } else {
+          setIcon("setup-check-libs", "❌");
+          setStatus("setup-check-libs", tr("setup.installFailed"));
+          showActions({ showSkip: true });
+          bindSkip();
+        }
+      });
+    }
+    return;
+  }
+
+  setIcon("setup-check-libs", "✅");
+  setStatus("setup-check-libs", tr("setup.allInstalled"));
+  await checkFfmpegForSetup();
+  showSetupComplete();
+}
+
 const ffmpegStateListeners = [];
 const FFMPEG_WARNING_IDS = ["cls-ffmpeg-warning", "set-ffmpeg-warning", "conv-ffmpeg-warning"];
 
@@ -274,27 +436,87 @@ bpmInputDrop.addEventListener("click", async () => {
 const metaInputDrop = document.getElementById("meta-input-drop");
 const metaInputPath = document.getElementById("meta-input");
 
+async function loadMetaFiles(pathValue) {
+  if (!pathValue || !metaInputPath || !metaFileList || !metaStatus || !metaResults || !metaResultsList) return;
+  const dropContent = metaInputDrop?.querySelector(".conv-drop-content");
+  metaInputPath.value = pathValue;
+  metaInputPath.classList.remove("hidden");
+  if (dropContent) dropContent.classList.add("hidden");
+
+  // Single audio file — add directly without hitting /api/metadata/list
+  if (isAudioFile(pathValue.split("/").pop())) {
+    metaFiles = [pathValue];
+    metaStatus.textContent = tr("metadata.filesFound", { count: 1 });
+    renderMetaFileList([pathValue], false);
+    metaResults.classList.add("hidden");
+    metaResultsList.innerHTML = "";
+    return;
+  }
+
+  // Directory — fetch list from server
+  metaStatus.textContent = tr("metadata.loadingFiles");
+  metaFileList.innerHTML = `<div class="empty-state">${tr("common.loading")}</div>`;
+  try {
+    const res = await fetch(`/api/metadata/list?dir=${encodeURIComponent(pathValue)}&recursive=false`);
+    const data = await res.json();
+    if (!data.ok) {
+      metaStatus.textContent = `${tr("common.errorPrefix")}: ${data.error}`;
+      metaFileList.innerHTML = `<div class="empty-state">${tr("metadata.errorLoading")}</div>`;
+      return;
+    }
+    if (data.files.length === 0) {
+      metaStatus.textContent = tr("metadata.noAudioFound");
+      metaFileList.innerHTML = `<div class="empty-state">${tr("metadata.noAudioFound")}</div>`;
+      return;
+    }
+    metaFiles = data.files;
+    metaStatus.textContent = tr("metadata.filesFound", { count: data.files.length });
+    renderMetaFileList(data.files, false);
+    metaResults.classList.add("hidden");
+    metaResultsList.innerHTML = "";
+  } catch (e) {
+    metaStatus.textContent = `${tr("common.errorPrefix")}: ${e.message}`;
+    metaFileList.innerHTML = `<div class="empty-state">${tr("metadata.errorConnection")}</div>`;
+  }
+}
+
 if (metaInputDrop && metaInputPath) {
   setupDragDrop(metaInputDrop, async (files) => {
+    const audioFiles = files.filter(f => isAudioFile(f.split("/").pop()));
     if (files.length === 1) {
-      metaInputPath.value = files[0];
-      metaInputPath.dataset.pathLabel = displayPathLabel(files[0]);
+      await loadMetaFiles(files[0]);
+    } else if (audioFiles.length > 1) {
+      metaFiles = audioFiles;
+      metaInputPath.value = `${audioFiles.length} archivos`;
       metaInputPath.classList.remove("hidden");
-      metaInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
+      metaInputDrop.querySelector(".conv-drop-content")?.classList.add("hidden");
+      metaStatus.textContent = tr("metadata.filesFound", { count: audioFiles.length });
+      renderMetaFileList(audioFiles, false);
+      metaResults.classList.add("hidden");
+      metaResultsList.innerHTML = "";
     } else {
-      showToast(tr("common.selectFolder"), "info");
+      showToast(tr("metadata.dropHint"), "info");
     }
   });
 }
 
 if (metaInputDrop) metaInputDrop.addEventListener("click", async () => {
   if (!metaInputPath) return;
-  const path = await selectDirectory(tr("dialog.selectAudioFolder"));
-  if (path) {
-    metaInputPath.value = path;
-    metaInputPath.dataset.pathLabel = displayPathLabel(path);
-    metaInputPath.classList.remove("hidden");
-    metaInputDrop.querySelector(".conv-drop-content").classList.add("hidden");
+  const files = await selectFiles(tr("dialog.selectAudioFiles"), true);
+  if (files && files.length === 1) {
+    await loadMetaFiles(files[0]);
+  } else if (files && files.length > 1) {
+    const audioFiles = files.filter(f => isAudioFile(f.split("/").pop()));
+    if (audioFiles.length > 0) {
+      metaFiles = audioFiles;
+      metaInputPath.value = `${audioFiles.length} archivos`;
+      metaInputPath.classList.remove("hidden");
+      metaInputDrop.querySelector(".conv-drop-content")?.classList.add("hidden");
+      metaStatus.textContent = tr("metadata.filesFound", { count: audioFiles.length });
+      renderMetaFileList(audioFiles, false);
+      metaResults.classList.add("hidden");
+      metaResultsList.innerHTML = "";
+    }
   }
 });
 
@@ -302,7 +524,6 @@ const navButtons = document.querySelectorAll(".nav-btn");
 const panels = {
   classifier: document.getElementById("tab-classifier"),
   sets: document.getElementById("tab-sets"),
-  converter: document.getElementById("tab-converter"),
   metadata: document.getElementById("tab-metadata"),
   bpm: document.getElementById("tab-bpm"),
   stems: document.getElementById("tab-stems"),
@@ -835,7 +1056,6 @@ convCancel.addEventListener("click", async () => {
 // ==================== METADATA EDITOR FUNCTIONALITY ====================
 
 const metaInput = document.getElementById("meta-input");
-const metaLoad = document.getElementById("meta-load");
 const metaIdentifyAll = document.getElementById("meta-identify-all");
 const metaCancel = document.getElementById("meta-cancel");
 const metaFileList = document.getElementById("meta-file-list");
@@ -865,45 +1085,6 @@ let metaResultsData = [];
 let currentMetaFile = null;
 let currentMetaData = null;
 
-// Load files from selected folder
-if (metaLoad) metaLoad.addEventListener("click", async () => {
-  if (!metaInput || !metaStatus || !metaFileList || !metaResults || !metaResultsList) return;
-
-  const dir = metaInput.value.trim();
-  if (!dir) {
-    metaStatus.textContent = tr("common.selectFolderFirst");
-    return;
-  }
-  
-  metaStatus.textContent = tr("metadata.loadingFiles");
-  metaFileList.innerHTML = `<div class="empty-state">${tr("common.loading")}</div>`;
-  
-  try {
-    const res = await fetch(`/api/metadata/list?dir=${encodeURIComponent(dir)}&recursive=false`);
-    const data = await res.json();
-    
-    if (!data.ok) {
-      metaStatus.textContent = `${tr("common.errorPrefix")}: ${data.error}`;
-      metaFileList.innerHTML = `<div class="empty-state">${tr("metadata.errorLoading")}</div>`;
-      return;
-    }
-    
-    if (data.files.length === 0) {
-      metaStatus.textContent = tr("metadata.noAudioFound");
-      metaFileList.innerHTML = `<div class="empty-state">${tr("metadata.noAudioFound")}</div>`;
-      return;
-    }
-    
-    metaFiles = data.files;
-    metaStatus.textContent = tr("metadata.filesFound", { count: data.files.length });
-    renderMetaFileList(data.files, false);
-    metaResults.classList.add("hidden");
-    metaResultsList.innerHTML = "";
-  } catch (e) {
-    metaStatus.textContent = `${tr("common.errorPrefix")}: ${e.message}`;
-    metaFileList.innerHTML = `<div class="empty-state">${tr("metadata.errorConnection")}</div>`;
-  }
-});
 
 // Audio file extensions filter
 const AUDIO_EXTENSIONS = ['mp3', 'wav', 'aiff', 'aif', 'flac', 'm4a'];
@@ -1219,8 +1400,8 @@ if (metaSave) metaSave.addEventListener("click", async () => {
     } else {
       metaStatus.textContent = tr("metadata.saved");
       if (metaEditor) metaEditor.classList.add("hidden");
-      // Reload file list
-      if (metaLoad) metaLoad.click();
+      const currentPath = metaInput?.value.trim();
+      if (currentPath) await loadMetaFiles(currentPath);
     }
   } catch (e) {
     metaStatus.textContent = `${tr("common.errorPrefix")}: ${e.message}`;
@@ -1638,6 +1819,7 @@ async function initAppState() {
     console.error("Error initializing app state:", error);
     setFfmpegReady(null);
   }
+  await runSetupAssistant();
 }
 
 // Save settings
@@ -1659,9 +1841,28 @@ if (cfgLastfmToggle && cfgLastfmKey) cfgLastfmToggle.addEventListener("click", (
 if (cfgDefaultOutputBrowse) cfgDefaultOutputBrowse.addEventListener("click", async () => {
   if (!cfgDefaultOutput) return;
   const selected = await selectDirectory(tr("dialog.selectOutputFolder"));
-  if (selected) {
-    cfgDefaultOutput.value = selected;
-    cfgDefaultOutput.dataset.pathLabel = displayPathLabel(selected);
+  if (!selected) return;
+  cfgDefaultOutput.value = selected;
+  cfgDefaultOutput.dataset.pathLabel = displayPathLabel(selected);
+  // Auto-save immediately so the path persists without requiring a manual Save click
+  AppState.settings.defaultOutputDir = selected;
+  try {
+    const currentSettings = {
+      spotifyClientId: document.getElementById("cfg-spotify-id")?.value.trim() || "",
+      spotifyClientSecret: document.getElementById("cfg-spotify-secret")?.value.trim() || "",
+      lastfmApiKey: document.getElementById("cfg-lastfm-key")?.value.trim() || "",
+      language: document.getElementById("cfg-language")?.value || "es",
+      defaultOutputDir: selected
+    };
+    const res = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(currentSettings)
+    });
+    const data = await res.json();
+    if (data.ok) showToast(tr("toast.settingsSaved"), "success", 2000);
+  } catch {
+    // Non-critical: field is updated in memory, user can still click Save manually
   }
 });
 

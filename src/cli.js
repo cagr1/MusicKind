@@ -16,6 +16,20 @@ import { discoverAudioFiles } from "./services/audio-discovery.js";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const bpmAnalyzerPath = path.join(scriptDir, "bpm_analyzer.py");
 
+function getPythonCmdSync() {
+  const candidates = process.platform === "win32" ? ["python", "python3"] : ["python3", "python"];
+  for (const cmd of candidates) {
+    const result = spawnSync(cmd, ["--version"], {
+      encoding: "utf-8",
+      timeout: 5000
+    });
+    if (result.status === 0) {
+      return cmd;
+    }
+  }
+  return null;
+}
+
 const args = parseArgs(process.argv.slice(2));
 
 if (args.help || !args.input) {
@@ -254,11 +268,14 @@ for (const filePath of files) {
 
     if (!classification) {
       // Spotify audio-features deprecated — fallback to local BPM via librosa
-      const bpmResult = spawnSync("python3", [bpmAnalyzerPath, "--files", filePath, "--analysis-seconds", "90"], {
-        encoding: "utf-8",
-        timeout: 30000
-      });
-      if (bpmResult.status === 0 && bpmResult.stdout) {
+      const pythonCmd = getPythonCmdSync();
+      const bpmResult = pythonCmd
+        ? spawnSync(pythonCmd, [bpmAnalyzerPath, "--files", filePath, "--analysis-seconds", "90"], {
+            encoding: "utf-8",
+            timeout: 30000
+          })
+        : null;
+      if (bpmResult?.status === 0 && bpmResult.stdout) {
         const lines = bpmResult.stdout.split("\n");
         const jsonStart = lines.findIndex(l => l.trim() === "[");
         if (jsonStart >= 0) {

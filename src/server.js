@@ -16,6 +16,38 @@ const uiRoot = path.join(projectRoot, "ui");
 const genresPath = path.join(projectRoot, "config", "genres.json");
 const settingsPath = path.join(projectRoot, "config", "settings.json");
 
+// Resolves the correct Python command for the current platform.
+// Tries python3 first on Unix-like systems and python first on Windows.
+let _pythonCmd = null;
+async function getPythonCmd() {
+  if (_pythonCmd) return _pythonCmd;
+  const candidates = process.platform === "win32" ? ["python", "python3"] : ["python3", "python"];
+  for (const cmd of candidates) {
+    try {
+      await new Promise((resolve, reject) => {
+        const child = spawn(cmd, ["--version"], { stdio: "ignore" });
+        child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`Python probe failed: ${cmd}`))));
+        child.on("error", reject);
+      });
+      _pythonCmd = cmd;
+      return cmd;
+    } catch {
+      // Try next candidate.
+    }
+  }
+  throw new Error("Python no encontrado. Instala Python 3.8+ desde https://python.org");
+}
+
+function writeSseCompleteError(res, errorMessage) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive"
+  });
+  res.write(`data: ${JSON.stringify({ type: "complete", success: false, error: errorMessage })}\n\n`);
+  res.end();
+}
+
 // Registry for running processes (for cancellation)
 const runningProcesses = new Map();
 
@@ -141,9 +173,17 @@ async function handleApi(req, res, url) {
     if (tempFormat) args.push("--temp-format", tempFormat);
     if (tempBitrate) args.push("--temp-bitrate", String(tempBitrate));
 
+    let pyCmd;
+    try {
+      pyCmd = await getPythonCmd();
+    } catch (error) {
+      writeSseCompleteError(res, error.message);
+      return;
+    }
+
     // Note: runProcessWithProgress handles response completion (res.end())
     // so no further response should be sent after this
-    await runProcessWithProgress("python3", args, res, processId);
+    await runProcessWithProgress(pyCmd, args, res, processId);
     return; // Response already sent by runProcessWithProgress
   }
 
@@ -176,9 +216,17 @@ async function handleApi(req, res, url) {
     ];
     if (bitrate) args.push("--bitrate", String(bitrate));
 
+    let pyCmd;
+    try {
+      pyCmd = await getPythonCmd();
+    } catch (error) {
+      writeSseCompleteError(res, error.message);
+      return;
+    }
+
     // Note: runProcessWithProgress handles response completion (res.end())
     // so no further response should be sent after this
-    await runProcessWithProgress("python3", args, res, processId);
+    await runProcessWithProgress(pyCmd, args, res, processId);
     return; // Response already sent by runProcessWithProgress
   }
 
@@ -307,30 +355,73 @@ async function handleApi(req, res, url) {
     return sendJson(res, { ok: true, filename });
   }
 
-  // Auto-identify and tag a file using Spotify
+  // Auto-identify and tag a file using Shazam, optionally enriched with Spotify
   if (req.method === "POST" && url.pathname === "/api/metadata/identify") {
     const body = await readJsonBody(req);
     const filePath = body.filePath ? String(body.filePath) : "";
-    
+
     if (!filePath) {
       return sendJson(res, { ok: false, error: "filePath required" }, 400);
     }
-    
+
     try {
-      // Load Spotify credentials
-      const settings = loadSettings();
-      if (!settings.spotifyClientId || !settings.spotifyClientSecret) {
-        return sendJson(res, { ok: false, error: "Spotify credentials not configured. Go to Settings." }, 400);
-      }
-      
-      const cache = new JsonCache(path.join(projectRoot, ".cache/api-cache.json"));
-      const spotify = new SpotifyClient({
-        clientId: settings.spotifyClientId,
-        clientSecret: settings.spotifyClientSecret,
-        cache
+      let shazamResult = null;
+      const pyCmd = await getPythonCmd();
+      shazamResult = await new Promise((resolve) => {
+        const args = [path.join(projectRoot, "src", "shazam_identify.py"), "--file", filePath];
+        const child = spawn(pyCmd, args, { cwd: projectRoot });
+        let stdout = "";
+        let settled = false;
+
+        const finish = (value) => {
+          if (settled) return;
+          settled = true;
+          resolve(value);
+        };
+
+        const timeoutId = setTimeout(() => {
+          child.kill("SIGTERM");
+          finish(null);
+        }, 30000);
+
+        child.stdout.on("data", (d) => {
+          stdout += d.toString();
+        });
+        child.stderr.on("data", () => {});
+        child.on("close", () => {
+          clearTimeout(timeoutId);
+          try {
+            const parsed = JSON.parse(stdout.trim());
+            finish(parsed.error ? null : parsed);
+          } catch {
+            finish(null);
+          }
+        });
+        child.on("error", () => {
+          clearTimeout(timeoutId);
+          finish(null);
+        });
       });
-      
-      const result = await identifyAndTag(filePath, spotify);
+
+      const settings = loadSettings();
+      let spotify = null;
+      if (settings.spotifyClientId && settings.spotifyClientSecret) {
+        const cache = new JsonCache(path.join(projectRoot, ".cache/api-cache.json"));
+        spotify = new SpotifyClient({
+          clientId: settings.spotifyClientId,
+          clientSecret: settings.spotifyClientSecret,
+          cache
+        });
+      }
+
+      if (!spotify && !shazamResult) {
+        return sendJson(res, {
+          ok: false,
+          error: "No se pudo identificar la canción. Instala shazamio: pip install shazamio"
+        }, 400);
+      }
+
+      const result = await identifyAndTag(filePath, spotify, shazamResult);
       return sendJson(res, result);
     } catch (error) {
       return sendJson(res, { ok: false, error: error.message }, 400);
@@ -365,9 +456,17 @@ async function handleApi(req, res, url) {
       args.push("--analysis-seconds", String(analysisSeconds));
     }
     
+    let pyCmd;
+    try {
+      pyCmd = await getPythonCmd();
+    } catch (error) {
+      writeSseCompleteError(res, error.message);
+      return;
+    }
+
     // Note: runProcessWithProgress handles response completion (res.end())
     // so no further response should be sent after this
-    await runProcessWithProgress("python3", args, res, processId, { parseJsonResult: true });
+    await runProcessWithProgress(pyCmd, args, res, processId, { parseJsonResult: true });
     return; // Response already sent by runProcessWithProgress
   }
 
@@ -396,7 +495,15 @@ async function handleApi(req, res, url) {
     if (closingDir) args.push("--closing", closingDir);
     if (analysisSeconds) args.push("--analysis-seconds", String(analysisSeconds));
 
-    await runProcessWithProgress("python3", args, res, processId, { parseJsonResult: true });
+    let pyCmd;
+    try {
+      pyCmd = await getPythonCmd();
+    } catch (error) {
+      writeSseCompleteError(res, error.message);
+      return;
+    }
+
+    await runProcessWithProgress(pyCmd, args, res, processId, { parseJsonResult: true });
     return;
   }
 
@@ -425,7 +532,15 @@ async function handleApi(req, res, url) {
       args.push("--input", inputDir);
     }
 
-    await runProcessWithProgress("python3", args, res, processId, { parseJsonResult: true });
+    let pyCmd;
+    try {
+      pyCmd = await getPythonCmd();
+    } catch (error) {
+      writeSseCompleteError(res, error.message);
+      return;
+    }
+
+    await runProcessWithProgress(pyCmd, args, res, processId, { parseJsonResult: true });
     return;
   }
 

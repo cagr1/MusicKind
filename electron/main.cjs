@@ -16,6 +16,26 @@ const projectRoot = path.join(__dirname, '..');
 const appIconPath = path.join(__dirname, 'assets', 'icon.png');
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
+async function checkPythonResult() {
+  const candidates = process.platform === 'win32' ? ['python', 'python3'] : ['python3', 'python'];
+  for (const cmd of candidates) {
+    try {
+      const version = await new Promise((resolve, reject) => {
+        const child = spawn(cmd, ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let out = '';
+        child.stdout.on('data', (d) => { out += d; });
+        child.stderr.on('data', (d) => { out += d; });
+        child.on('close', (code) => code === 0 ? resolve(out.trim()) : reject(new Error(`Python probe failed: ${cmd}`)));
+        child.on('error', reject);
+      });
+      return { found: true, cmd, version };
+    } catch {
+      // Try next candidate.
+    }
+  }
+  return { found: false };
+}
+
 if (!gotSingleInstanceLock) {
   app.quit();
 }
@@ -230,6 +250,50 @@ ipcMain.handle('check-ffmpeg', async () => {
   });
 });
 
+ipcMain.handle('check-python', async () => {
+  return checkPythonResult();
+});
+
+ipcMain.handle('check-pip-package', async (_event, pkg) => {
+  const python = await checkPythonResult();
+  if (!python.found) return { installed: false };
+  return new Promise((resolve) => {
+    const child = spawn(python.cmd, ['-c', `import ${pkg}`], { stdio: 'ignore' });
+    child.on('close', (code) => resolve({ installed: code === 0 }));
+    child.on('error', () => resolve({ installed: false }));
+  });
+});
+
+ipcMain.handle('install-pip-packages', async (event, packages) => {
+  const python = await checkPythonResult();
+  if (!python.found) {
+    return { success: false, message: 'Python no encontrado.' };
+  }
+  const pkgList = Array.isArray(packages) ? packages.filter(Boolean) : [];
+  if (pkgList.length === 0) {
+    return { success: true, output: '' };
+  }
+
+  return new Promise((resolve) => {
+    const child = spawn(python.cmd, ['-m', 'pip', 'install', '--upgrade', ...pkgList], {
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let output = '';
+    child.stdout.on('data', (d) => {
+      const chunk = d.toString();
+      output += chunk;
+      event.sender.send('pip-install-progress', chunk);
+    });
+    child.stderr.on('data', (d) => {
+      const chunk = d.toString();
+      output += chunk;
+      event.sender.send('pip-install-progress', chunk);
+    });
+    child.on('close', (code) => resolve({ success: code === 0, output }));
+    child.on('error', (err) => resolve({ success: false, message: err.message }));
+  });
+});
+
 // Install FFmpeg (cross-platform: macOS with brew, Windows with chocolatey or winget)
 ipcMain.handle('install-ffmpeg', async () => {
   const platform = process.platform;
@@ -342,4 +406,8 @@ ipcMain.handle('is-electron', () => {
 
 ipcMain.handle('show-in-folder', (_event, filePath) => {
   shell.showItemInFolder(filePath);
+});
+
+ipcMain.handle('open-external', (_event, targetUrl) => {
+  return shell.openExternal(targetUrl);
 });

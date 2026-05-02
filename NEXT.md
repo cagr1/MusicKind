@@ -1,6 +1,6 @@
 # MusicKind — Qué falta y qué ya está hecho
 
-> Última actualización: 2026-05-02 (rev 14)
+> Última actualización: 2026-05-02 (rev 17)
 > Este archivo es la fuente de verdad del avance. PROJECT_STATE.md tiene el contexto de arquitectura.
 
 ---
@@ -105,6 +105,16 @@ Un DJ tiene cientos de canciones. No sabe qué track meter en su warmup vs su pe
 | Bug applyLanguage: selección por data-tab en vez de índice | CODEX_TASK_08 | ✅ verificado |
 | Absorber Style Matcher en Set Creator (3 perfiles + /api/set-analyze) | CODEX_TASK_09 | ✅ verificado 2026-04-30 |
 | Stem Separator UX: un archivo a la vez, dos botones resultado | CODEX_TASK_10 | ✅ verificado 2026-05-01 |
+| i18n archivos separados (es.js + en.js) | CODEX_TASK_11 | ✅ verificado |
+| UI redesign: violet/cyan, pulse, breathing-border | CODEX_TASK_12 | ✅ verificado |
+| i18n infra: tr(), applyLanguage(), data-i18n base | CODEX_TASK_13 | ✅ verificado 2026-05-02 |
+| i18n HTML: 129 data-i18n en index.html, 196 claves en i18n files | CODEX_TASK_14 | ✅ verificado 2026-05-02 |
+| Seguridad: config/settings.json fuera de git, settings.example.json | CODEX_TASK_15 | ✅ verificado 2026-05-02 |
+| Limpieza repo: plan.md, .m3u, guide.txt, README_improved eliminados | CODEX_TASK_16 | ✅ verificado 2026-05-02 |
+| Python multiplataforma: getPythonCmd() + demucs en requirements.txt | CODEX_TASK_17 | ✅ verificado 2026-05-02 |
+| Setup Assistant: overlay primera ejecución (Python/pip/FFmpeg) | CODEX_TASK_18 | ✅ verificado 2026-05-02 |
+| Manual de usuario reescrito para no técnicos (MANUAL_USUARIO.md) | CODEX_TASK_19 | ✅ verificado 2026-05-02 |
+| Shazam real: reemplazar AudD por shazamio (Python, sin API key) | CODEX_TASK_20 | ✅ verificado 2026-05-02 |
 
 ---
 
@@ -245,17 +255,21 @@ Un DJ tiene cientos de canciones. No sabe qué track meter en su warmup vs su pe
 ## Roadmap visual actualizado
 
 ```
-COMPLETADO ✅              PENDIENTE (en orden)
-──────────────────────     ──────────────────────────────────────────
-Genre Classifier           CODEX_15: 🔒 Seguridad — config/settings.json fuera de git ★ PRIMERO
-Converter                  CODEX_14: i18n HTML — agregar data-i18n al resto del HTML
-BPM Analyzer               CODEX_16: Limpieza — eliminar archivos obsoletos del repo
-Metadata Editor            E2E manual en Electron (al final)
+COMPLETADO ✅              PENDIENTE — FASE RELEASE (en orden)
+──────────────────────     ──────────────────────────────────────────────────────────────
+Genre Classifier           QA manual completo en Electron (macOS + Windows)
+Converter                  E2E manual en Electron en Mac + Windows ★ SIGUIENTE
+BPM Analyzer               Build & packaging test (npm run build → .dmg + .exe)
+Metadata Editor            
 Stem Separator             
-Set Creator evolucionado ✅
-i18n archivos separados ✅
-UI Redesign ✅ (CODEX_12)
-i18n infra ✅ (CODEX_13)
+Set Creator evolucionado ✅ 
+i18n archivos separados ✅  
+UI Redesign ✅ (CODEX_12)   
+i18n infra ✅ (CODEX_13)    
+Python multiplataforma ✅ (CODEX_17)
+Setup Assistant ✅ (CODEX_18)
+Manual usuario ✅ (CODEX_19)
+Shazam real ✅ (CODEX_20)
 
 ELIMINADO                  
 ──────────────────────     
@@ -275,12 +289,44 @@ Stem Separator UX          ████████████ 100%  ✅ CODEX_
 i18n archivos separados    ████████████ 100%  ✅ CODEX_11
 UI / Diseño                ████████████ 100%  ✅ CODEX_12
 i18n infra (tr/apply/files)████████████ 100%  ✅ CODEX_13
-Seguridad (settings.json)  ░░░░░░░░░░░░   0%  ← CODEX_15 (PRIORITARIO)
-i18n HTML (data-i18n markup)░░░░░░░░░░░   0%  ← CODEX_14
-Limpieza repo              ░░░░░░░░░░░░   0%  ← CODEX_16
+i18n HTML (data-i18n)      ████████████ 100%  ✅ CODEX_14
+Seguridad (settings.json)  ████████████ 100%  ✅ CODEX_15
+Limpieza repo              ████████████ 100%  ✅ CODEX_16
+Python multiplataforma     ████████████ 100%  ✅ CODEX_17
+Setup Assistant            ████████████ 100%  ✅ CODEX_18
+Manual de usuario          ████████████ 100%  ✅ CODEX_19
+Shazam (shazamio)          ████████████ 100%  ✅ CODEX_20
+Build & packaging (.dmg/.exe)░░░░░░░░░░  0%  ← siguiente bloque release
 
-App lista para testear     █████████░░░  74%
+App lista para release     ████████████ 95%
 ```
+
+---
+
+## Arquitectura de distribución — qué viene bundleado y qué no
+
+| Dependencia | Viene en el instalador | Instalación por el usuario |
+|---|---|---|
+| **Node.js / Runtime JS** | ✅ electron-builder lo bundlea | — |
+| **Python 3.8+** | ❌ No se puede bundlear fácilmente | Setup Assistant lo detecta y guía la descarga |
+| **librosa, numpy** | ❌ Requieren pip | Setup Assistant los instala automáticamente (pip) |
+| **demucs + PyTorch** | ❌ ~2 GB — impráctido bundlear | Setup Assistant los instala automáticamente; avisa que tarda |
+| **FFmpeg** | ❌ | App lo instala via brew (Mac) o winget (Windows) desde Settings |
+
+### Por qué Python no se bundlea
+PyInstaller puede congelar scripts Python en binarios, pero requeriría convertir los 4 scripts
+(bpm_analyzer, style_analyzer, stem_separator, run_classification) en ejecutables separados,
+reescribir los spawns en server.js para usar esas rutas, y aumenta el tamaño del instalador
+~500 MB. Se evalúa como mejora futura, no para v1.
+
+### Flujo de usuario nuevo (desde cero)
+1. Descarga `MusicKind-setup.exe` o `MusicKind.dmg`
+2. Instala normalmente (doble clic)
+3. Abre la app → aparece Setup Assistant
+4. Si Python no está: guía al usuario con link a python.org
+5. Si Python está pero faltan paquetes: instala automáticamente con pip
+6. FFmpeg: instalación automática desde dentro de la app (Settings)
+7. Usuario entra a la app completamente funcional
 
 ---
 
