@@ -41,3 +41,6 @@ tests/output/
 # Local task docs / generated Python cache
 CODEX_TASK_*.md
 src/__pycache__/
+
+# Local config with credentials
+config/settings.json

@@ -1,0 +1,7 @@
+{
+  "spotifyClientId": "",
+  "spotifyClientSecret": "",
+  "lastfmApiKey": "",
+  "language": "es",
+  "defaultOutputDir": "output"
+}
