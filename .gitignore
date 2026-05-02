@@ -44,3 +44,8 @@ src/__pycache__/
 
 # Local config with credentials
 config/settings.json
+
+# Legacy dev artifacts
+*.m3u
+guide.txt
+plan.md
