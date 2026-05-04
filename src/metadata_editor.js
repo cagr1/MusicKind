@@ -193,23 +193,23 @@ export function generateFilename(metadata, format = "{artist} - {title}") {
   return filename;
 }
 
-export async function identifyAndTag(filePath, spotifyClient, shazamResult = null) {
+export async function identifyAndTag(filePath, spotifyClient, identifyResult = null) {
   const currentData = await readMetadata(filePath);
   const currentMeta = currentData.metadata;
 
   let spotifyTrack = null;
 
-  // 1. If Shazam already identified the song, try to enrich it with Spotify metadata.
-  if (shazamResult && shazamResult.artist && shazamResult.title && spotifyClient) {
+  // 1. If AcoustID already identified the song, enrich it with Spotify metadata.
+  if (identifyResult && identifyResult.artist && identifyResult.title && spotifyClient) {
     try {
-      spotifyTrack = await spotifyClient.searchTrack(shazamResult.artist, shazamResult.title);
+      spotifyTrack = await spotifyClient.searchTrack(identifyResult.artist, identifyResult.title);
     } catch (e) {
       console.log("Spotify enrichment failed:", e.message);
     }
   }
 
   // 2. Fallback: Spotify text search using existing tags or "Artist - Title" filename pattern.
-  if (!shazamResult && !spotifyTrack && spotifyClient) {
+  if (!identifyResult && !spotifyTrack && spotifyClient) {
     if (currentMeta.title || currentMeta.artist) {
       try {
         spotifyTrack = await spotifyClient.searchTrack(
@@ -238,12 +238,12 @@ export async function identifyAndTag(filePath, spotifyClient, shazamResult = nul
 
   // 3. Build final metadata.
   const newMetadata = {
-    title: spotifyTrack?.name || shazamResult?.title || currentMeta.title,
-    artist: spotifyTrack?.artists?.[0]?.name || shazamResult?.artist || currentMeta.artist,
-    album: spotifyTrack?.album?.name || shazamResult?.album || currentMeta.album,
+    title: spotifyTrack?.name || identifyResult?.title || currentMeta.title,
+    artist: spotifyTrack?.artists?.[0]?.name || identifyResult?.artist || currentMeta.artist,
+    album: spotifyTrack?.album?.name || identifyResult?.album || currentMeta.album,
     year: spotifyTrack?.album?.release_date
       ? new Date(spotifyTrack.album.release_date).getFullYear()
-      : (shazamResult?.year || currentMeta.year),
+      : (identifyResult?.year || currentMeta.year),
     genre: "",
     track: spotifyTrack?.track_number || currentMeta.track
   };
@@ -251,7 +251,7 @@ export async function identifyAndTag(filePath, spotifyClient, shazamResult = nul
   // 4. If nothing was identified, fail explicitly.
   if (!newMetadata.artist && !newMetadata.title) {
     throw new Error(
-      "No se pudo identificar la canción. Asegúrate de que shazamio esté instalado (pip install shazamio)."
+      "No se pudo identificar la canción. Configura tu clave API de AcoustID en Ajustes."
     );
   }
 

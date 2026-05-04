@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
+import { config as loadEnv } from "dotenv";
 import { readMetadata, renameFile, writeMetadata, generateFilename, identifyAndTag } from "./metadata_editor.js";
 import { SpotifyClient } from "./spotify.js";
 import { JsonCache } from "./cache.js";
@@ -12,6 +13,7 @@ import { buildMetadataListResponse } from "./services/metadata-list-api.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
+loadEnv({ path: path.join(projectRoot, ".env.local"), override: false });
 const uiRoot = path.join(projectRoot, "ui");
 const genresPath = path.join(projectRoot, "config", "genres.json");
 const settingsPath = path.join(projectRoot, "config", "settings.json");
@@ -36,6 +38,63 @@ async function getPythonCmd() {
     }
   }
   throw new Error("Python no encontrado. Instala Python 3.8+ desde https://python.org");
+}
+
+async function checkPythonImport(packageName) {
+  let pyCmd;
+  try {
+    pyCmd = await getPythonCmd();
+  } catch {
+    return false;
+  }
+
+  return new Promise((resolve) => {
+    const child = spawn(pyCmd, ["-c", `import ${packageName}`], {
+      cwd: projectRoot,
+      stdio: "ignore"
+    });
+    child.on("error", () => resolve(false));
+    child.on("close", (code) => resolve(code === 0));
+  });
+}
+
+function checkFpcalc() {
+  return new Promise((resolve) => {
+    const child = spawn("fpcalc", ["--version"], { stdio: "ignore" });
+    child.on("error", () => resolve(false));
+    child.on("close", (code) => resolve(code === 0));
+  });
+}
+
+function streamProcessAsSse(child, res) {
+  return new Promise((resolve) => {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive"
+    });
+
+    const writeLog = (chunk, stream = "stdout") => {
+      const text = chunk.toString();
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      for (const line of lines) {
+        res.write(`data: ${JSON.stringify({ type: "log", line, stream })}\n\n`);
+      }
+    };
+
+    child.stdout.on("data", (chunk) => writeLog(chunk, "stdout"));
+    child.stderr.on("data", (chunk) => writeLog(chunk, "stderr"));
+    child.on("error", (error) => {
+      res.write(`data: ${JSON.stringify({ type: "complete", ok: false, error: error.message })}\n\n`);
+      res.end();
+      resolve();
+    });
+    child.on("close", (code) => {
+      res.write(`data: ${JSON.stringify({ type: "complete", ok: code === 0, code })}\n\n`);
+      res.end();
+      resolve();
+    });
+  });
 }
 
 function writeSseCompleteError(res, errorMessage) {
@@ -242,6 +301,7 @@ async function handleApi(req, res, url) {
       spotifyClientId: body.spotifyClientId ? String(body.spotifyClientId).trim() : "",
       spotifyClientSecret: body.spotifyClientSecret ? String(body.spotifyClientSecret).trim() : "",
       lastfmApiKey: body.lastfmApiKey ? String(body.lastfmApiKey).trim() : "",
+      acoustidApiKey: body.acoustidApiKey ? String(body.acoustidApiKey).trim() : "",
       language: body.language ? String(body.language).trim() : "es",
       defaultOutputDir: body.defaultOutputDir ? String(body.defaultOutputDir).trim() : "output"
     };
@@ -253,6 +313,43 @@ async function handleApi(req, res, url) {
   if (req.method === "GET" && url.pathname === "/api/ffmpeg-status") {
     const installed = await checkFFmpeg();
     return sendJson(res, { ok: true, installed });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/check-deps") {
+    const [librosa, numpy, demucs, acoustid] = await Promise.all([
+      checkPythonImport("librosa"),
+      checkPythonImport("numpy"),
+      checkPythonImport("demucs"),
+      checkFpcalc()
+    ]);
+    return sendJson(res, { ok: true, deps: { librosa, numpy, demucs, acoustid } });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/install-dep") {
+    const body = await readJsonBody(req);
+    const group = body.group ? String(body.group) : "";
+    const packagesByGroup = {
+      audio: ["librosa", "numpy"],
+      stems: ["demucs"]
+    };
+    const pkgList = packagesByGroup[group];
+    if (!pkgList) {
+      return sendJson(res, { ok: false, error: "group invalido" }, 400);
+    }
+
+    let pyCmd;
+    try {
+      pyCmd = await getPythonCmd();
+    } catch (error) {
+      writeSseCompleteError(res, error.message);
+      return;
+    }
+
+    const child = spawn(pyCmd, ["-m", "pip", "install", "--upgrade", "--break-system-packages", ...pkgList], {
+      cwd: projectRoot
+    });
+    await streamProcessAsSse(child, res);
+    return;
   }
 
   // Cancel process API
@@ -355,7 +452,7 @@ async function handleApi(req, res, url) {
     return sendJson(res, { ok: true, filename });
   }
 
-  // Auto-identify and tag a file using Shazam, optionally enriched with Spotify
+  // Auto-identify and tag a file using AcoustID, optionally enriched with Spotify
   if (req.method === "POST" && url.pathname === "/api/metadata/identify") {
     const body = await readJsonBody(req);
     const filePath = body.filePath ? String(body.filePath) : "";
@@ -365,45 +462,69 @@ async function handleApi(req, res, url) {
     }
 
     try {
-      let shazamResult = null;
-      const pyCmd = await getPythonCmd();
-      shazamResult = await new Promise((resolve) => {
-        const args = [path.join(projectRoot, "src", "shazam_identify.py"), "--file", filePath];
-        const child = spawn(pyCmd, args, { cwd: projectRoot });
-        let stdout = "";
-        let settled = false;
-
-        const finish = (value) => {
-          if (settled) return;
-          settled = true;
-          resolve(value);
-        };
-
-        const timeoutId = setTimeout(() => {
-          child.kill("SIGTERM");
-          finish(null);
-        }, 30000);
-
-        child.stdout.on("data", (d) => {
-          stdout += d.toString();
-        });
-        child.stderr.on("data", () => {});
-        child.on("close", () => {
-          clearTimeout(timeoutId);
-          try {
-            const parsed = JSON.parse(stdout.trim());
-            finish(parsed.error ? null : parsed);
-          } catch {
-            finish(null);
-          }
-        });
-        child.on("error", () => {
-          clearTimeout(timeoutId);
-          finish(null);
-        });
-      });
-
       const settings = loadSettings();
+
+      let identifyResult = null;
+      let identifyError = null;
+
+      const acoustidApiKey = process.env.ACOUSTID_API_KEY || settings.acoustidApiKey || "";
+      if (acoustidApiKey) {
+        let pyCmd;
+        try {
+          pyCmd = await getPythonCmd();
+        } catch (e) {
+          identifyError = e.message;
+        }
+
+        if (pyCmd) {
+          identifyResult = await new Promise((resolve) => {
+            const args = [
+              path.join(projectRoot, "src", "acoustid_identify.py"),
+              "--file", filePath,
+              "--api-key", acoustidApiKey
+            ];
+            const child = spawn(pyCmd, args, { cwd: projectRoot });
+            let stdout = "";
+            let settled = false;
+
+            const finish = (value) => {
+              if (settled) return;
+              settled = true;
+              resolve(value);
+            };
+
+            const timeoutId = setTimeout(() => {
+              child.kill("SIGTERM");
+              identifyError = "Tiempo de espera agotado al identificar la canción";
+              finish(null);
+            }, 30000);
+
+            child.stdout.on("data", (d) => { stdout += d.toString(); });
+            child.stderr.on("data", () => {});
+            child.on("close", () => {
+              clearTimeout(timeoutId);
+              try {
+                const parsed = JSON.parse(stdout.trim());
+                if (parsed.error) {
+                  identifyError = parsed.error;
+                  finish(null);
+                } else {
+                  finish(parsed);
+                }
+              } catch {
+                identifyError = "Respuesta inesperada del proceso de identificación";
+                finish(null);
+              }
+            });
+            child.on("error", () => {
+              clearTimeout(timeoutId);
+              identifyError = "No se pudo ejecutar el proceso de identificación";
+              finish(null);
+            });
+          });
+        }
+      }
+
       let spotify = null;
       if (settings.spotifyClientId && settings.spotifyClientSecret) {
         const cache = new JsonCache(path.join(projectRoot, ".cache/api-cache.json"));
@@ -414,14 +535,13 @@ async function handleApi(req, res, url) {
         });
       }
 
-      if (!spotify && !shazamResult) {
-        return sendJson(res, {
-          ok: false,
-          error: "No se pudo identificar la canción. Instala shazamio: pip install shazamio"
-        }, 400);
+      if (!spotify && !identifyResult) {
+        const err = identifyError
+          || (!acoustidApiKey ? "Falta la clave API de AcoustID. Configúrala en Ajustes." : "No se pudo identificar la canción");
+        return sendJson(res, { ok: false, error: err }, 400);
       }
 
-      const result = await identifyAndTag(filePath, spotify, shazamResult);
+      const result = await identifyAndTag(filePath, spotify, identifyResult);
       return sendJson(res, result);
     } catch (error) {
       return sendJson(res, { ok: false, error: error.message }, 400);
@@ -578,6 +698,7 @@ function loadSettings() {
     spotifyClientId: "",
     spotifyClientSecret: "",
     lastfmApiKey: "",
+    acoustidApiKey: "",
     language: "es",
     defaultOutputDir: "output"
   };

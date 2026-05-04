@@ -25,11 +25,42 @@ const AppState = {
   settings: {
     defaultOutputDir: "output"
   },
-  ffmpegReady: null
+  ffmpegReady: null,
+  deps: {
+    librosa: null,
+    numpy: null,
+    demucs: null,
+    acoustid: null
+  },
+  depInstallInFlight: null
 };
 
 const SETUP_DONE_KEY = "musickind-setup-done";
-const PIP_PACKAGES = ["librosa", "numpy", "demucs"];
+let depToastTimer = null;
+
+const DEP_GROUPS = {
+  audio: {
+    badgeId: "dep-badge-audio",
+    buttonId: "dep-install-audio",
+    packages: ["librosa", "numpy"],
+    isMissing: (deps) => deps.librosa === false || deps.numpy === false,
+    isInstalled: (deps) => deps.librosa === true && deps.numpy === true
+  },
+  stems: {
+    badgeId: "dep-badge-stems",
+    buttonId: "dep-install-stems",
+    packages: ["demucs"],
+    isMissing: (deps) => deps.demucs === false,
+    isInstalled: (deps) => deps.demucs === true
+  },
+  acoustid: {
+    badgeId: "dep-badge-acoustid",
+    buttonId: null,
+    packages: [],
+    isMissing: (deps) => deps.acoustid === false,
+    isInstalled: (deps) => deps.acoustid === true
+  }
+};
 
 function completeSetup() {
   localStorage.setItem(SETUP_DONE_KEY, "1");
@@ -128,21 +159,18 @@ async function runSetupAssistant() {
   setStatus("setup-check-python", pythonResult.version || pythonResult.cmd || tr("setup.installed"));
 
   setStatus("setup-check-libs", tr("setup.checking"));
-  const missingPkgs = [];
-  for (const pkg of PIP_PACKAGES) {
-    const result = await window.electronAPI.checkPipPackage(pkg);
-    if (!result.installed) missingPkgs.push(pkg);
-  }
+  await checkDeps();
+  const missingGroups = getMissingDepGroups();
 
-  if (missingPkgs.length > 0) {
+  if (missingGroups.length > 0) {
     setIcon("setup-check-libs", "⚠️");
-    setStatus("setup-check-libs", tr("setup.missing", { count: missingPkgs.length }));
+    setStatus("setup-check-libs", tr("setup.missing", { count: missingGroups.length }));
     showActions({ showInstall: true, showSkip: true });
     bindSkip();
 
-    if (installBtn && !installBtn.dataset.bound) {
-      installBtn.dataset.bound = "1";
-      installBtn.addEventListener("click", async () => {
+    if (installBtn) {
+      installBtn.onclick = async () => {
+        const groupsToInstall = getMissingDepGroups();
         installBtn.disabled = true;
         installBtn.textContent = tr("setup.installing");
         if (setupLog) {
@@ -152,22 +180,24 @@ async function runSetupAssistant() {
         setStatus("setup-check-libs", tr("setup.installing"));
         setIcon("setup-check-libs", "⏳");
 
-        let unsubscribe = null;
-        if (window.electronAPI?.onPipInstallProgress) {
-          unsubscribe = window.electronAPI.onPipInstallProgress((data) => {
-            if (!setupLog) return;
-            setupLog.textContent += data;
-            setupLog.scrollTop = setupLog.scrollHeight;
+        let success = true;
+        for (const group of groupsToInstall) {
+          const ok = await installDep(group, {
+            logEl: setupLog,
+            onStatus: (text) => setStatus("setup-check-libs", text),
+            silentRefresh: true
           });
+          if (!ok) {
+            success = false;
+            break;
+          }
         }
 
-        const result = await window.electronAPI.installPipPackages(missingPkgs);
-        if (typeof unsubscribe === "function") unsubscribe();
-
+        await checkDeps();
         installBtn.disabled = false;
         installBtn.textContent = tr("setup.installBtn");
 
-        if (result.success) {
+        if (success && getMissingDepGroups().length === 0) {
           setIcon("setup-check-libs", "✅");
           setStatus("setup-check-libs", tr("setup.installed"));
           if (actions) actions.classList.add("hidden");
@@ -179,7 +209,7 @@ async function runSetupAssistant() {
           showActions({ showSkip: true });
           bindSkip();
         }
-      });
+      };
     }
     return;
   }
@@ -213,6 +243,157 @@ function onFfmpegStateChange(listener) {
     const idx = ffmpegStateListeners.indexOf(listener);
     if (idx >= 0) ffmpegStateListeners.splice(idx, 1);
   };
+}
+
+function isDepGroupMissing(group) {
+  const config = DEP_GROUPS[group];
+  return config ? config.isMissing(AppState.deps) : false;
+}
+
+function getMissingDepGroups() {
+  return Object.keys(DEP_GROUPS).filter((group) => isDepGroupMissing(group));
+}
+
+function renderDepCards() {
+  Object.entries(DEP_GROUPS).forEach(([group, config]) => {
+    const badge = document.getElementById(config.badgeId);
+    const button = document.getElementById(config.buttonId);
+    if (!badge || !button) return;
+
+    const installing = AppState.depInstallInFlight === group;
+    badge.className = "dep-badge";
+
+    if (installing) {
+      badge.textContent = tr("depInstalling");
+      button.classList.add("hidden");
+      return;
+    }
+
+    if (config.isInstalled(AppState.deps)) {
+      badge.textContent = tr("depInstalled");
+      badge.classList.add("ok");
+      button.classList.add("hidden");
+      button.disabled = false;
+      button.textContent = tr("depInstall");
+      return;
+    }
+
+    if (config.isMissing(AppState.deps)) {
+      badge.textContent = tr("depMissing");
+      badge.classList.add("missing");
+      button.classList.remove("hidden");
+      button.disabled = false;
+      button.textContent = tr("depInstall");
+      return;
+    }
+
+    badge.textContent = "…";
+    button.classList.add("hidden");
+    button.disabled = true;
+    button.textContent = tr("depInstall");
+  });
+}
+
+async function checkDeps() {
+  try {
+    const res = await fetch("/api/check-deps");
+    if (!res.ok) throw new Error(`Dependency check failed: ${res.status}`);
+    const data = await res.json();
+    AppState.deps = {
+      librosa: data.deps?.librosa ?? null,
+      numpy: data.deps?.numpy ?? null,
+      demucs: data.deps?.demucs ?? null,
+      acoustid: data.deps?.acoustid ?? null
+    };
+  } catch (error) {
+    console.warn("Dependency check unavailable:", error.message);
+    AppState.deps = {
+      librosa: null,
+      numpy: null,
+      demucs: null,
+      acoustid: null
+    };
+  }
+  renderDepCards();
+}
+
+async function installDep(group, options = {}) {
+  const { logEl = null, progressEl = null, progressBarEl = null, onStatus = null, silentRefresh = false } = options;
+  if (!DEP_GROUPS[group] || AppState.depInstallInFlight) return false;
+
+  AppState.depInstallInFlight = group;
+  renderDepCards();
+
+  if (logEl) {
+    logEl.textContent = "";
+  }
+  if (progressEl) {
+    progressEl.classList.remove("hidden");
+  }
+  if (progressBarEl) {
+    progressBarEl.style.width = "24%";
+  }
+  if (typeof onStatus === "function") {
+    onStatus(tr("depInstalling"));
+  }
+
+  let ok = false;
+  let errorMessage = "";
+
+  try {
+    const res = await fetch("/api/install-dep", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ group })
+    });
+    if (!res.ok || !res.body) {
+      throw new Error(`Install request failed: ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === "log") {
+            if (logEl) {
+              logEl.textContent += `${data.line}\n`;
+              logEl.scrollTop = logEl.scrollHeight;
+            }
+            if (progressBarEl) progressBarEl.style.width = "78%";
+          } else if (data.type === "complete") {
+            ok = data.ok === true || data.success === true;
+            errorMessage = data.error || "";
+            if (progressBarEl) progressBarEl.style.width = ok ? "100%" : "0%";
+          }
+        } catch (error) {
+          console.error("Dependency install SSE parse error:", error);
+        }
+      }
+    }
+  } catch (error) {
+    errorMessage = error.message;
+  }
+
+  AppState.depInstallInFlight = null;
+  if (!silentRefresh) {
+    await checkDeps();
+  } else {
+    renderDepCards();
+  }
+  if (typeof onStatus === "function") {
+    onStatus(ok ? tr("depInstalled") : `${tr("common.errorPrefix")}: ${errorMessage || tr("metadata.unknownError")}`);
+  }
+  return ok;
 }
 
 function displayPathLabel(value) {
@@ -530,14 +711,54 @@ const panels = {
   settings: document.getElementById("tab-settings")
 };
 
+function switchTab(tabKey) {
+  const panel = panels[tabKey];
+  if (!panel) return;
+  navButtons.forEach((b) => b.classList.toggle("active", b.dataset.tab === tabKey));
+  Object.values(panels).forEach((item) => item.classList.add("hidden"));
+  panel.classList.remove("hidden");
+}
+
 navButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
-    navButtons.forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    Object.values(panels).forEach((panel) => panel.classList.add("hidden"));
-    panels[btn.dataset.tab].classList.remove("hidden");
+    switchTab(btn.dataset.tab);
   });
 });
+
+function hideDepToast() {
+  const toast = document.getElementById("dep-toast");
+  if (!toast) return;
+  toast.classList.add("hidden");
+  if (depToastTimer) {
+    clearTimeout(depToastTimer);
+    depToastTimer = null;
+  }
+}
+
+function showDepToast(depGroup) {
+  const names = {
+    audio: tr("depAudioName"),
+    stems: tr("depStemsName"),
+    acoustid: tr("depAcoustidName")
+  };
+  const toast = document.getElementById("dep-toast");
+  const msg = document.getElementById("dep-toast-msg");
+  const goBtn = document.getElementById("dep-toast-go");
+  const closeBtn = document.getElementById("dep-toast-close");
+  const depsAnchor = document.getElementById("settings-deps");
+  if (!toast || !msg || !goBtn || !closeBtn) return;
+
+  msg.textContent = tr("depNeedInstall").replace("{name}", names[depGroup] || depGroup);
+  toast.classList.remove("hidden");
+  goBtn.onclick = () => {
+    switchTab("settings");
+    depsAnchor?.scrollIntoView({ behavior: "smooth", block: "start" });
+    hideDepToast();
+  };
+  closeBtn.onclick = () => hideDepToast();
+  if (depToastTimer) clearTimeout(depToastTimer);
+  depToastTimer = setTimeout(() => hideDepToast(), 8000);
+}
 
 const genresList = document.getElementById("genres-list");
 const genresInput = document.getElementById("genres-input");
@@ -611,6 +832,10 @@ let currentProcessId = null;
 let clsIsPaused = false;
 
 clsRun.addEventListener("click", async () => {
+  if (isDepGroupMissing("audio")) {
+    showDepToast("audio");
+    return;
+  }
   const inputPath = document.getElementById("cls-input").value.trim();
   const dryRun = document.getElementById("cls-dry").checked;
   const status = document.getElementById("cls-status");
@@ -777,6 +1002,10 @@ const setCancel = document.getElementById("set-cancel");
 let setProcessId = null;
 
 setRun.addEventListener("click", async () => {
+  if (isDepGroupMissing("audio")) {
+    showDepToast("audio");
+    return;
+  }
   const warmup = document.getElementById("set-warmup").value.trim();
   const peak = document.getElementById("set-peak").value.trim();
   const closing = document.getElementById("set-closing").value.trim();
@@ -1195,6 +1424,10 @@ function removeMetaFile(idx) {
 // Identify all files
 if (metaIdentifyAll) metaIdentifyAll.addEventListener("click", async () => {
   if (!metaStatus || !metaProgress || !metaCancel || !metaProgressText || !metaProgressPercent || !metaProgressFill || !metaCurrentFile || !metaFileList || !metaResults || !metaResultsList) return;
+  if (isDepGroupMissing("acoustid")) {
+    showDepToast("acoustid");
+    return;
+  }
 
   if (metaFiles.length === 0) {
     metaStatus.textContent = tr("metadata.loadFilesFirst");
@@ -1436,6 +1669,10 @@ bpmSeconds.addEventListener("input", () => {
 
 // Analyze BPM
 bpmAnalyze.addEventListener("click", async () => {
+  if (isDepGroupMissing("audio")) {
+    showDepToast("audio");
+    return;
+  }
   const dir = bpmInput.value.trim();
   if (!dir) {
     bpmStatus.textContent = tr("common.selectFolderFirst");
@@ -1633,6 +1870,10 @@ stemsFileDrop.addEventListener("drop", (e) => {
 });
 
 stemsRun.addEventListener("click", async () => {
+  if (isDepGroupMissing("stems")) {
+    showDepToast("stems");
+    return;
+  }
   if (!stemsFilePath) {
     stemsStatus.textContent = tr("stems.selectSongFirst");
     return;
@@ -1773,6 +2014,7 @@ function applySettingsToUi(settings) {
   document.getElementById("cfg-spotify-id").value = settings.spotifyClientId || "";
   document.getElementById("cfg-spotify-secret").value = settings.spotifyClientSecret || "";
   document.getElementById("cfg-lastfm-key").value = settings.lastfmApiKey || "";
+  document.getElementById("cfg-acoustid-key").value = settings.acoustidApiKey || "";
   document.getElementById("cfg-language").value = settings.language || "es";
 
   const cfgDefaultOutput = document.getElementById("cfg-output-dir");
@@ -1804,9 +2046,10 @@ async function fetchFfmpegReadyOnce() {
 
 async function initAppState() {
   try {
-    const [settingsRes, ffmpegReady] = await Promise.all([
+    const [settingsRes, ffmpegReady, depsReady] = await Promise.all([
       fetch("/api/settings"),
-      fetchFfmpegReadyOnce()
+      fetchFfmpegReadyOnce(),
+      checkDeps()
     ]);
 
     const settingsData = await settingsRes.json();
@@ -1815,9 +2058,11 @@ async function initAppState() {
     }
 
     setFfmpegReady(ffmpegReady);
+    await depsReady;
   } catch (error) {
     console.error("Error initializing app state:", error);
     setFfmpegReady(null);
+    renderDepCards();
   }
   await runSetupAssistant();
 }
@@ -1828,12 +2073,22 @@ const cfgDefaultOutput = document.getElementById("cfg-output-dir");
 const cfgDefaultOutputBrowse = document.getElementById("cfg-output-dir-browse");
 const cfgLastfmKey = document.getElementById("cfg-lastfm-key");
 const cfgLastfmToggle = document.getElementById("cfg-lastfm-toggle");
+const cfgAcoustidKey = document.getElementById("cfg-acoustid-key");
+const cfgAcoustidToggle = document.getElementById("cfg-acoustid-toggle");
 let cfgStatusTimer = null;
 
 if (cfgLastfmToggle && cfgLastfmKey) cfgLastfmToggle.addEventListener("click", () => {
   const isHidden = cfgLastfmKey.type === "password";
   cfgLastfmKey.type = isHidden ? "text" : "password";
   cfgLastfmToggle.innerHTML = isHidden
+    ? '<span class="iconify" data-icon="mdi:eye-off-outline"></span>'
+    : '<span class="iconify" data-icon="mdi:eye-outline"></span>';
+});
+
+if (cfgAcoustidToggle && cfgAcoustidKey) cfgAcoustidToggle.addEventListener("click", () => {
+  const isHidden = cfgAcoustidKey.type === "password";
+  cfgAcoustidKey.type = isHidden ? "text" : "password";
+  cfgAcoustidToggle.innerHTML = isHidden
     ? '<span class="iconify" data-icon="mdi:eye-off-outline"></span>'
     : '<span class="iconify" data-icon="mdi:eye-outline"></span>';
 });
@@ -1851,6 +2106,7 @@ if (cfgDefaultOutputBrowse) cfgDefaultOutputBrowse.addEventListener("click", asy
       spotifyClientId: document.getElementById("cfg-spotify-id")?.value.trim() || "",
       spotifyClientSecret: document.getElementById("cfg-spotify-secret")?.value.trim() || "",
       lastfmApiKey: document.getElementById("cfg-lastfm-key")?.value.trim() || "",
+      acoustidApiKey: document.getElementById("cfg-acoustid-key")?.value.trim() || "",
       language: document.getElementById("cfg-language")?.value || "es",
       defaultOutputDir: selected
     };
@@ -1872,6 +2128,7 @@ cfgSave.addEventListener("click", async () => {
     spotifyClientId: document.getElementById("cfg-spotify-id").value.trim(),
     spotifyClientSecret: document.getElementById("cfg-spotify-secret").value.trim(),
     lastfmApiKey: document.getElementById("cfg-lastfm-key").value.trim(),
+    acoustidApiKey: document.getElementById("cfg-acoustid-key").value.trim(),
     language: document.getElementById("cfg-language").value,
     defaultOutputDir: (cfgDefaultOutput?.value || "").trim() || "output"
   };
@@ -1939,6 +2196,35 @@ ffmpegInstall.addEventListener("click", async () => {
   }
 });
 
+const depInstallProgress = document.getElementById("dep-install-progress");
+const depProgressBar = document.getElementById("dep-progress-bar");
+const depInstallLog = document.getElementById("dep-install-log");
+const depCheckAll = document.getElementById("dep-check-all");
+const depInstallAudio = document.getElementById("dep-install-audio");
+const depInstallStems = document.getElementById("dep-install-stems");
+
+async function installDepFromSettings(group) {
+  if (depProgressBar) depProgressBar.style.width = "0%";
+  const ok = await installDep(group, {
+    logEl: depInstallLog,
+    progressEl: depInstallProgress,
+    progressBarEl: depProgressBar
+  });
+  if (ok) {
+    showToast(tr("depInstalled"), "success", 2500);
+  } else {
+    showToast(tr("setup.installFailed"), "error", 4000);
+  }
+}
+
+if (depCheckAll) {
+  depCheckAll.addEventListener("click", async () => {
+    await checkDeps();
+  });
+}
+if (depInstallAudio) depInstallAudio.addEventListener("click", async () => installDepFromSettings("audio"));
+if (depInstallStems) depInstallStems.addEventListener("click", async () => installDepFromSettings("stems"));
+
 function applyLanguage(lang) {
   const t = getTranslationsForLang(lang);
   document.querySelectorAll("[data-i18n]").forEach((el) => {
@@ -1954,6 +2240,7 @@ function applyLanguage(lang) {
     if (key && t[key] !== undefined) el.title = t[key];
   });
   localStorage.setItem("musickind-lang", lang);
+  renderDepCards();
 }
 
 function onFfmpegStateChangeRender(ready) {
@@ -1984,11 +2271,7 @@ function setupFFmpegWarningButtons() {
   const goToSettingsBtns = document.querySelectorAll("[id$='-goto-settings']");
   goToSettingsBtns.forEach(btn => {
     btn.addEventListener("click", () => {
-      // Switch to settings tab
-      navButtons.forEach(b => b.classList.remove("active"));
-      Object.values(panels).forEach(panel => panel.classList.add("hidden"));
-      document.getElementById("tab-settings").classList.remove("hidden");
-      document.querySelector("[data-tab='settings']").classList.add("active");
+      switchTab("settings");
     });
   });
 }

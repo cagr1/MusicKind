@@ -55,6 +55,11 @@
     </div>
     <div class="bg-glow"></div>
     <div id="toast-container" class="toast-container"></div>
+    <div id="dep-toast" class="hidden">
+      <span id="dep-toast-msg"></span>
+      <button id="dep-toast-go" data-i18n="depGoSettings">Ir a Configuración</button>
+      <span id="dep-toast-close">×</span>
+    </div>
     <div class="app">
       <aside class="sidebar">
         <div class="brand">
@@ -464,26 +469,42 @@
           <div class="panel-body">
             <div class="settings-section">
               <h3 data-i18n="settings.apiKeysTitle">API Keys</h3>
-              <p class="settings-desc" data-i18n="settings.apiKeysDesc">Ingresa tus credenciales para usar el clasificador de musica. Si no tienes claves, puedes obtenerlas gratuitamente en:</p>
-              <ul class="settings-links">
-                <li><a href="https://developer.spotify.com/dashboard" target="_blank">Spotify Developer Dashboard</a></li>
-                <li><a href="https://www.last.fm/api" target="_blank">Last.fm API</a></li>
-              </ul>
-              
+              <p class="settings-desc" data-i18n="settings.apiKeysDesc">Ingresa tus credenciales. Haz clic en GET para registrarte gratis en cada servicio.</p>
+
               <div class="form-grid">
                 <label class="field">
-                  <span data-i18n="settings.spotifyId">Spotify Client ID</span>
+                  <div class="field-label-row">
+                    <span data-i18n="settings.spotifyId">Spotify Client ID</span>
+                    <a href="https://developer.spotify.com/dashboard" target="_blank" class="btn-get-api">GET</a>
+                  </div>
                   <input id="cfg-spotify-id" type="text" placeholder="Tu Spotify Client ID" data-i18n-placeholder="settings.spotifyIdPlaceholder" />
                 </label>
                 <label class="field">
-                  <span data-i18n="settings.spotifySecret">Spotify Client Secret</span>
+                  <div class="field-label-row">
+                    <span data-i18n="settings.spotifySecret">Spotify Client Secret</span>
+                  </div>
                   <input id="cfg-spotify-secret" type="password" placeholder="Tu Spotify Client Secret" data-i18n-placeholder="settings.spotifySecretPlaceholder" />
                 </label>
                 <label class="field">
-                  <span data-i18n="settings.lastfmKey">Last.fm API Key</span>
+                  <div class="field-label-row">
+                    <span data-i18n="settings.lastfmKey">Last.fm API Key</span>
+                    <a href="https://www.last.fm/api/account/create" target="_blank" class="btn-get-api">GET</a>
+                  </div>
                   <div class="input-group">
                     <input id="cfg-lastfm-key" type="password" placeholder="Tu Last.fm API Key" data-i18n-placeholder="settings.lastfmKeyPlaceholder" />
                     <button id="cfg-lastfm-toggle" class="btn browse-btn icon-btn" type="button" title="Mostrar/Ocultar API Key" data-i18n-title="settings.toggleVisibility">
+                      <span class="iconify" data-icon="mdi:eye-outline"></span>
+                    </button>
+                  </div>
+                </label>
+                <label class="field">
+                  <div class="field-label-row">
+                    <span data-i18n="settings.acoustidKey">AcoustID API Key</span>
+                    <a href="https://acoustid.org/login" target="_blank" class="btn-get-api">GET</a>
+                  </div>
+                  <div class="input-group">
+                    <input id="cfg-acoustid-key" type="password" placeholder="Tu AcoustID API Key" data-i18n-placeholder="settings.acoustidKeyPlaceholder" />
+                    <button id="cfg-acoustid-toggle" class="btn browse-btn icon-btn" type="button" title="Mostrar/Ocultar API Key" data-i18n-title="settings.toggleVisibility">
                       <span class="iconify" data-icon="mdi:eye-outline"></span>
                     </button>
                   </div>
@@ -548,6 +569,45 @@
             </div>
 
             <div class="status" id="cfg-status"></div>
+
+            <div class="settings-divider"></div>
+            <div id="settings-deps" class="settings-section">
+              <h3 data-i18n="depsTitle">Herramientas de audio (Python)</h3>
+              <div class="dep-card" id="dep-card-audio">
+                <div class="dep-card-info">
+                  <span class="dep-card-name" data-i18n="depAudioName">Análisis de audio</span>
+                  <span class="dep-card-pkg">librosa, numpy</span>
+                </div>
+                <span class="dep-badge" id="dep-badge-audio"></span>
+                <button class="btn dep-install-btn hidden" id="dep-install-audio" data-i18n="depInstall">Instalar</button>
+              </div>
+
+              <div class="dep-card" id="dep-card-stems">
+                <div class="dep-card-info">
+                  <span class="dep-card-name" data-i18n="depStemsName">Separador de stems</span>
+                  <span class="dep-card-pkg">demucs + PyTorch</span>
+                  <span class="dep-card-note" data-i18n="depStemsNote">~2 GB la primera vez</span>
+                </div>
+                <span class="dep-badge" id="dep-badge-stems"></span>
+                <button class="btn dep-install-btn hidden" id="dep-install-stems" data-i18n="depInstall">Instalar</button>
+              </div>
+
+              <div class="dep-card" id="dep-card-acoustid">
+                <div class="dep-card-info">
+                  <span class="dep-card-name" data-i18n="depAcoustidName">Identificación de canciones</span>
+                  <span class="dep-card-pkg">fpcalc (chromaprint)</span>
+                  <span class="dep-card-note" data-i18n="depAcoustidNote">brew install chromaprint</span>
+                </div>
+                <span class="dep-badge" id="dep-badge-acoustid"></span>
+              </div>
+
+              <div id="dep-install-progress" class="hidden">
+                <div class="progress-bar-wrap"><div class="progress-bar" id="dep-progress-bar"></div></div>
+                <pre id="dep-install-log" class="dep-log"></pre>
+              </div>
+
+              <button id="dep-check-all" class="btn ghost" data-i18n="depCheckAll">Verificar todo</button>
+            </div>
           </div>
         </section>
 
