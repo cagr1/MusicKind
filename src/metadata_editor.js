@@ -9,6 +9,7 @@ import fs from "fs";
 import path from "path";
 import { parseFile } from "music-metadata";
 import { spawn } from "child_process";
+import { StringDecoder } from "string_decoder";
 import { fileURLToPath } from "url";
 import { getAudioExtensions, discoverAudioFiles } from "./services/audio-discovery.js";
 
@@ -144,18 +145,31 @@ export function writeMetadata(filePath, metadata) {
     if (metadata.year) args.push("-metadata", `year=${metadata.year}`);
     if (metadata.genre) args.push("-metadata", `genre=${metadata.genre}`);
     if (metadata.track) args.push("-metadata", `track=${metadata.track}`);
-    
+    if (metadata.bpm !== undefined && metadata.bpm !== null && metadata.bpm !== "") {
+      // ID3 spec (TBPM) requires an integer; write both the ID3 frame name
+      // and the generic key so non-ID3 containers (FLAC/Vorbis, etc.) pick it up.
+      const bpmInt = Math.round(Number(metadata.bpm));
+      args.push("-metadata", `TBPM=${bpmInt}`);
+      args.push("-metadata", `bpm=${bpmInt}`);
+    }
+    if (metadata.key) {
+      args.push("-metadata", `TKEY=${metadata.key}`);
+      args.push("-metadata", `initialkey=${metadata.key}`);
+    }
+
     // Output to temp file
     args.push("-codec", "copy", tempPath);
     
     const child = spawn("ffmpeg", args, { cwd: projectRoot });
     let stderr = "";
+    const stderrDecoder = new StringDecoder("utf8");
     
     child.stderr.on("data", (data) => {
-      stderr += data.toString();
+      stderr += typeof data === "string" ? data : stderrDecoder.write(data);
     });
     
     child.on("close", (code) => {
+      stderr += stderrDecoder.end();
       if (code === 0) {
         // Replace original with temp
         fs.unlinkSync(filePath);

@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import fs from "fs";
 import path from "path";
-import { spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 import { parseFile } from "music-metadata";
 import dotenv from "dotenv";
@@ -12,23 +11,11 @@ import { classifyFromTags, classifyFromAudio, classifyFromBpm } from "./classify
 import { cleanTitle, ensureDir, moveFile, writeCsv, appendLog, parseArtistTitleFromFilename } from "./utils.js";
 import { loadOverrides, classifyFromOverrides } from "./overrides.js";
 import { discoverAudioFiles } from "./services/audio-discovery.js";
+import { resolvePython } from "./python-env.js";
+import { runBpmAnalyzer as runBpmAnalyzerProcess } from "./bpm-runner.js";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const bpmAnalyzerPath = path.join(scriptDir, "bpm_analyzer.py");
-
-function getPythonCmdSync() {
-  const candidates = process.platform === "win32" ? ["python", "python3"] : ["python3", "python"];
-  for (const cmd of candidates) {
-    const result = spawnSync(cmd, ["--version"], {
-      encoding: "utf-8",
-      timeout: 5000
-    });
-    if (result.status === 0) {
-      return cmd;
-    }
-  }
-  return null;
-}
 
 const args = parseArgs(process.argv.slice(2));
 
@@ -268,14 +255,10 @@ for (const filePath of files) {
 
     if (!classification) {
       // Spotify audio-features deprecated — fallback to local BPM via librosa
-      const pythonCmd = getPythonCmdSync();
-      const bpmResult = pythonCmd
-        ? spawnSync(pythonCmd, [bpmAnalyzerPath, "--files", filePath, "--analysis-seconds", "90"], {
-            encoding: "utf-8",
-            timeout: 30000
-          })
-        : null;
-      if (bpmResult?.status === 0 && bpmResult.stdout) {
+      try {
+        const resolvedPython = await resolvePython({ projectRoot: path.resolve(scriptDir, ".."), env: process.env, requireVenv: true });
+      const bpmResult = await runBpmAnalyzer(resolvedPython.command, filePath);
+      if (bpmResult.code === 0 && bpmResult.stdout) {
         const lines = bpmResult.stdout.split("\n");
         const jsonStart = lines.findIndex(l => l.trim() === "[");
         if (jsonStart >= 0) {
@@ -289,6 +272,9 @@ for (const filePath of files) {
             }
           } catch (_) { /* ignore parse errors */ }
         }
+        }
+      } catch (error) {
+        console.error(`BPM local no disponible; se deja en Unsorted: ${error.message}`);
       }
     }
 
@@ -410,6 +396,10 @@ function withTimeout(promise, ms) {
     setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms);
   });
   return Promise.race([promise, timeout]);
+}
+
+function runBpmAnalyzer(pythonCommand, filePath) {
+  return runBpmAnalyzerProcess(pythonCommand, bpmAnalyzerPath, filePath);
 }
 
 function isAlreadySorted(filePath, genreFolders, baseDir) {

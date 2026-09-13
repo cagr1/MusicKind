@@ -3,12 +3,18 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
+import { StringDecoder } from "string_decoder";
 import { config as loadEnv } from "dotenv";
 import { readMetadata, renameFile, writeMetadata, generateFilename, identifyAndTag } from "./metadata_editor.js";
 import { SpotifyClient } from "./spotify.js";
 import { JsonCache } from "./cache.js";
 import { discoverAudioFiles } from "./services/audio-discovery.js";
 import { buildMetadataListResponse } from "./services/metadata-list-api.js";
+import {
+  resolvePython
+} from "./python-env.js";
+import { createPythonInstallHandler } from "./python-install.js";
+import { LineBuffer } from "./line-buffer.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,39 +23,38 @@ loadEnv({ path: path.join(projectRoot, ".env.local"), override: false });
 const uiRoot = path.join(projectRoot, "ui");
 const genresPath = path.join(projectRoot, "config", "genres.json");
 const settingsPath = path.join(projectRoot, "config", "settings.json");
+const pythonDependenciesPath = path.join(projectRoot, "config", "python-dependencies.json");
+
+function loadPythonDependencies() {
+  const config = JSON.parse(fs.readFileSync(pythonDependenciesPath, "utf8"));
+  for (const group of ["audio", "stems"]) {
+    if (!config[group] || !Array.isArray(config[group].packages) || config[group].packages.length === 0
+      || config[group].packages.some((pkg) => typeof pkg !== "string" || !/^[A-Za-z0-9_.-]+$/.test(pkg))) {
+      throw new Error(`Configuración inválida de dependencias Python: ${group}`);
+    }
+  }
+  return config;
+}
+
+const pythonDependencies = loadPythonDependencies();
 
 // Resolves the correct Python command for the current platform.
 // Tries python3 first on Unix-like systems and python first on Windows.
-let _pythonCmd = null;
-async function getPythonCmd() {
-  if (_pythonCmd) return _pythonCmd;
-  const candidates = process.platform === "win32" ? ["python", "python3"] : ["python3", "python"];
-  for (const cmd of candidates) {
-    try {
-      await new Promise((resolve, reject) => {
-        const child = spawn(cmd, ["--version"], { stdio: "ignore" });
-        child.on("close", (code) => (code === 0 ? resolve() : reject(new Error(`Python probe failed: ${cmd}`))));
-        child.on("error", reject);
-      });
-      _pythonCmd = cmd;
-      return cmd;
-    } catch {
-      // Try next candidate.
-    }
-  }
-  throw new Error("Python no encontrado. Instala Python 3.8+ desde https://python.org");
+async function getPythonCmd({ requireVenv = false } = {}) {
+  const resolved = await resolvePython({ projectRoot, requireVenv });
+  return resolved.command;
 }
 
-async function checkPythonImport(packageName) {
+export async function checkPythonImport(packageName, { getPythonCommand = getPythonCmd, spawnImpl = spawn } = {}) {
   let pyCmd;
   try {
-    pyCmd = await getPythonCmd();
+    pyCmd = await getPythonCommand({ requireVenv: true });
   } catch {
     return false;
   }
 
   return new Promise((resolve) => {
-    const child = spawn(pyCmd, ["-c", `import ${packageName}`], {
+    const child = spawnImpl(pyCmd, ["-c", `import ${packageName}`], {
       cwd: projectRoot,
       stdio: "ignore"
     });
@@ -66,37 +71,6 @@ function checkFpcalc() {
   });
 }
 
-function streamProcessAsSse(child, res) {
-  return new Promise((resolve) => {
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive"
-    });
-
-    const writeLog = (chunk, stream = "stdout") => {
-      const text = chunk.toString();
-      const lines = text.split(/\r?\n/).filter(Boolean);
-      for (const line of lines) {
-        res.write(`data: ${JSON.stringify({ type: "log", line, stream })}\n\n`);
-      }
-    };
-
-    child.stdout.on("data", (chunk) => writeLog(chunk, "stdout"));
-    child.stderr.on("data", (chunk) => writeLog(chunk, "stderr"));
-    child.on("error", (error) => {
-      res.write(`data: ${JSON.stringify({ type: "complete", ok: false, error: error.message })}\n\n`);
-      res.end();
-      resolve();
-    });
-    child.on("close", (code) => {
-      res.write(`data: ${JSON.stringify({ type: "complete", ok: code === 0, code })}\n\n`);
-      res.end();
-      resolve();
-    });
-  });
-}
-
 function writeSseCompleteError(res, errorMessage) {
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -107,14 +81,17 @@ function writeSseCompleteError(res, errorMessage) {
   res.end();
 }
 
+const installPythonDependencies = createPythonInstallHandler({ projectRoot, dependencies: pythonDependencies });
+
 // Registry for running processes (for cancellation)
 const runningProcesses = new Map();
 
-const server = http.createServer(async (req, res) => {
+export function createServer({ installHandler = installPythonDependencies } = {}) {
+  return http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
     if (url.pathname.startsWith("/api/")) {
-      await handleApi(req, res, url);
+      await handleApi(req, res, url, { installHandler });
       return;
     }
 
@@ -133,14 +110,16 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(500, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: false, error: err.message }));
   }
-});
+  });
+}
 
 const PORT = process.env.PORT || 3030;
-server.listen(PORT, () => {
-  console.log(`MusicKind dashboard running on http://localhost:${PORT}`);
-});
+const HOST = "127.0.0.1";
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  createServer().listen(PORT, HOST, () => console.log(`MusicKind dashboard running on http://${HOST}:${PORT} (loopback only)`));
+}
 
-async function handleApi(req, res, url) {
+async function handleApi(req, res, url, { installHandler = installPythonDependencies } = {}) {
   if (req.method === "GET" && url.pathname === "/api/genres") {
     const genres = readGenres();
     return sendJson(res, { ok: true, genres });
@@ -234,7 +213,7 @@ async function handleApi(req, res, url) {
 
     let pyCmd;
     try {
-      pyCmd = await getPythonCmd();
+      pyCmd = await getPythonCmd({ requireVenv: true });
     } catch (error) {
       writeSseCompleteError(res, error.message);
       return;
@@ -277,7 +256,7 @@ async function handleApi(req, res, url) {
 
     let pyCmd;
     try {
-      pyCmd = await getPythonCmd();
+      pyCmd = await getPythonCmd({ requireVenv: false });
     } catch (error) {
       writeSseCompleteError(res, error.message);
       return;
@@ -328,27 +307,7 @@ async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/install-dep") {
     const body = await readJsonBody(req);
     const group = body.group ? String(body.group) : "";
-    const packagesByGroup = {
-      audio: ["librosa", "numpy"],
-      stems: ["demucs"]
-    };
-    const pkgList = packagesByGroup[group];
-    if (!pkgList) {
-      return sendJson(res, { ok: false, error: "group invalido" }, 400);
-    }
-
-    let pyCmd;
-    try {
-      pyCmd = await getPythonCmd();
-    } catch (error) {
-      writeSseCompleteError(res, error.message);
-      return;
-    }
-
-    const child = spawn(pyCmd, ["-m", "pip", "install", "--upgrade", "--break-system-packages", ...pkgList], {
-      cwd: projectRoot
-    });
-    await streamProcessAsSse(child, res);
+    await installHandler(group, res);
     return;
   }
 
@@ -395,6 +354,9 @@ async function handleApi(req, res, url) {
     if (!dirPath) {
       return sendJson(res, { ok: false, error: "dir parameter required" }, 400);
     }
+    if (!path.isAbsolute(dirPath)) {
+      return sendJson(res, { ok: false, error: `Ruta no absoluta: se recibió "${dirPath}" (solo el nombre de archivo/carpeta). Se requiere una ruta absoluta.` }, 400);
+    }
     try {
       const response = await buildMetadataListResponse({ dirPath, recursive });
       for (const line of response.logs) {
@@ -429,6 +391,23 @@ async function handleApi(req, res, url) {
     const metadata = body.metadata || {};
     if (!filePath) {
       return sendJson(res, { ok: false, error: "filePath required" }, 400);
+    }
+    if (!path.isAbsolute(filePath)) {
+      return sendJson(res, { ok: false, error: `Ruta no absoluta: se recibió "${filePath}". Se requiere una ruta absoluta.` }, 400);
+    }
+    if (!fs.existsSync(filePath)) {
+      return sendJson(res, { ok: false, error: `No se encontró el archivo: ${filePath}` }, 400);
+    }
+    if (metadata.bpm !== undefined && metadata.bpm !== null && metadata.bpm !== "") {
+      const bpmNum = Number(metadata.bpm);
+      if (!Number.isFinite(bpmNum) || bpmNum < 20 || bpmNum > 300) {
+        return sendJson(res, { ok: false, error: "bpm debe ser numérico entre 20 y 300" }, 400);
+      }
+    }
+    if (metadata.key !== undefined && metadata.key !== null && metadata.key !== "") {
+      if (typeof metadata.key !== "string" || metadata.key.length > 16) {
+        return sendJson(res, { ok: false, error: "key debe ser un string corto (máx. 16 caracteres)" }, 400);
+      }
     }
     try {
       // Check FFmpeg availability
@@ -486,6 +465,7 @@ async function handleApi(req, res, url) {
             const child = spawn(pyCmd, args, { cwd: projectRoot });
             let stdout = "";
             let settled = false;
+            const identifyStdoutDecoder = new StringDecoder("utf8");
 
             const finish = (value) => {
               if (settled) return;
@@ -499,10 +479,13 @@ async function handleApi(req, res, url) {
               finish(null);
             }, 30000);
 
-            child.stdout.on("data", (d) => { stdout += d.toString(); });
+            child.stdout.on("data", (d) => {
+              stdout += typeof d === "string" ? d : identifyStdoutDecoder.write(d);
+            });
             child.stderr.on("data", () => {});
             child.on("close", () => {
               clearTimeout(timeoutId);
+              stdout += identifyStdoutDecoder.end();
               try {
                 const parsed = JSON.parse(stdout.trim());
                 if (parsed.error) {
@@ -560,13 +543,17 @@ async function handleApi(req, res, url) {
     if (files.length === 0) {
       return sendJson(res, { ok: false, error: "files required" }, 400);
     }
-    
+    const nonAbsolute = files.find((f) => !path.isAbsolute(String(f)));
+    if (nonAbsolute !== undefined) {
+      return sendJson(res, { ok: false, error: `Ruta no absoluta: se recibió "${nonAbsolute}" (solo el nombre de archivo). Se requiere una ruta absoluta.` }, 400);
+    }
+
     // Check FFmpeg availability
     const ffmpegAvailable = await checkFFmpeg();
     if (!ffmpegAvailable) {
       return sendJson(res, { ok: false, error: "FFmpeg not available for BPM analysis" }, 400);
     }
-    
+
     const args = [
       path.join(projectRoot, "src", "bpm_analyzer.py"),
       "--files",
@@ -578,7 +565,7 @@ async function handleApi(req, res, url) {
     
     let pyCmd;
     try {
-      pyCmd = await getPythonCmd();
+      pyCmd = await getPythonCmd({ requireVenv: true });
     } catch (error) {
       writeSseCompleteError(res, error.message);
       return;
@@ -617,7 +604,7 @@ async function handleApi(req, res, url) {
 
     let pyCmd;
     try {
-      pyCmd = await getPythonCmd();
+      pyCmd = await getPythonCmd({ requireVenv: true });
     } catch (error) {
       writeSseCompleteError(res, error.message);
       return;
@@ -654,7 +641,7 @@ async function handleApi(req, res, url) {
 
     let pyCmd;
     try {
-      pyCmd = await getPythonCmd();
+      pyCmd = await getPythonCmd({ requireVenv: true });
     } catch (error) {
       writeSseCompleteError(res, error.message);
       return;
@@ -794,18 +781,20 @@ function runProcessWithProgress(cmd, args, res, processId, options = {}) {
     let totalFiles = 0;
     let processedFiles = 0;
     let isKilled = false;
+    const stdoutBuffer = new LineBuffer();
+    const stderrBuffer = new LineBuffer();
+    const outputStdoutDecoder = new StringDecoder("utf8");
+    const outputStderrDecoder = new StringDecoder("utf8");
 
     // Register process for cancellation
     if (processId) {
       runningProcesses.set(processId, child);
     }
-    
-    child.stdout.on("data", (data) => {
-      output += data.toString();
-      const text = data.toString();
 
-      const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
-      for (const line of lines) {
+    const handleStdoutLines = (lines) => {
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
         // Extract progress information from [PROGRESS:X/Y] format
         const progressRegex = /\[PROGRESS:(\d+)\/(\d+)\]\s*Processing:\s*(.+)/;
         const match = line.match(progressRegex);
@@ -836,18 +825,36 @@ function runProcessWithProgress(cmd, args, res, processId, options = {}) {
 
         res.write(`data: ${JSON.stringify({ type: "log", message: line })}\n\n`);
       }
-    });
-    
-    child.stderr.on("data", (data) => {
-      output += data.toString();
-      const text = data.toString();
-      const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
-      for (const line of lines) {
+    };
+
+    const handleStderrLines = (lines) => {
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line) continue;
         res.write(`data: ${JSON.stringify({ type: "log", message: line, stream: "stderr" })}\n\n`);
       }
+    };
+
+    child.stdout.on("data", (data) => {
+      const text = typeof data === "string" ? data : outputStdoutDecoder.write(data);
+      output += text;
+      handleStdoutLines(stdoutBuffer.push(text));
     });
-    
+
+    child.stderr.on("data", (data) => {
+      const text = typeof data === "string" ? data : outputStderrDecoder.write(data);
+      output += text;
+      handleStderrLines(stderrBuffer.push(text));
+    });
+
     child.on("close", (code) => {
+      const stdoutTail = outputStdoutDecoder.end();
+      const stderrTail = outputStderrDecoder.end();
+      output += stdoutTail + stderrTail;
+      handleStdoutLines(stdoutBuffer.push(stdoutTail));
+      handleStderrLines(stderrBuffer.push(stderrTail));
+      handleStdoutLines(stdoutBuffer.flush());
+      handleStderrLines(stderrBuffer.flush());
       isKilled = child._killed === true;
       // Remove from registry
       if (processId) {
@@ -922,13 +929,16 @@ function runProcess(cmd, args) {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { cwd: projectRoot });
     let output = "";
+    const stdoutDecoder = new StringDecoder("utf8");
+    const stderrDecoder = new StringDecoder("utf8");
     child.stdout.on("data", (data) => {
-      output += data.toString();
+      output += typeof data === "string" ? data : stdoutDecoder.write(data);
     });
     child.stderr.on("data", (data) => {
-      output += data.toString();
+      output += typeof data === "string" ? data : stderrDecoder.write(data);
     });
     child.on("close", (code) => {
+      output += stdoutDecoder.end() + stderrDecoder.end();
       if (code === 0) {
         resolve({ ok: true, output });
       } else {

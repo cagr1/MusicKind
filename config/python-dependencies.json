@@ -1,0 +1,4 @@
+{
+  "audio": { "label": "Análisis de audio", "packages": ["librosa", "numpy"] },
+  "stems": { "label": "Separador de stems", "packages": ["demucs"] }
+}

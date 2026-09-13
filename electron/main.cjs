@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
+const { StringDecoder } = require('string_decoder');
 const http = require('http');
 
 let mainWindow;
@@ -23,8 +24,11 @@ async function checkPythonResult() {
       const version = await new Promise((resolve, reject) => {
         const child = spawn(cmd, ['--version'], { stdio: ['ignore', 'pipe', 'pipe'] });
         let out = '';
-        child.stdout.on('data', (d) => { out += d; });
-        child.stderr.on('data', (d) => { out += d; });
+        const stdoutDecoder = new StringDecoder('utf8');
+        const stderrDecoder = new StringDecoder('utf8');
+        child.stdout.on('data', (d) => { out += typeof d === 'string' ? d : stdoutDecoder.write(d); });
+        child.stderr.on('data', (d) => { out += typeof d === 'string' ? d : stderrDecoder.write(d); });
+        child.on('close', () => { out += stdoutDecoder.end() + stderrDecoder.end(); });
         child.on('close', (code) => code === 0 ? resolve(out.trim()) : reject(new Error(`Python probe failed: ${cmd}`)));
         child.on('error', reject);
       });
@@ -138,19 +142,28 @@ function startBackendServer() {
   backendOwnedByElectron = true;
   backendProcess = spawn(process.execPath, [path.join(projectRoot, 'src', 'server.js')], {
     cwd: projectRoot,
-    env: { ...process.env, PORT: String(SERVER_PORT), ELECTRON_RUN_AS_NODE: '1' },
+    env: {
+      ...process.env,
+      PORT: String(SERVER_PORT),
+      ELECTRON_RUN_AS_NODE: '1',
+      MUSIC_KIND_DATA_DIR: app.getPath('userData')
+    },
     stdio: ['ignore', 'pipe', 'pipe']
   });
+  const backendStdoutDecoder = new StringDecoder('utf8');
+  const backendStderrDecoder = new StringDecoder('utf8');
 
   backendProcess.stdout.on('data', (chunk) => {
-    process.stdout.write(`[backend] ${chunk.toString()}`);
+    process.stdout.write(`[backend] ${typeof chunk === 'string' ? chunk : backendStdoutDecoder.write(chunk)}`);
   });
 
   backendProcess.stderr.on('data', (chunk) => {
-    process.stderr.write(`[backend] ${chunk.toString()}`);
+    process.stderr.write(`[backend] ${typeof chunk === 'string' ? chunk : backendStderrDecoder.write(chunk)}`);
   });
 
   backendProcess.on('exit', (code, signal) => {
+    process.stdout.write(backendStdoutDecoder.end());
+    process.stderr.write(backendStderrDecoder.end());
     if (!shuttingDown && code !== 0) {
       console.error(`[backend] exited early (code=${code}, signal=${signal})`);
     }
@@ -264,36 +277,6 @@ ipcMain.handle('check-pip-package', async (_event, pkg) => {
   });
 });
 
-ipcMain.handle('install-pip-packages', async (event, packages) => {
-  const python = await checkPythonResult();
-  if (!python.found) {
-    return { success: false, message: 'Python no encontrado.' };
-  }
-  const pkgList = Array.isArray(packages) ? packages.filter(Boolean) : [];
-  if (pkgList.length === 0) {
-    return { success: true, output: '' };
-  }
-
-  return new Promise((resolve) => {
-    const child = spawn(python.cmd, ['-m', 'pip', 'install', '--upgrade', ...pkgList], {
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-    let output = '';
-    child.stdout.on('data', (d) => {
-      const chunk = d.toString();
-      output += chunk;
-      event.sender.send('pip-install-progress', chunk);
-    });
-    child.stderr.on('data', (d) => {
-      const chunk = d.toString();
-      output += chunk;
-      event.sender.send('pip-install-progress', chunk);
-    });
-    child.on('close', (code) => resolve({ success: code === 0, output }));
-    child.on('error', (err) => resolve({ success: false, message: err.message }));
-  });
-});
-
 // Install FFmpeg (cross-platform: macOS with brew, Windows with chocolatey or winget)
 ipcMain.handle('install-ffmpeg', async () => {
   const platform = process.platform;
@@ -322,16 +305,19 @@ ipcMain.handle('install-ffmpeg', async () => {
     
     const child = spawn(installCommand, installArgs);
     let output = '';
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
     
     child.stdout.on('data', (data) => {
-      output += data.toString();
+      output += typeof data === 'string' ? data : stdoutDecoder.write(data);
     });
     
     child.stderr.on('data', (data) => {
-      output += data.toString();
+      output += typeof data === 'string' ? data : stderrDecoder.write(data);
     });
     
     child.on('close', (code) => {
+      output += stdoutDecoder.end() + stderrDecoder.end();
       if (code === 0) {
         resolve({
           success: true,
@@ -342,16 +328,19 @@ ipcMain.handle('install-ffmpeg', async () => {
         // Try chocolatey as fallback on Windows
         const chocoChild = spawn(fallbackCommand, fallbackArgs);
         let chocoOutput = '';
+        const chocoStdoutDecoder = new StringDecoder('utf8');
+        const chocoStderrDecoder = new StringDecoder('utf8');
         
         chocoChild.stdout.on('data', (data) => {
-          chocoOutput += data.toString();
+          chocoOutput += typeof data === 'string' ? data : chocoStdoutDecoder.write(data);
         });
         
         chocoChild.stderr.on('data', (data) => {
-          chocoOutput += data.toString();
+          chocoOutput += typeof data === 'string' ? data : chocoStderrDecoder.write(data);
         });
         
         chocoChild.on('close', (chocoCode) => {
+          chocoOutput += chocoStdoutDecoder.end() + chocoStderrDecoder.end();
           resolve({
             success: chocoCode === 0,
             output: chocoOutput,

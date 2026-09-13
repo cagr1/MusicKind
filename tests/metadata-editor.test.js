@@ -3,11 +3,34 @@ import assert from "node:assert/strict";
 import fs from "fs";
 import os from "os";
 import path from "path";
+import { spawnSync } from "child_process";
 import {
   renameFile,
   generateFilename,
   writeMetadata,
 } from "../src/metadata_editor.js";
+
+function ffmpegAvailable() {
+  const result = spawnSync("ffmpeg", ["-version"]);
+  return result.status === 0;
+}
+
+function makeToneFile(dir) {
+  // MP3/ID3 supports arbitrary metadata frames (TBPM/TKEY); WAV's RIFF INFO
+  // chunk silently drops tags ffmpeg does not know how to map.
+  const filePath = path.join(dir, "tone.mp3");
+  spawnSync("ffmpeg", [
+    "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-loglevel", "error", filePath
+  ]);
+  return filePath;
+}
+
+function readTags(filePath) {
+  const result = spawnSync("ffprobe", [
+    "-v", "error", "-show_entries", "format_tags", "-of", "json", filePath
+  ]);
+  return JSON.parse(result.stdout.toString()).format.tags || {};
+}
 
 function makeTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "metadata-editor-"));
@@ -125,4 +148,31 @@ test("writeMetadata rechaza con error claro si el archivo no existe", async () =
     () => writeMetadata("/tmp/nonexistent-musickind.mp3", { title: "Test" }),
     /File not found/
   );
+});
+
+test("writeMetadata escribe bpm redondeado a entero (TBPM/bpm) y key (TKEY/initialkey)", { skip: !ffmpegAvailable() }, async () => {
+  const dir = makeTempDir();
+  const filePath = makeToneFile(dir);
+
+  const result = await writeMetadata(filePath, { bpm: 128.7, key: "Am" });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.newPath, filePath);
+
+  const tags = readTags(filePath);
+  const lowerTags = Object.fromEntries(Object.entries(tags).map(([k, v]) => [k.toLowerCase(), v]));
+  assert.equal(lowerTags.tbpm ?? lowerTags.bpm, "129");
+  assert.equal(lowerTags.tkey ?? lowerTags.initialkey, "Am");
+});
+
+test("writeMetadata no escribe bpm/key cuando no se proveen", { skip: !ffmpegAvailable() }, async () => {
+  const dir = makeTempDir();
+  const filePath = makeToneFile(dir);
+
+  await writeMetadata(filePath, { title: "Solo titulo" });
+
+  const tags = readTags(filePath);
+  const lowerKeys = Object.keys(tags).map((k) => k.toLowerCase());
+  assert.ok(!lowerKeys.includes("tbpm") && !lowerKeys.includes("bpm"));
+  assert.ok(!lowerKeys.includes("tkey") && !lowerKeys.includes("initialkey"));
 });

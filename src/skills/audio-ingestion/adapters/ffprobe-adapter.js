@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import { StringDecoder } from "string_decoder";
 
 export function createFFprobeAdapter(options = {}) {
   const ffprobePath = options.ffprobePath || "ffprobe";
@@ -38,13 +39,15 @@ function runFFprobe(ffprobePath, filePath) {
     const child = spawn(ffprobePath, args);
     let stdout = "";
     let stderr = "";
+    const stdoutDecoder = new StringDecoder("utf8");
+    const stderrDecoder = new StringDecoder("utf8");
 
     child.stdout.on("data", (chunk) => {
-      stdout += chunk.toString();
+      stdout += typeof chunk === "string" ? chunk : stdoutDecoder.write(chunk);
     });
 
     child.stderr.on("data", (chunk) => {
-      stderr += chunk.toString();
+      stderr += typeof chunk === "string" ? chunk : stderrDecoder.write(chunk);
     });
 
     child.on("error", (err) => {
@@ -52,6 +55,8 @@ function runFFprobe(ffprobePath, filePath) {
     });
 
     child.on("close", (code) => {
+      stdout += stdoutDecoder.end();
+      stderr += stderrDecoder.end();
       if (code === 0) {
         resolve(stdout);
         return;
