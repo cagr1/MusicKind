@@ -364,15 +364,29 @@ async function installDep(group, options = {}) {
         if (!line.startsWith("data: ")) continue;
         try {
           const data = JSON.parse(line.slice(6));
-          if (data.type === "log") {
+          if (data.type === "stage") {
+            if (typeof onStatus === "function") onStatus(data.message || tr("depInstalling"));
+            if (logEl && data.message) {
+              logEl.textContent += `${data.message}\n`;
+              logEl.scrollTop = logEl.scrollHeight;
+            }
+            if (progressBarEl) {
+              const widths = { preparing: "20%", pip: "40%", packages: "75%", verify: "90%" };
+              progressBarEl.style.width = widths[data.stage] || "30%";
+            }
+          } else if (data.type === "log") {
             if (logEl) {
-              logEl.textContent += `${data.line}\n`;
+              logEl.textContent += `${data.line || data.message || ""}\n`;
               logEl.scrollTop = logEl.scrollHeight;
             }
             if (progressBarEl) progressBarEl.style.width = "78%";
           } else if (data.type === "complete") {
             ok = data.ok === true || data.success === true;
             errorMessage = data.error || "";
+            if (!ok && logEl && errorMessage) {
+              logEl.textContent += `${errorMessage}\n`;
+              logEl.scrollTop = logEl.scrollHeight;
+            }
             if (progressBarEl) progressBarEl.style.width = ok ? "100%" : "0%";
           }
         } catch (error) {
@@ -512,11 +526,20 @@ function setupDragDrop(element, onFilesDropped) {
     element.classList.remove("drag-over");
   });
   
-  element.addEventListener("drop", (e) => {
+  element.addEventListener("drop", async (e) => {
     e.preventDefault();
     element.classList.remove("drag-over");
-    
-    const files = Array.from(e.dataTransfer.files).map(f => f.path || f.name);
+
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    const files = await Promise.all(
+      droppedFiles.map(async (f) => {
+        if (Runtime.isElectron && window.electronAPI?.getPathForFile) {
+          const resolved = await window.electronAPI.getPathForFile(f);
+          if (resolved) return resolved;
+        }
+        return f.path || f.name;
+      })
+    );
     if (files.length > 0) {
       onFilesDropped(files);
     }
@@ -1425,8 +1448,9 @@ function removeMetaFile(idx) {
 if (metaIdentifyAll) metaIdentifyAll.addEventListener("click", async () => {
   if (!metaStatus || !metaProgress || !metaCancel || !metaProgressText || !metaProgressPercent || !metaProgressFill || !metaCurrentFile || !metaFileList || !metaResults || !metaResultsList) return;
   if (isDepGroupMissing("acoustid")) {
+    // fpcalc (AcoustID) is optional: the backend still identifies via embedded
+    // tags + Spotify when the fingerprint tool is missing. Warn, don't block.
     showDepToast("acoustid");
-    return;
   }
 
   if (metaFiles.length === 0) {

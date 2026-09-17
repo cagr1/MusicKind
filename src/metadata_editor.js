@@ -157,6 +157,14 @@ export function writeMetadata(filePath, metadata) {
       args.push("-metadata", `initialkey=${metadata.key}`);
     }
 
+    // AIFF's native chunk-based metadata only supports a title-like NAME
+    // chunk; FFmpeg silently drops artist/album/year/genre unless an ID3v2
+    // chunk is requested. Every other supported format handles -metadata
+    // via its own tag format, so this is AIFF-only.
+    if (ext.toLowerCase() === ".aiff" || ext.toLowerCase() === ".aif") {
+      args.push("-write_id3v2", "1");
+    }
+
     // Output to temp file
     args.push("-codec", "copy", tempPath);
     

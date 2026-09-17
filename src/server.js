@@ -151,19 +151,11 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     const settings = loadSettings();
     const spotifyClientId = process.env.SPOTIFY_CLIENT_ID || settings.spotifyClientId;
     const spotifyClientSecret = process.env.SPOTIFY_CLIENT_SECRET || settings.spotifyClientSecret;
-    if (!spotifyClientId || !spotifyClientSecret) {
-      return sendJson(
-        res,
-        {
-          ok: false,
-          error: "Faltan credenciales de Spotify. Configura Spotify Client ID y Spotify Client Secret en Settings para poder clasificar."
-        },
-        400
-      );
-    }
-    
+    const hasSpotify = Boolean(spotifyClientId && spotifyClientSecret);
+
     const args = [path.join(projectRoot, "src", "cli.js"), "--input", inputPath];
     if (dryRun) args.push("--dry-run");
+    if (!hasSpotify) args.push("--no-spotify");
     
     // Note: runProcessWithProgress handles response completion (res.end())
     // so no further response should be sent after this
@@ -750,7 +742,10 @@ function serveFile(res, filePath) {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg"
   };
-  res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream" });
+  res.writeHead(200, {
+    "Content-Type": types[ext] || "application/octet-stream",
+    "Cache-Control": "no-cache"
+  });
   fs.createReadStream(filePath).pipe(res);
 }
 
