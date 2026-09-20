@@ -1,0 +1,38 @@
+{
+  "nav": {
+    "classifier": "Classifier",
+    "sets": "Sets",
+    "converter": "Converter",
+    "metadata": "Metadata",
+    "bpm": "BPM",
+    "stems": "Stems",
+    "settings": "Settings"
+  },
+  "common": {
+    "close": "Close",
+    "toggleSidebar": "Toggle sidebar",
+    "sidebar": "Sidebar",
+    "sidebarDescription": "Displays the mobile sidebar",
+    "language": "Language"
+  },
+  "status": {
+    "ffmpeg": {
+      "ok": "FFmpeg ready",
+      "warn": "FFmpeg unchecked",
+      "error": "FFmpeg not found"
+    },
+    "python": {
+      "ok": "Python ready",
+      "warn": "Python unchecked",
+      "error": "Python not found"
+    }
+  },
+  "commandPalette": {
+    "title": "Command palette",
+    "description": "Search a view or action",
+    "placeholder": "Search...",
+    "views": "Views",
+    "actions": "Actions",
+    "changeLanguage": "Change language"
+  }
+}

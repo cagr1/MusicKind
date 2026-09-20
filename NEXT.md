@@ -3,6 +3,21 @@
 > Última actualización: 2026-05-03 (rev 21)
 > Este archivo es la fuente de verdad del avance. PROJECT_STATE.md tiene el contexto de arquitectura.
 
+## Estado 2026-09-13 — orden de trabajo (manda sobre lo de abajo; detalle en `plan.md`)
+
+Hecho (back, commit `e0c0424`, tests 9/9 exit 0):
+- SSE bufferiza por línea (`src/line-buffer.js`), streams de procesos UTF-8 seguros en `src/` y `electron/`.
+- Servidor solo `127.0.0.1`.
+- `POST /api/metadata/write` acepta `bpm` (entero, TBPM) y `key` (TKEY) con validación.
+- Preload expone `electronAPI.getPathForFile`; back rechaza con 400 rutas no absolutas.
+
+Pendiente, en orden:
+1. **Revisión Terra del back** (`e0c0424`) cuando haya cuota Codex: `codex exec -m gpt-5.6-terra -s read-only -o .memories/back-cleanup/review-terra-3.md`, criterios `.memories/back-cleanup/spec.md`. Revisar el commit, no reviews previas.
+2. **Front F1.0** (`plan.md:212`): usar `getPathForFile` al arrastrar en la UI + tests `DataTransfer.File` sin `path`. Sin commitear aún: `ui/app.js`, `web/`, `plan.md`.
+3. **Front F1.1** correcciones (`plan.md:222`), luego F3 BPM/Key con botones Guardar (usa el endpoint nuevo).
+4. BPM Serato vs MusicKind (`plan.md:192`): informativo, requiere comparación controlada.
+5. Recortar `CLAUDE.md` del proyecto (desactualizado: Electron 28, líneas y tamaños viejos).
+
 ---
 
 ## Decisión de plataforma
