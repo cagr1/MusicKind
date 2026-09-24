@@ -1,15 +1,15 @@
-import { AudioLines, Languages, Terminal } from 'lucide-react'
 import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarInset,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-} from '@/components/ui/sidebar'
+  Activity,
+  AudioLines,
+  FileAudio,
+  Languages,
+  ListMusic,
+  RefreshCw,
+  Search,
+  Settings,
+  Tags,
+  Terminal,
+} from 'lucide-react'
 import {
   Tooltip,
   TooltipContent,
@@ -21,9 +21,16 @@ import { CommandMenu } from '@/components/command-menu'
 import { NAV_ITEMS } from '@/lib/nav'
 import { useView } from '@/hooks/useView'
 import { useI18n, useT } from '@/i18n/I18nProvider'
-import { SystemStatusProvider, useSystemStatus, type StatusState } from '@/lib/system-status'
+import {
+  SystemStatusProvider,
+  useSystemStatus,
+  type StatusState,
+} from '@/lib/system-status'
 import { VIEW_COMPONENTS } from '@/views'
 import logo from '@/assets/musickind-logo.svg'
+import { Popover } from 'radix-ui'
+import { PlayerProvider } from '@/lib/player'
+import { ProcessProvider, useProcess } from '@/lib/process'
 
 const DOT_CLASS: Record<StatusState, string> = {
   ok: 'bg-emerald-500',
@@ -61,67 +68,153 @@ function Shell() {
   const { toggleLang } = useI18n()
   const status = useSystemStatus()
   const ActiveView = VIEW_COMPONENTS[view]
+  const { active } = useProcess()
+  const navIcons = {
+    classifier: Tags,
+    sets: ListMusic,
+    converter: RefreshCw,
+    metadata: FileAudio,
+    bpm: Activity,
+    stems: AudioLines,
+    settings: Settings,
+  }
 
   return (
     <TooltipProvider delayDuration={0}>
-      <SidebarProvider defaultOpen={false}>
-        <Sidebar collapsible="icon">
-          <SidebarHeader className="items-center justify-center py-3">
-            <img src={logo} alt="" className="size-6" />
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarMenu className="items-center gap-1">
-              {NAV_ITEMS.map((item) => (
-                <SidebarMenuItem key={item.key} className="flex justify-center">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <SidebarMenuButton
-                        isActive={view === item.key}
-                        onClick={() => setView(item.key)}
-                        aria-label={t(`nav.${item.key}`)}
-                        className="size-8 justify-center p-2"
-                      >
-                        <item.icon />
-                      </SidebarMenuButton>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">{t(`nav.${item.key}`)}</TooltipContent>
-                  </Tooltip>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarContent>
-          <SidebarFooter className="items-center gap-1 py-3">
-            <StatusIndicator
-              icon={AudioLines}
-              state={status.ffmpeg}
-              label={t(`status.ffmpeg.${status.ffmpeg}`)}
-            />
-            <StatusIndicator
-              icon={Terminal}
-              state={status.python}
-              label={t(`status.python.${status.python}`)}
-            />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={t('common.language')}
-                  onClick={toggleLang}
-                  className="flex size-8 items-center justify-center rounded-md text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                >
-                  <Languages className="size-4" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">{t('common.language')}</TooltipContent>
-            </Tooltip>
-          </SidebarFooter>
-        </Sidebar>
-        <SidebarInset>
-          <div className="flex h-full w-full items-center justify-center">
-            <ActiveView />
+      <div className="flex h-screen w-screen overflow-hidden bg-surface-app text-zinc-100">
+        <aside className="flex w-[220px] shrink-0 flex-col justify-between border-r border-line bg-surface-app">
+          <div>
+            <div className="flex h-[58px] items-center gap-3 border-b border-line px-4">
+              <img src={logo} alt="MusicKind" className="size-7" />
+              <div className="leading-none">
+                <p className="text-[13px] font-semibold">{t('app.name')}</p>
+                <p className="mt-1 font-mono text-[9px] uppercase tracking-wider text-zinc-500">
+                  {t('app.tagline')}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                document.dispatchEvent(
+                  new KeyboardEvent('keydown', { key: 'k', metaKey: true }),
+                )
+              }
+              className="mx-3 mt-3 flex h-8 w-[calc(100%-24px)] items-center justify-between
+                rounded border border-line bg-surface-panel px-2.5 text-[11px] text-zinc-500
+                hover:text-zinc-300"
+              aria-label={t('commandPalette.open')}
+            >
+              <span className="flex items-center gap-2">
+                <Search className="size-3.5" />
+                {t('commandPalette.search')}
+              </span>
+              <kbd className="font-mono text-[10px]">⌘K</kbd>
+            </button>
+            <nav
+              className="space-y-0.5 p-2"
+              aria-label={t('common.navigation')}
+            >
+              {NAV_ITEMS.map((item) => {
+                const Icon = navIcons[item.key]
+                const isActive = view === item.key
+
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setView(item.key)}
+                    className={`flex h-8 w-full items-center gap-2.5 rounded border-l-2 px-3 text-left text-[12px] font-medium ${
+                      isActive
+                        ? 'border-brand bg-white/[0.06] text-zinc-100'
+                        : 'border-transparent text-zinc-500 hover:bg-white/[0.03] hover:text-zinc-300'
+                    }`}
+                  >
+                    <Icon
+                      className={`size-4 ${isActive ? 'text-brand' : ''}`}
+                    />
+                    <span>{t(`nav.${item.key}`)}</span>
+                  </button>
+                )
+              })}
+            </nav>
           </div>
-        </SidebarInset>
-      </SidebarProvider>
+          <div className="border-t border-line">
+            {active.status === 'running' || active.status === 'paused' ? (
+              <div className="space-y-1.5 bg-surface-panel p-3">
+                <div className="flex justify-between font-mono text-[11px]">
+                  <span className="truncate text-zinc-300">{active.name}</span>
+                    <span className="text-brand">
+                    {active.current}/{active.total}
+                  </span>
+                </div>
+                <div className="h-0.5 bg-white/10">
+                  <div
+                    className="h-full bg-brand transition-all"
+                    style={{
+                      width: `${
+                        (active.current / Math.max(1, active.total)) * 100
+                      }%`,
+                    }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <Popover.Root>
+                <Popover.Trigger asChild>
+                  <button
+                    type="button"
+                    className="flex h-10 w-full items-center justify-between px-3 text-[11px] text-zinc-500 hover:bg-white/[0.03]"
+                    aria-label={t('status.title')}
+                  >
+                    <span>{t('status.title')}</span>
+                    <span
+                      className={`size-1.5 rounded-full ${
+                        status.ffmpeg === 'ok' && status.python === 'ok'
+                          ? 'bg-emerald-500'
+                          : 'bg-amber-500'
+                      }`}
+                    />
+                  </button>
+                </Popover.Trigger>
+                <Popover.Portal>
+                  <Popover.Content
+                    side="top"
+                    align="start"
+                    className="w-64 space-y-2 rounded border border-line bg-surface-panel p-3 text-[11px] shadow-xl"
+                  >
+                    <p className="font-semibold uppercase tracking-wider text-zinc-300">
+                      {t('status.title')}
+                    </p>
+                    <StatusIndicator
+                      icon={AudioLines}
+                      state={status.ffmpeg}
+                      label={t(`status.ffmpeg.${status.ffmpeg}`)}
+                    />
+                    <StatusIndicator
+                      icon={Terminal}
+                      state={status.python}
+                      label={t(`status.python.${status.python}`)}
+                    />
+                  </Popover.Content>
+                </Popover.Portal>
+              </Popover.Root>
+            )}
+            <button
+              type="button"
+              aria-label={t('common.language')}
+              onClick={toggleLang}
+              className="flex h-9 w-full items-center gap-2 px-3 text-[11px] text-zinc-500 hover:text-zinc-200"
+            >
+              <Languages className="size-4" />
+              {t('common.language')}
+            </button>
+          </div>
+        </aside>
+        <main className="min-w-0 flex-1 overflow-hidden">
+          <ActiveView />
+        </main>
+      </div>
       <CommandMenu />
       <Toaster theme="dark" />
     </TooltipProvider>
@@ -131,7 +224,11 @@ function Shell() {
 function App() {
   return (
     <SystemStatusProvider>
-      <Shell />
+      <ProcessProvider>
+        <PlayerProvider>
+          <Shell />
+        </PlayerProvider>
+      </ProcessProvider>
     </SystemStatusProvider>
   )
 }

@@ -1,5 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
-import { appendChunk, dispatchSseLine, parseSsePayload } from './api'
+import { act, createElement, useEffect } from 'react'
+import { createRoot } from 'react-dom/client'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { appendChunk, dispatchSseLine, parseSsePayload, streamProcess, useProcessStream } from './api'
+
+afterEach(() => vi.unstubAllGlobals())
 
 describe('appendChunk', () => {
   it('buffers a line split across two chunks', () => {
@@ -94,5 +98,157 @@ describe('dispatchSseLine', () => {
 
   it('ignores a garbage line without throwing', () => {
     expect(() => dispatchSseLine('garbage', {})).not.toThrow()
+  })
+})
+
+function sseResponse(lines: string[]) {
+  const encoder = new TextEncoder()
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(lines.join('')))
+      controller.close()
+    },
+  })
+  return new Response(body, { status: 200, headers: { 'Content-Type': 'text/event-stream' } })
+}
+
+describe('streamProcess', () => {
+  it('flushes a final partial line and uses a UUID process id', async () => {
+    const onStart = vi.fn()
+    const onDone = vi.fn()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
+      'data: {"type":"progress","processed":1,"total":1,"current":"song.mp3","message":"song"}\n',
+      'data: {"type":"complete","success":true,"cancelled":false}',
+    ])))
+    await streamProcess('/api/test', {}, { onStart, onDone })
+    expect(onStart).toHaveBeenCalledWith(expect.stringMatching(/^[0-9a-f-]{36}$/))
+    expect(onDone).toHaveBeenCalledOnce()
+  })
+
+  it('reports fetch failures through the error callback', async () => {
+    const onError = vi.fn()
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    await streamProcess('/api/test', {}, { onError })
+    expect(onError).toHaveBeenCalledWith('offline')
+  })
+
+  it('uses the JSON error message for a non-200 response', async () => {
+    const onError = vi.fn()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ error: 'No se pudo analizar' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    )
+
+    await streamProcess('/api/test', {}, { onError })
+
+    expect(onError).toHaveBeenCalledWith('No se pudo analizar')
+  })
+})
+
+describe('useProcessStream', () => {
+  it('exposes the terminal state after a simulated stream', async () => {
+    const controls: { run?: ReturnType<typeof useProcessStream>['run']; state?: ReturnType<typeof useProcessStream>['state'] } = {}
+    function Harness() {
+      const value = useProcessStream()
+      controls.run = value.run
+      controls.state = value.state
+      return null
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse(['data: {"type":"complete","success":true,"cancelled":false}\n'])))
+    const root = createRoot(document.createElement('div'))
+    await act(async () => { root.render(createElement(Harness)) })
+    await act(async () => { await controls.run?.('/api/test') })
+    expect(controls.state?.status).toBe('done')
+    root.unmount()
+  })
+
+  it('posts cancel and returns to idle after a cancelled completion', async () => {
+    const controls: {
+      run?: ReturnType<typeof useProcessStream>['run']
+      cancel?: ReturnType<typeof useProcessStream>['cancel']
+      state?: ReturnType<typeof useProcessStream>['state']
+    } = {}
+    let streamController: ReadableStreamDefaultController<Uint8Array> | undefined
+    const encoder = new TextEncoder()
+    const fetchMock = vi.fn((path: string) => {
+      if (path === '/api/cancel') {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      }
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          streamController = controller
+        },
+      })
+      return Promise.resolve(
+        new Response(body, {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        }),
+      )
+    })
+
+    function Harness() {
+      const value = useProcessStream()
+      controls.run = value.run
+      controls.cancel = value.cancel
+      controls.state = value.state
+      return null
+    }
+
+    vi.stubGlobal('fetch', fetchMock)
+    const root = createRoot(document.createElement('div'))
+    await act(async () => {
+      root.render(createElement(Harness))
+    })
+    let runPromise: Promise<string> | undefined
+    await act(async () => {
+      runPromise = controls.run?.('/api/test')
+      await Promise.resolve()
+    })
+    await act(async () => {
+      await controls.cancel?.()
+      streamController?.enqueue(
+        encoder.encode('data: {"type":"complete","success":false,"cancelled":true}\n'),
+      )
+      streamController?.close()
+      await runPromise
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/cancel', expect.anything())
+    expect(controls.state?.status).toBe('idle')
+    root.unmount()
+  })
+
+  it('aborts the stream when the hook unmounts', async () => {
+    let signal: AbortSignal | undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_path: string, options?: RequestInit) => {
+        signal = options?.signal ?? undefined
+        return new Promise<Response>(() => undefined)
+      }),
+    )
+
+    function Harness() {
+      const { run } = useProcessStream()
+      useEffect(() => {
+        void run('/api/test')
+      }, [run])
+      return null
+    }
+
+    const root = createRoot(document.createElement('div'))
+    await act(async () => {
+      root.render(createElement(Harness))
+      await Promise.resolve()
+    })
+    root.unmount()
+
+    expect(signal?.aborted).toBe(true)
   })
 })

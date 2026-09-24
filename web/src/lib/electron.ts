@@ -19,6 +19,7 @@ export interface InstallFFmpegResult {
 }
 
 interface ElectronApi {
+  getPathForFile: (file: File) => string | Promise<string>
   openDirectory: (title?: string) => Promise<string | null>
   openFiles: (title?: string, multiple?: boolean) => Promise<string | string[] | null>
   checkPython: () => Promise<PythonCheckResult>
@@ -46,6 +47,12 @@ export const isElectron: boolean = Boolean(getApi()?.openDirectory)
 
 export const electron = {
   isElectron,
+
+  async getPathForFile(file: File): Promise<string> {
+    const api = getApi()
+    if (!api?.getPathForFile) return ''
+    return (await api.getPathForFile(file)) || ''
+  },
 
   async openDirectory(title?: string): Promise<string | null> {
     const api = getApi()
@@ -102,4 +109,22 @@ export const electron = {
     if (!api) return
     await api.openExternal(targetUrl)
   },
+}
+
+function isAbsoluteFilePath(value: string): boolean {
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value)
+}
+
+/** Resolve a dropped File without ever sending a basename to the backend. */
+export async function getDroppedFilePath(file: File): Promise<string> {
+  const resolved = await electron.getPathForFile(file)
+  if (isAbsoluteFilePath(resolved)) return resolved
+
+  const legacyPath = (file as File & { path?: unknown }).path
+  if (typeof legacyPath === 'string' && isAbsoluteFilePath(legacyPath)) return legacyPath
+  throw new Error('Dropped file has no absolute filesystem path')
+}
+
+export async function resolveDroppedFiles(files: Iterable<File>): Promise<string[]> {
+  return Promise.all(Array.from(files, getDroppedFilePath))
 }

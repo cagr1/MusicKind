@@ -45,6 +45,7 @@ export interface ProgressPayload {
   total: number
   file: string
   percentage: number
+  message?: string
 }
 
 export interface StreamHandlers {
@@ -53,7 +54,14 @@ export interface StreamHandlers {
   onLog?: (line: string) => void
   onResult?: (result: unknown) => void
   onError?: (message: string) => void
-  onDone?: (info: { success: boolean; cancelled: boolean }) => void
+  onDone?: (info: {
+    success: boolean
+    cancelled: boolean
+    processed?: number
+    total?: number
+    message?: string
+    error?: string
+  }) => void
 }
 
 export interface StreamProcessResult {
@@ -92,6 +100,7 @@ export function dispatchSseLine(line: string, handlers: StreamHandlers): void {
         total: Number(data.total) || 0,
         file: typeof data.current === 'string' ? data.current : '',
         percentage: Number(data.percentage) || 0,
+        message: typeof data.message === 'string' ? data.message : undefined,
       })
       return
     }
@@ -117,8 +126,8 @@ export function dispatchSseLine(line: string, handlers: StreamHandlers): void {
   }
 }
 
-function makeProcessId(prefix: string): string {
-  return `${prefix}-${Date.now()}`
+function makeProcessId(): string {
+  return crypto.randomUUID()
 }
 
 export async function streamProcess(
@@ -127,45 +136,74 @@ export async function streamProcess(
   handlers: StreamHandlers = {},
   signal?: AbortSignal
 ): Promise<StreamProcessResult> {
-  const processId =
-    typeof body.processId === 'string' && body.processId ? body.processId : makeProcessId('proc')
+  const processId = typeof body.processId === 'string' && body.processId ? body.processId : makeProcessId()
   handlers.onStart?.(processId)
-
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, processId }),
-    signal,
-  })
-
-  if (!res.ok || !res.body) {
-    let message = `Request failed: ${res.status}`
-    try {
-      const data = (await res.json()) as { error?: string }
-      if (data?.error) message = data.error
-    } catch {
-      // ignore
-    }
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
+  let terminal = false
+  const onError = (message: string) => {
+    if (terminal) return
+    terminal = true
     handlers.onError?.(message)
-    return { processId }
+  }
+  const onDone = handlers.onDone
+  const wrappedHandlers: StreamHandlers = {
+    ...handlers,
+    onError,
+    onDone: (info) => {
+      if (terminal) return
+      terminal = true
+      onDone?.(info)
+    },
   }
 
-  const reader = res.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, processId }),
+      signal,
+    })
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    const chunkText = decoder.decode(value, { stream: true })
-    const appended = appendChunk(buffer, chunkText)
-    buffer = appended.buffer
-    for (const line of appended.lines) {
-      dispatchSseLine(line, handlers)
+    if (!res.ok || !res.body) {
+      let message = `Request failed: ${res.status}`
+      if (!res.body) message += ' (empty response body)'
+      try {
+        const data = (await res.json()) as { error?: string }
+        if (data?.error) message = data.error
+      } catch {
+        // Response wasn't JSON — keep the diagnostic above.
+      }
+      onError(message)
+      return { processId }
+    }
+
+    reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const appended = appendChunk(buffer, decoder.decode(value, { stream: true }))
+      buffer = appended.buffer
+      for (const line of appended.lines) dispatchSseLine(line, wrappedHandlers)
+    }
+
+    const finalText = decoder.decode()
+    const finalChunk = appendChunk(buffer, finalText)
+    if (finalChunk.buffer) dispatchSseLine(finalChunk.buffer, wrappedHandlers)
+    return { processId }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return { processId }
+    onError(error instanceof Error ? error.message : String(error))
+    return { processId }
+  } finally {
+    try {
+      await reader?.cancel()
+    } finally {
+      reader?.releaseLock()
     }
   }
-
-  return { processId }
 }
 
 export function cancelProcess(processId: string): Promise<{ ok: boolean; cancelled?: boolean }> {
@@ -204,7 +242,14 @@ export function useProcessStream() {
   const [state, setState] = React.useState<ProcessStreamState>(INITIAL_STATE)
   const controllerRef = React.useRef<AbortController | null>(null)
 
-  const run = React.useCallback(async (path: string, body: Record<string, unknown> = {}) => {
+  React.useEffect(() => () => controllerRef.current?.abort(), [])
+
+  const run = React.useCallback(async (
+    path: string,
+    body: Record<string, unknown> = {},
+    onResult?: (result: unknown) => void,
+  ) => {
+    controllerRef.current?.abort()
     const controller = new AbortController()
     controllerRef.current = controller
     setState({ ...INITIAL_STATE, status: 'running' })
@@ -216,7 +261,10 @@ export function useProcessStream() {
         onStart: (id) => setState((s) => ({ ...s, processId: id })),
         onProgress: (progress) => setState((s) => ({ ...s, progress })),
         onLog: (line) => setState((s) => ({ ...s, logs: [...s.logs, line] })),
-        onResult: (result) => setState((s) => ({ ...s, result })),
+        onResult: (result) => {
+          setState((s) => ({ ...s, result }))
+          onResult?.(result)
+        },
         onError: (error) => setState((s) => ({ ...s, status: 'error', error })),
         onDone: ({ success, cancelled }) =>
           setState((s) => (s.status === 'error' ? s : { ...s, status: cancelled ? 'idle' : success ? 'done' : 'error' })),
@@ -241,7 +289,6 @@ export function useProcessStream() {
   const cancel = React.useCallback(async () => {
     if (!state.processId) return
     await cancelProcess(state.processId)
-    controllerRef.current?.abort()
   }, [state.processId])
 
   return { state, run, pause, resume, cancel }
