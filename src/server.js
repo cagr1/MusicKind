@@ -166,6 +166,38 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     return sendJson(res, { ok: true, genres: cleaned });
   }
 
+  if (req.method === "POST" && url.pathname === "/api/classify-by-tags") {
+    const body = await readJsonBody(req);
+    const inputRoot = typeof body.inputRoot === "string" ? body.inputRoot : "";
+    const destRoot = typeof body.destRoot === "string" ? body.destRoot : "";
+    const excludeRoots = Array.isArray(body.excludeRoots) ? body.excludeRoots : [];
+    const pathValues = [inputRoot, destRoot, ...excludeRoots];
+    if (!inputRoot || !destRoot || !Array.isArray(body.excludeRoots) || excludeRoots.some((root) => typeof root !== "string" || !root)) {
+      return sendJson(res, { ok: false, error: "inputRoot, excludeRoots y destRoot requeridos" }, 400);
+    }
+    if (pathValues.some((value) => !path.isAbsolute(value))) {
+      return sendJson(res, { ok: false, error: "Todas las rutas deben ser absolutas" }, 400);
+    }
+    const normalized = pathValues.map((value) => path.resolve(value));
+    const [input, destination, ...excludes] = normalized;
+    const within = (candidate, root) => {
+      const relative = path.relative(root, candidate);
+      return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
+    };
+    if (excludes.some((root) => within(input, root) || within(destination, root)) || excludes.some((root) => within(root, destination))) {
+      return sendJson(res, { ok: false, error: "inputRoot o destRoot se solapan con excludeRoots" }, 400);
+    }
+    if (!fs.existsSync(input) || !fs.statSync(input).isDirectory()
+      || excludes.some((root) => !fs.existsSync(root) || !fs.statSync(root).isDirectory())) {
+      return sendJson(res, { ok: false, error: "inputRoot y excludeRoots deben ser carpetas existentes" }, 400);
+    }
+    const args = [path.join(projectRoot, "src", "tag-classifier-cli.js"), "--input-root", input, "--dest-root", destination];
+    for (const root of excludes) args.push("--exclude-root", root);
+    const processId = body.processId || `tags-${Date.now()}`;
+    await runProcessWithProgress(process.execPath, args, res, processId, { parseJsonResult: true });
+    return;
+  }
+
   if (req.method === "POST" && url.pathname === "/api/genre-classify") {
     const body = await readJsonBody(req);
     const inputPath = body.inputPath ? String(body.inputPath) : "";

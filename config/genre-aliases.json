@@ -1,0 +1,15 @@
+{
+  "Tech House": ["Latin Tech"],
+  "Afro House": ["Afro Latin", "Afro / Latin"],
+  "Deep House": [],
+  "House": ["Funky House"],
+  "Indie Dance": ["Nu Disco", "NuDisco", "Nu Disco / Disco", "Nu Disco / Indie Dance", "Indie Dance / Nu Disco"],
+  "Minimal Deep Tech": ["Minimal", "Minimal / Deep Tech", "Deep Tech"],
+  "Melodic House & Techno": ["Melodic House", "Melodic Techno"],
+  "Progressive House": [],
+  "Organic House": ["Organic House / Downtempo"],
+  "Techno": [],
+  "Electronica": ["Electronic"],
+  "Dance Pop": ["Dance", "Dance / Pop", "Dance / Electro Pop", "Europop"],
+  "DJ Tools": ["DJ Tools / Acapellas"]
+}

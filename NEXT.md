@@ -36,7 +36,7 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
 8. [x] **Lote 5** — S1 stems a elección + escucha por carril (verificado en vivo: envía `stems:"vocals"`, solo Voces audible) · S1.1 carriles no generados ocultos · C1 botón Instalar Chromaprint (brew/winget).
    **Antes de distribuir:** la app empaquetada abierta desde Finder no hereda el PATH de la terminal → no encontrará `ffmpeg`/`fpcalc`/`brew` en `/opt/homebrew/bin`. Resolver con rutas conocidas o binarios incluidos (junto con fijar versiones y Python propio).
 
-9. [ ] **Lote 6 — Clasificar por ejemplos** (`design/SPEC.md` § Lote 6): E0 medición · E1 motor · E2 vista · E3 mover aprobado a `Clasificado/<Género>` con deshacer · E4 `.m3u8` del set. `2026/` intocable.
+9. [ ] **Lote 6 — Clasificar por ejemplos** (`design/SPEC.md` § Lote 6): E0 medición [x] (audio ≈ base; tag ~97%) · E1 motor por tags [x] (corrida real solo lectura: 2,487 → 2,241 ok / 246 revisar, 1m22s, disco intacto) · E2 vista · E3 mover aprobado a `Clasificado/<Género>` con deshacer · E4 `.m3u8` del set. `2026/` intocable.
 
 **Siguiente (propuesto):** QA manual de Carlos en Electron (audio audible, arrastrar carpetas) → Back 3 (puntajes de Sets normalizados) → P2 del clasificador (ordenar/deshacer con manifiesto) → F9 corte `ui/`→`web/dist`. Back 1b (libkeyfinder) y la pérdida de remixer en `identify` como mejoras.
 
