@@ -16,6 +16,7 @@ import {
 } from "./python-env.js";
 import { createPythonInstallHandler } from "./python-install.js";
 import { LineBuffer } from "./line-buffer.js";
+import { parseFile } from "music-metadata";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -96,12 +97,12 @@ function getUiRoot() {
   return legacyUiRoot;
 }
 
-export function createServer({ installHandler = installPythonDependencies } = {}) {
+export function createServer({ installHandler = installPythonDependencies, mediaSpawn = spawn } = {}) {
   return http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
     if (url.pathname.startsWith("/api/")) {
-      await handleApi(req, res, url, { installHandler });
+      await handleApi(req, res, url, { installHandler, mediaSpawn });
       return;
     }
 
@@ -130,12 +131,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   createServer().listen(PORT, HOST, () => console.log(`MusicKind dashboard running on http://${HOST}:${PORT} (loopback only)`));
 }
 
-async function handleApi(req, res, url, { installHandler = installPythonDependencies } = {}) {
-  if (req.method === "GET" && (url.pathname === "/api/audio" || url.pathname === "/api/waveform")) {
+async function handleApi(req, res, url, { installHandler = installPythonDependencies, mediaSpawn = spawn } = {}) {
+  if (req.method === "GET" && ["/api/audio", "/api/waveform", "/api/artwork"].includes(url.pathname)) {
     const filePath = url.searchParams.get("path") || "";
     const validation = validateMediaPath(filePath);
     if (validation.error) return sendJson(res, validation.error, validation.status);
-    if (url.pathname === "/api/audio") return serveAudio(res, filePath, req.headers.range);
+    if (url.pathname === "/api/audio") return serveAudio(res, filePath, req.headers.range, mediaSpawn);
+    if (url.pathname === "/api/artwork") return serveArtwork(res, filePath);
 
     const rawBins = url.searchParams.get("bins");
     const bins = rawBins === null ? 200 : Number(rawBins);
@@ -777,7 +779,77 @@ const AUDIO_CONTENT_TYPES = {
   ".m4a": "audio/mp4"
 };
 
-function serveAudio(res, filePath, rangeHeader) {
+const NEEDS_TRANSCODE = new Set([".aif", ".aiff"]);
+const transcodesInProgress = new Map();
+
+function mediaCacheKey(filePath, stat) {
+  return crypto.createHash("sha1").update(`${filePath}|${stat.size}|${stat.mtimeMs}`).digest("hex");
+}
+
+async function getPlayableAudio(filePath, mediaSpawn) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (!NEEDS_TRANSCODE.has(ext)) return filePath;
+  const stat = fs.statSync(filePath);
+  const hash = mediaCacheKey(filePath, stat);
+  const cacheDir = path.join(projectRoot, ".cache", "audio");
+  const output = path.join(cacheDir, `${hash}.flac`);
+  if (fs.existsSync(output)) return output;
+  if (transcodesInProgress.has(output)) return transcodesInProgress.get(output);
+
+  const pending = (async () => {
+    fs.mkdirSync(cacheDir, { recursive: true });
+    const temporary = path.join(cacheDir, `${hash}.tmp.flac`);
+    await new Promise((resolve, reject) => {
+      const child = mediaSpawn("ffmpeg", ["-y", "-v", "error", "-i", filePath, "-map", "0:a:0", "-c:a", "flac", "-compression_level", "5", temporary], { stdio: "ignore" });
+      child.once("error", (error) => reject(error.code === "ENOENT" ? new Error("FFmpeg no está instalado; no se puede preparar el audio AIFF.") : error));
+      child.once("close", (code) => code === 0 ? resolve() : reject(new Error(`FFmpeg no pudo preparar el audio AIFF (código ${code}).`)));
+    });
+    fs.renameSync(temporary, output);
+    return output;
+  })().catch((error) => {
+    try { fs.rmSync(path.join(cacheDir, `${hash}.tmp.flac`), { force: true }); } catch {}
+    throw error;
+  }).finally(() => transcodesInProgress.delete(output));
+  transcodesInProgress.set(output, pending);
+  return pending;
+}
+
+async function serveArtwork(res, filePath) {
+  const stat = fs.statSync(filePath);
+  const cacheDir = path.join(projectRoot, ".cache", "artwork");
+  const hash = mediaCacheKey(filePath, stat);
+  const missingMarker = path.join(cacheDir, `${hash}.none`);
+  if (fs.existsSync(missingMarker)) return sendJson(res, { ok: false }, 404);
+  const extensions = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif" };
+  const cached = Object.keys(extensions).map((mime) => ({ mime, file: path.join(cacheDir, `${hash}.${extensions[mime]}`) })).find(({ file }) => fs.existsSync(file));
+  if (cached) return streamArtwork(res, cached.file, cached.mime);
+
+  const metadata = await parseFile(filePath, { skipPostHeaders: true });
+  const picture = metadata.common.picture?.[0];
+  const extension = extensions[picture?.format];
+  if (!picture || !extension) {
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(missingMarker, "");
+    return sendJson(res, { ok: false }, 404);
+  }
+  fs.mkdirSync(cacheDir, { recursive: true });
+  const cachedPath = path.join(cacheDir, `${hash}.${extension}`);
+  fs.writeFileSync(cachedPath, picture.data);
+  return streamArtwork(res, cachedPath, picture.format);
+}
+
+function streamArtwork(res, filePath, mime) {
+  res.writeHead(200, { "Content-Type": mime, "Content-Length": fs.statSync(filePath).size, "Cache-Control": "public, max-age=31536000, immutable" });
+  fs.createReadStream(filePath).on("error", () => { if (!res.destroyed) res.destroy(); }).pipe(res);
+}
+
+async function serveAudio(res, sourcePath, rangeHeader, mediaSpawn = spawn) {
+  let filePath;
+  try {
+    filePath = await getPlayableAudio(sourcePath, mediaSpawn);
+  } catch (error) {
+    return sendJson(res, { ok: false, error: error.message }, error.message.startsWith("FFmpeg no está") ? 503 : 500);
+  }
   const stat = fs.statSync(filePath);
   const ext = path.extname(filePath).toLowerCase();
   let start = 0;

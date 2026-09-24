@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import test from "node:test";
 import { createServer } from "../src/server.js";
 
@@ -55,7 +56,7 @@ function makeHalfVolumeWav() {
 test("media endpoints validan ruta, extensión y existencia", async (t) => {
   const server = await startServer();
   t.after(() => server.close());
-  for (const [endpoint, expected] of [["/api/audio", 400], ["/api/waveform", 400]]) {
+  for (const [endpoint, expected] of [["/api/audio", 400], ["/api/waveform", 400], ["/api/artwork", 400]]) {
     const response = await fetch(`${base(server)}${endpoint}?path=relative.wav`);
     assert.equal(response.status, expected);
   }
@@ -63,6 +64,49 @@ test("media endpoints validan ruta, extensión y existencia", async (t) => {
   assert.equal(unsupported.status, 415);
   const missing = await fetch(`${base(server)}/api/audio?path=${encodeURIComponent("/tmp/missing-musickind.wav")}`);
   assert.equal(missing.status, 404);
+});
+
+test("/api/audio transcodifica AIFF una vez y sirve FLAC con rangos", { skip: !ffmpeg }, async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "musickind-aiff-"));
+  const file = path.join(dir, "tone.aiff");
+  assert.equal(spawnSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", file]).status, 0);
+  let transcodes = 0;
+  const server = createServer({ mediaSpawn: (...args) => { transcodes++; return spawn(...args); } });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => { server.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const url = `${base(server)}/api/audio?path=${encodeURIComponent(file)}`;
+  const [first, second] = await Promise.all([fetch(url), fetch(url)]);
+  assert.equal(first.status, 200);
+  assert.equal(second.headers.get("content-type"), "audio/flac");
+  assert.ok((await first.arrayBuffer()).byteLength > 0);
+  assert.equal(transcodes, 1);
+  const range = await fetch(url, { headers: { Range: "bytes=0-99" } });
+  assert.equal(range.status, 206);
+  assert.equal(range.headers.get("content-type"), "audio/flac");
+  assert.equal((await range.arrayBuffer()).byteLength, 100);
+  assert.equal(transcodes, 1);
+});
+
+test("/api/artwork extrae y cachea carátulas y devuelve 404 si no hay imagen", { skip: !ffmpeg }, async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "musickind-artwork-"));
+  const audio = path.join(dir, "tone.wav");
+  const cover = path.join(dir, "cover.jpg");
+  const tagged = path.join(dir, "tagged.mp3");
+  assert.equal(spawnSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", audio]).status, 0);
+  assert.equal(spawnSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=red:s=32x32", "-frames:v", "1", cover]).status, 0);
+  assert.equal(spawnSync("ffmpeg", ["-y", "-v", "error", "-i", audio, "-i", cover, "-map", "0:a", "-map", "1:v", "-c:a", "libmp3lame", "-c:v", "mjpeg", "-disposition:v:0", "attached_pic", "-id3v2_version", "3", tagged]).status, 0);
+  const server = await startServer();
+  t.after(() => { server.close(); fs.rmSync(dir, { recursive: true, force: true }); });
+  const imageUrl = `${base(server)}/api/artwork?path=${encodeURIComponent(tagged)}`;
+  const image = await fetch(imageUrl);
+  assert.equal(image.status, 200);
+  assert.match(image.headers.get("content-type"), /^image\/(jpeg|png)$/);
+  assert.ok((await image.arrayBuffer()).byteLength > 0);
+  const cached = await fetch(imageUrl);
+  assert.equal(cached.status, 200);
+  const empty = await fetch(`${base(server)}/api/artwork?path=${encodeURIComponent(audio)}`);
+  assert.equal(empty.status, 404);
+  assert.deepEqual(await empty.json(), { ok: false });
 });
 
 test("/api/audio entrega el archivo completo y rangos 206", { skip: !ffmpeg }, async (t) => {
