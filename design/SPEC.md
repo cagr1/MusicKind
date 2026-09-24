@@ -656,6 +656,13 @@ caché en `.cache/embeddings/<backend>/<sha1(path|size|mtime)>.npy` (dentro del 
    destRoot, cancelación a mitad deja manifiesto coherente, deshacer completo, deshacer con destino ocupado, EXDEV simulado.
 **Gate:** node tests exit 0 + corrida real del cerebro sobre una **copia** de 5 pistas (no sobre el backup).
 
+### E3.1 · Refuerzos tras prueba real sobre copia (2026-09-24)
+Prueba del cerebro sobre una copia: rechazo total con un archivo de `2026`, movimiento y deshacer correctos. Falta:
+1. **Re-escaneo:** `destRoot` (`Clasificado/`) está dentro de `inputRoot`; tras mover, un segundo análisis propone de nuevo las pistas ya
+   clasificadas. `classifyByTags` debe excluir siempre `destRoot` (además de `excludeRoots`) del recorrido. Test.
+2. **Deshacer confía en el manifiesto:** `undoClassifyManifest` (`src/classify-apply.js`) no valida que cada `move.to` esté dentro de
+   `manifest.destRoot`. Validar por movimiento (si no, `undoStatus:'error'` sin tocar). Test con manifiesto alterado.
+
 ### E2 · Vista "Clasificar por etiquetas" (front)
 Modo por defecto del Clasificador (el método viejo queda en un `Select` "Método: Etiquetas (recomendado) · Reglas online").
 1. Tres carpetas: Carpeta a clasificar · Ejemplos protegidos (excluidas; se guardan en `localStorage` como conveniencia) · Destino
