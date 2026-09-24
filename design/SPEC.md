@@ -583,6 +583,34 @@ no nulos); ajustar la regla de tiempo y el Inspector (fila del stem ausente ocul
    "Opcional: identifica pistas sin tags por huella de audio (requiere clave de AcoustID)".
 3. Tests: wrapper `electron.ts` (no-op sin Electron) y la fila de Settings (Instalar llama al wrapper y luego re-verifica).
 
+## Lote 6 — Clasificar por ejemplos (colección de ehdu, 2026-09-24)
+
+Objetivo (acordado con Carlos): usar su gusto curado para clasificar la colección `/Volumes/Mac Backup/MUSIC BACKUP`.
+- **Ejemplos** = subcarpetas de `MUSIC BACKUP/2026/` (Tech house 116, house 16, Indie dance 16, minimal : deep tech 13, Afro House 12,
+  deep house 11; `acapella` y los archivos sueltos de la raíz de `2026` no son ejemplos). 172 AIFF, 14 MP3, 10 FLAC, 1 WAV.
+- **A clasificar** = todo `MUSIC BACKUP/` **excepto** `2026/` (~2,480 pistas, ~135 GB): carpetas de género del MusicKind viejo + `Unsorted`.
+- **Regla dura:** nada se escribe, mueve ni borra dentro de `MUSIC BACKUP/2026/` (validado en código, no solo en UI).
+- Etapa 1: mover lo aprobado a `MUSIC BACKUP/Clasificado/<Género>/`; lo que no se parece a ningún ejemplo queda fuera (sin más procesamiento).
+- Etapa 2: playlists `.m3u8` Warmup (deep + afro) · Peak (tech house) · Closing (indie dance + house) desde `Clasificado/`; minimal fuera del set.
+
+### E0 · Medición antes de construir (script reutilizable)
+Crear `scripts/eval_examples.py` (Python del venv de la app; instalar `transformers` en ese venv si falta). **Solo lectura del disco**;
+caché en `.cache/embeddings/<backend>/<sha1(path|size|mtime)>.npy` (dentro del repo, ya ignorado por `.gitignore`).
+1. Entrada: `--examples "/Volumes/Mac Backup/MUSIC BACKUP/2026"` (etiqueta = nombre de subcarpeta; excluir `acapella` y archivos sueltos)
+   y `--negatives` = muestra aleatoria fija (seed 42) de 60 pistas de `MUSIC BACKUP/Melodic Techno`, `Progressive House`,
+   `Melodic House : Techno`, `Dance Pop` (fuera del gusto) para calibrar el rechazo.
+2. Por pista: 30 s centrados en la mitad (si dura menos, entera), mono. Backends:
+   - `librosa`: las 53 features de `src/style_analyzer.py` **estandarizadas** (z-score con media/desviación de los ejemplos).
+   - `clap`: `transformers` `ClapModel` + `ClapProcessor` `laion/clap-htsat-unfused` (48 kHz), embedding de audio normalizado L2.
+   - `mert`: `m-a-p/MERT-v1-95M` (`trust_remote_code=True`, 24 kHz), media temporal de la última capa oculta; si falla por dependencias,
+     reportar el error y seguir con los otros.
+   Dispositivo `mps` si está disponible, si no `cpu`.
+3. Métricas por backend: kNN coseno (k=5, voto ponderado) con **leave-one-out** y regresión logística con **5-fold estratificado**:
+   exactitud, macro-F1, recall por clase y matriz de confusión. Rechazo: con el umbral de similitud máxima que deja pasar el 95% de los
+   ejemplos (LOO), ¿qué % de los negativos se rechaza? Tiempo medio por pista.
+4. Salida: `.cache/eval/report.md` + `.cache/eval/report.json` y resumen en stdout. No toca `web/`, `src/` salvo lectura.
+**Gate (cerebro):** reporte con los 3 backends (o el error de MERT), números reproducibles en una segunda corrida desde caché.
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)
