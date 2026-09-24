@@ -543,6 +543,17 @@ coloreado por `index/peaks.length <= progress`; línea naranja en la misma escal
 tengan el mismo patrón. Test vitest: con 400 picos y contenedor de 300 px, la barra en la posición x=150 corresponde al pico 200 y un clic ahí
 hace `seek(duration/2)`.
 
+### A4 · El deck desaparece pero la pista sigue sonando (2026-09-24, reporte de Carlos)
+Causa: `web/src/components/music/DeckPlayer.tsx:45` obtiene los datos de la pista actual buscándola en la `queue`, y `:64` hace
+`return null` si no está. Al quitar/limpiar la tabla la pista sale de la cola → el deck se oculta mientras el audio sigue (sin forma de pararlo).
+Decisión (como Spotify/rekordbox): quitar de la lista **no** corta la reproducción.
+1. `PlayerProvider` guarda una copia `current: DeckTrack | null` al empezar a reproducir (título, artista, bpm, key, path); el deck usa
+   `current`, no la cola. Visible mientras `current` exista.
+2. Si `current` ya no está en la cola: anterior/siguiente deshabilitados; al terminar la pista no avanza (se detiene).
+3. Botón de icono "Cerrar reproductor" (`X`, Tooltip i18n) en el deck: pausa, vacía `src`, `current = null`, oculta el deck.
+4. Tests vitest: limpiar la cola con una pista sonando → deck visible y audio no pausado; cerrar → `pause()` y deck oculto;
+   siguiente deshabilitado si `current` no está en la cola.
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)
