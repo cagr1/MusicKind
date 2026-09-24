@@ -10,6 +10,7 @@ import json
 import os
 import numpy as np
 from pathlib import Path
+from key_detection import resolve_key
 
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.aiff', '.aif', '.flac', '.m4a'}
 
@@ -23,7 +24,7 @@ def find_audio_files(directory):
     return result
 
 
-def extract_features(file_path, duration=None):
+def _extract_audio_features(file_path, duration=None, include_tonal=False):
     import librosa
     y, sr = librosa.load(file_path, sr=22050, mono=True, duration=duration)
 
@@ -46,6 +47,12 @@ def extract_features(file_path, duration=None):
         [float(tempo)],                                     # 1
         [beat_strength]                                     # 1
     ])
+    return vec, float(tempo), resolve_key(file_path) if include_tonal else None
+
+
+def extract_features(file_path, duration=None):
+    """Return the style vector, retaining the existing public helper contract."""
+    vec, _, _ = _extract_audio_features(file_path, duration)
     return vec
 
 
@@ -103,7 +110,7 @@ if __name__ == "__main__":
             print(f"[PROGRESS:{i+1}/{total}] Processing: {name}")
             sys.stdout.flush()
             try:
-                vec = extract_features(f, args.analysis_seconds)
+                vec, tempo, key_info = _extract_audio_features(f, args.analysis_seconds, include_tonal=True)
                 scores = {}
                 for section, profile in profiles.items():
                     sim = cosine_similarity(vec, profile)
@@ -114,7 +121,10 @@ if __name__ == "__main__":
                     "warmup": scores.get("warmup", None),
                     "peak": scores.get("peak", None),
                     "closing": scores.get("closing", None),
-                    "best": best
+                    "best": best,
+                    "bpm": round(tempo, 1),
+                    "camelot": key_info["camelot"],
+                    "keySource": key_info["keySource"]
                 })
             except Exception as e:
                 results.append({
@@ -160,10 +170,17 @@ if __name__ == "__main__":
             print(f"[PROGRESS:{i+1}/{total}] Processing: {name}")
             sys.stdout.flush()
             try:
-                vec = extract_features(f, args.analysis_seconds)
+                vec, tempo, key_info = _extract_audio_features(f, args.analysis_seconds, include_tonal=True)
                 sim = cosine_similarity(vec, profile)
                 score = round(max(0.0, min(1.0, sim)) * 100, 1)
-                results.append({"ok": True, "file": f, "score": score})
+                results.append({
+                    "ok": True,
+                    "file": f,
+                    "score": score,
+                    "bpm": round(tempo, 1),
+                    "camelot": key_info["camelot"],
+                    "keySource": key_info["keySource"]
+                })
             except Exception as e:
                 results.append({"ok": False, "file": f, "score": 0, "error": str(e)})
 

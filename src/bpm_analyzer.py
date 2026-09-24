@@ -6,6 +6,7 @@ Extracts BPM and key from audio files using librosa
 
 import sys
 import json
+from key_detection import resolve_key
 import librosa
 import numpy as np
 import os
@@ -24,19 +25,11 @@ def extract_bpm_key(file_path, analysis_seconds=None):
         tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
         bpm = float(tempo)
         
-        # Detect key using chroma features
-        chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-        chroma_mean = np.mean(chroma, axis=1)
-        pitch_class = int(np.argmax(chroma_mean))
-        
-        # Map pitch class to key notation
-        key_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
-        key = key_names[pitch_class]
-        
+        key_info = resolve_key(file_path)
         return {
             "ok": True,
             "bpm": round(bpm, 1),
-            "key": key,
+            **key_info,
             "file": file_path
         }
     except Exception as e:
