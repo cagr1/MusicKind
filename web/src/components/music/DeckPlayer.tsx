@@ -15,6 +15,11 @@ export function waveformSeekTime(clientX: number, left: number, width: number, d
   return Math.max(0, Math.min(duration, ((clientX - left) / width) * duration))
 }
 
+export function waveformPeakIndex(clientX: number, left: number, width: number, peakCount: number) {
+  if (width <= 0 || peakCount <= 0) return 0
+  return Math.min(peakCount - 1, Math.floor(((clientX - left) / width) * peakCount))
+}
+
 export function deckBpmLabel(bpm: number | null) {
   return bpm === null ? '—' : String(Math.round(bpm))
 }
@@ -111,24 +116,42 @@ export function DeckPlayer() {
         </span>
         <button
           type="button"
-          className="relative flex h-8 min-w-0 flex-1 items-center gap-px overflow-hidden"
+          className="relative h-8 min-w-0 flex-1 overflow-hidden"
           aria-label={t('player.seek')}
           onClick={(event) => {
             const bounds = event.currentTarget.getBoundingClientRect()
             seek(waveformSeekTime(event.clientX, bounds.left, bounds.width, duration))
           }}
         >
-          {peaks.map((peak, index) => (
-            <span
-              key={index}
-              className={`min-w-px flex-1 rounded-sm ${index / peaks.length <= progress ? 'bg-zinc-300' : 'bg-zinc-700'}`}
-              style={{ height: `${Math.max(3, peak * 28)}px` }}
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 400 32"
+            preserveAspectRatio="none"
+            className="size-full"
+          >
+            {peaks.map((peak, index) => {
+              const height = Math.max(3, Math.min(28, peak * 28))
+              return (
+                <rect
+                  key={index}
+                  x={((index + 0.5) / peaks.length) * 400 - 0.35}
+                  y={(32 - height) / 2}
+                  width="0.7"
+                  height={height}
+                  rx="0.35"
+                  className={index / peaks.length <= progress ? 'fill-zinc-300' : 'fill-zinc-700'}
+                />
+              )
+            })}
+            <line
+              x1={progress * 400}
+              x2={progress * 400}
+              y1="3"
+              y2="29"
+              className="stroke-brand"
+              strokeWidth="1"
             />
-          ))}
-          <span
-            className="pointer-events-none absolute h-5 w-px bg-brand"
-            style={{ left: `calc(${progress * 100}% + 1px)` }}
-          />
+          </svg>
         </button>
         <span className="font-mono text-[10px] tabular-nums text-zinc-500">{clock(duration)}</span>
       </div>
