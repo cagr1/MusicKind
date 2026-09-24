@@ -424,6 +424,48 @@ sirve `ui/` (`src/server.js:23` `uiRoot`, `:98-105`). La UI nueva solo existía 
    `MUSIC_KIND_UI=legacy` devuelve `ui/index.html`; `GET /assets/x.woff2` → `font/woff2`; `GET /../package.json` → 404.
 **Gate:** `node --test tests/*.test.js` exit 0 · `npm run build:web` exit 0 · el cerebro abre Electron y comprueba la UI nueva.
 
+## Lote 3 — feedback de Carlos en Electron (2026-09-24)
+
+Mismo "Checklist común" del Lote Front 2. Un ítem por corrida; el cerebro verifica en vivo y hace commit entre ítems.
+
+### M1 · Selección sin barra lateral + carga diferida de vistas
+- La barra naranja lateral de 2px (`border-l-2 border-brand`) se percibe como "AI slop". Eliminarla en **todos** los usos (15: nav en
+  `web/src/App.tsx` y filas seleccionadas en `web/src/views/*`).
+- Nav activa: `bg-white/[0.07]`, texto `zinc-50`, icono `text-brand`; hover `bg-white/[0.04]`; sin borde.
+- Fila seleccionada de tabla: `bg-white/[0.06]` sin borde; la mini onda sigue tiñéndose en `brand`.
+- Vistas con `React.lazy` + `Suspense` (fallback: `Skeleton` del área principal) en `web/src/App.tsx`; el aviso de Vite ">500 kB" debe
+  desaparecer de `npm --prefix web run build`.
+
+### M2 · Agregar archivos en cualquier momento (BPM, Convertidor, Metadatos)
+- Hoy soltar solo funciona en el estado vacío. Tras analizar, debe poder **soltarse en toda la vista** (overlay de borde punteado `brand`
+  con el verbo i18n "Soltar para agregar" mientras se arrastra) y con un botón de icono `+` (Tooltip "Agregar archivos") en la barra que abre
+  `electron.openFiles` multiselección.
+- Los nuevos se **suman** a la lista (sin duplicar por ruta absoluta) y la acción principal procesa **solo los pendientes**; los resultados
+  se anexan y los anteriores se conservan. Contador en la barra: `N pistas · M pendientes`.
+- Soltar una carpeta la expande con `/api/metadata/list` (como hoy) y suma sus archivos.
+- Durante un proceso en curso, soltar encola los archivos como pendientes (no interrumpe).
+- Tests vitest del reductor de lista (merge sin duplicados, pendientes, anexar resultados).
+
+### M3 · Icono de la app
+- Generar `electron/assets/icon.png` (1024×1024) desde `web/src/assets/musickind-logo.svg`: fondo cuadrado redondeado `#09090b`
+  (radio 22%), logo centrado al ~68% del ancho. Render con Chrome headless (`--default-background-color=00000000`) o equivalente sin
+  dependencias nuevas; conservar el anterior como `electron/assets/icon-legacy.png`.
+- Generar `build/icon.icns` con `iconutil` (iconset 16…1024) y apuntar `package.json` `build.mac.icon` a él.
+- `electron/main.cjs:17` ya usa `assets/icon.png` para ventana y Dock: no cambiar código salvo que falte algo.
+
+### M4 · Reproductor tipo deck (barra de transporte)
+Objetivo: combinar la herramienta con la experiencia de Serato/rekordbox sin salir de la app.
+- Barra fija inferior (64px) en todas las vistas, sobre el `PlayerProvider` existente (`web/src/lib/player.tsx`, un solo elemento de audio).
+  Oculta hasta que se reproduce algo por primera vez.
+- Contenido: carátula 40px (`TrackArtwork`), título/artista, BPM y chip Camelot; controles anterior / play-pausa / siguiente; forma de onda
+  a lo ancho (`/api/waveform?bins=400`) con parte reproducida en zinc-300, pendiente zinc-700, playhead `brand`, clic = buscar;
+  tiempo `mm:ss / mm:ss` mono; volumen (Slider radix) y mute.
+- Cola = pistas de la vista actual en su orden (cada vista expone su lista al `PlayerProvider`); doble clic en una fila la reproduce.
+  El play del Inspector usa el mismo reproductor.
+- Atajos globales (no activos si el foco está en un input): espacio play/pausa, ←/→ ±5 s, Shift+←/→ ±30 s, ↑/↓ pista anterior/siguiente.
+- La barra no tapa contenido: el área principal y el Inspector reducen su alto.
+- Tests vitest: cola (siguiente/anterior en bordes), atajos ignorados con foco en input, buscar por clic.
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)

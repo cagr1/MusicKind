@@ -29,6 +29,8 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
 
 5. [x] **F9a** — el servidor sirve `web/dist` (UI nueva) en Electron; `npm run electron`/`dev` compilan la web antes; `npm run electron:legacy` abre `ui/`. Verificado: `:3030/` entrega la UI nueva, CSS y woff2 con MIME correcto; node 57/57.
 
+6. [ ] **Lote 3** (`design/SPEC.md` § Lote 3): M1 selección sin barra + lazy · M2 agregar archivos siempre · M3 icono nuevo · M4 reproductor tipo deck.
+
 **Siguiente (propuesto):** QA manual de Carlos en Electron (audio audible, arrastrar carpetas) → Back 3 (puntajes de Sets normalizados) → P2 del clasificador (ordenar/deshacer con manifiesto) → F9 corte `ui/`→`web/dist`. Back 1b (libkeyfinder) y la pérdida de remixer en `identify` como mejoras.
 
 Sigue pendiente en paralelo: revisión Terra del back (`e0c0424`), P1/P2 del clasificador, F3 contrato de escritura de tags.
