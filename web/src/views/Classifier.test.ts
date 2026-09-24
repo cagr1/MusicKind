@@ -5,6 +5,8 @@ import { I18nProvider } from '@/i18n/I18nProvider'
 import { ProcessProvider } from '@/lib/process'
 import { Classifier, genreDistribution, sourceLabelKey, type ClassifierResult } from './Classifier'
 
+vi.mock('@/lib/player', () => ({ usePlayer: () => ({ setQueue: vi.fn(), toggle: vi.fn() }) }))
+
 const result = (genre: string, path: string): ClassifierResult => ({
   id: path,
   path,

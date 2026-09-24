@@ -24,6 +24,7 @@ import { Popover } from 'radix-ui'
 import { PlayerProvider } from '@/lib/player'
 import { ProcessProvider, useProcess } from '@/lib/process'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DeckPlayer } from '@/components/music/DeckPlayer'
 
 const DOT_CLASS: Record<StatusState, string> = {
   ok: 'bg-emerald-500',
@@ -204,11 +205,14 @@ function Shell() {
             </button>
           </div>
         </aside>
-        <main className="min-w-0 flex-1 overflow-hidden">
-          <Suspense fallback={<ViewFallback />}>
-            <ActiveView />
-          </Suspense>
-        </main>
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
+            <Suspense fallback={<ViewFallback />}>
+              <ActiveView />
+            </Suspense>
+          </main>
+          <DeckPlayer />
+        </div>
       </div>
       <CommandMenu />
       <Toaster theme="dark" />

@@ -486,6 +486,26 @@ Objetivo: combinar la herramienta con la experiencia de Serato/rekordbox sin sal
 - La barra no tapa contenido: el área principal y el Inspector reducen su alto.
 - Tests vitest: cola (siguiente/anterior en bordes), atajos ignorados con foco en input, buscar por clic.
 
+### M4.1 · Pulido tras QA en vivo (2026-09-24)
+QA: doble clic reproduce (00:03→00:06), ↓ pasa a la siguiente, espacio pausa. Falta:
+1. Deck: BPM entero (`Math.round`), como en tablas e Inspector.
+2. Pista en reproducción: en su fila, el número `#` se reemplaza por un icono `AudioLines` en `brand` (sin animación); el doble clic
+   también la selecciona (el Inspector la muestra) y al cambiar de pista con ↑/↓ o anterior/siguiente la selección la sigue.
+3. Inspector (`LargeWaveform`): el botón play/pausa se superpone al playhead; moverlo fuera de la onda (a la izquierda del tiempo `mm:ss`).
+Tests vitest de 1 y 2.
+
+### M4.2 · Causa raíz de "doble clic no reproduce" (2026-09-24, diagnóstico del cerebro)
+`web/src/components/music/LargeWaveform.tsx:47-50` crea WaveSurfer con `media: audio` (el elemento **compartido** del `PlayerProvider`) y en
+cada cambio de pista del Inspector llama `waveRef.current?.destroy()`. En wavesurfer 7.8.15 `Player.destroy()` hace `this.media.pause()`
+**siempre**, también con media externa (`web/node_modules/wavesurfer.js/dist/player.js:69`). Con M4.1 el Inspector sigue a la pista en
+reproducción → play → cambia el Inspector → destroy → pausa. Los tests con audio simulado no lo ven.
+Corrección:
+1. Ningún componente enlaza WaveSurfer al audio compartido. `LargeWaveform` (y el deck si lo usa) dibuja las barras en SVG desde `peaks`
+   (como `MiniWaveform`), con progreso = `currentTime/duration` del `PlayerProvider` **solo si** `path === activePath` (si no, 0);
+   clic = `seek` (si es otra pista: `toggle(path)` y luego seek). Quitar la dependencia `wavesurfer.js` si queda sin uso.
+2. Test vitest con un `HTMLAudioElement` simulado que registra `pause()`: reproducir la pista A y cambiar el `path` del Inspector a B
+   **no** llama `pause()` sobre el audio compartido.
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)

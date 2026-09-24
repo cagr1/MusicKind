@@ -1,6 +1,5 @@
-import WaveSurfer from 'wavesurfer.js'
 import { Pause, Play } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getJson } from '@/lib/api'
 import { useT } from '@/i18n/I18nProvider'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -14,14 +13,12 @@ interface LargeWaveformProps {
 export function LargeWaveform({ path, className = '' }: LargeWaveformProps) {
   const t = useT()
   const [peaks, setPeaks] = useState<number[] | null>(null)
-  const [duration, setDuration] = useState(0)
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const waveRef = useRef<WaveSurfer | null>(null)
-  const { audio, path: activePath, playing, currentTime, select, toggle, seek } = usePlayer()
+  const [waveDuration, setWaveDuration] = useState(0)
+  const { path: activePath, playing, currentTime, duration, toggle, seek } = usePlayer()
 
   useEffect(() => {
     setPeaks(null)
-    setDuration(0)
+    setWaveDuration(0)
     if (!path) return
 
     let cancelled = false
@@ -31,7 +28,7 @@ export function LargeWaveform({ path, className = '' }: LargeWaveformProps) {
       .then((data) => {
         if (cancelled) return
         setPeaks(data.peaks)
-        setDuration(data.duration)
+        setWaveDuration(data.duration)
       })
       .catch(() => {
         if (!cancelled) setPeaks([])
@@ -39,70 +36,91 @@ export function LargeWaveform({ path, className = '' }: LargeWaveformProps) {
 
     return () => {
       cancelled = true
-      waveRef.current?.destroy()
-      waveRef.current = null
     }
   }, [path])
-
-  useEffect(() => {
-    if (!containerRef.current || !audio || !path || !peaks) return
-    waveRef.current?.destroy()
-    const wave = WaveSurfer.create({
-      container: containerRef.current,
-      media: audio,
-      height: 56,
-      width: containerRef.current.clientWidth || 300,
-      cursorWidth: 1,
-      cursorColor: 'var(--brand-color)',
-      waveColor: 'rgb(63 63 70)',
-      progressColor: 'rgb(212 212 216)',
-      barWidth: 2,
-      barGap: 1,
-      barRadius: 1,
-      interact: true,
-    })
-    wave.setOptions({ peaks: [peaks], duration })
-    wave.on('interaction', (time) => seek(time))
-    waveRef.current = wave
-    return () => {
-      wave.destroy()
-      waveRef.current = null
-    }
-  }, [audio, duration, path, peaks, seek])
 
   if (!path || peaks === null) {
     return <Skeleton className={`h-14 w-full ${className}`} />
   }
 
-  const time = activePath === path ? currentTime : 0
+  const isActive = activePath === path
+  const time = isActive ? currentTime : 0
+  const progress = isActive && duration > 0 ? Math.min(1, currentTime / duration) : 0
   const formatTime = (seconds: number) =>
     `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(
       Math.floor(seconds % 60),
     ).padStart(2, '0')}`
+  const seekToPoint = (clientX: number, left: number, width: number) => {
+    if (width <= 0) return
+    if (!isActive) {
+      toggle(path)
+    }
+    seek(Math.max(0, Math.min(waveDuration, ((clientX - left) / width) * waveDuration)))
+  }
 
   return (
     <div className={`flex w-full min-w-0 select-none flex-col gap-1.5 ${className}`}>
-      <div
+      <button
+        type="button"
+        aria-label={t('music.waveform')}
         className="relative h-14 w-full min-w-0 overflow-hidden rounded-md border
           border-line bg-surface-panel"
+        onClick={(event) => {
+          const bounds = event.currentTarget.getBoundingClientRect()
+          seekToPoint(event.clientX, bounds.left, bounds.width)
+        }}
       >
-        <div ref={containerRef} aria-label={t('music.waveform')} role="img" className="size-full" />
-        <button
-          type="button"
-          onClick={() => {
-            if (path !== activePath) select(path)
-            toggle(path)
-          }}
-          aria-label={activePath === path && playing ? t('music.pause') : t('music.play')}
-          className="absolute bottom-2 left-2 flex size-6 items-center justify-center
-            rounded-full border border-line bg-black/70 text-white hover:bg-brand"
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 200 56"
+          preserveAspectRatio="none"
+          className="size-full"
         >
-          {playing ? <Pause className="size-3" /> : <Play className="ml-0.5 size-3 fill-current" />}
-        </button>
-      </div>
-      <div className="flex justify-between px-0.5 font-mono text-[11px] tabular-nums text-zinc-400">
-        <span>{formatTime(time)}</span>
-        <span>{formatTime(duration)}</span>
+          {peaks.map((peak, index) => {
+            const height = Math.max(2, Math.min(54, peak * 54))
+            const x = ((index + 0.5) / peaks.length) * 200
+            return (
+              <rect
+                key={index}
+                x={x}
+                y={(56 - height) / 2}
+                width={Math.max(0.5, 200 / peaks.length - 1)}
+                height={height}
+                rx="0.5"
+                className={index / peaks.length <= progress ? 'fill-brand' : 'fill-zinc-600'}
+              />
+            )
+          })}
+          {progress > 0 && (
+            <line
+              x1={progress * 200}
+              x2={progress * 200}
+              y1="2"
+              y2="54"
+              className="stroke-brand"
+              strokeWidth="1"
+            />
+          )}
+        </svg>
+      </button>
+      <div className="flex items-center justify-between px-0.5 font-mono text-[11px] tabular-nums text-zinc-400">
+        <span className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => toggle(path)}
+            aria-label={isActive && playing ? t('music.pause') : t('music.play')}
+            className="flex size-5 items-center justify-center rounded-full border border-line
+              bg-black/70 text-white hover:bg-brand"
+          >
+            {isActive && playing ? (
+              <Pause className="size-3" />
+            ) : (
+              <Play className="ml-0.5 size-3 fill-current" />
+            )}
+          </button>
+          {formatTime(time)}
+        </span>
+        <span>{formatTime(waveDuration)}</span>
       </div>
     </div>
   )

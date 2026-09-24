@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { FileAudio, FolderOpen, Plus, Save, ScanSearch, X } from 'lucide-react'
+import { AudioLines, FileAudio, FolderOpen, Plus, Save, ScanSearch, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,6 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
 import { Checkbox } from '@/components/ui/checkbox'
+import { usePlayer } from '@/lib/player'
 
 interface MetadataFields {
   title: string
@@ -102,6 +103,7 @@ export function metadataNeedsRename(row: MetadataRow): boolean {
 }
 
 export function Metadata() {
+  const { setQueue, toggle, path: playingPath } = usePlayer()
   const t = useT()
   const { setView } = useView()
   const { results: savedResults, setActive, setResult } = useProcess()
@@ -120,6 +122,23 @@ export function Metadata() {
   const [dragging, setDragging] = React.useState(false)
   const controllerRef = React.useRef<AbortController | null>(null)
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0] ?? null
+  React.useEffect(() => {
+    const active = rows.find((row) => row.path === playingPath)
+    if (active) setSelectedId(active.id)
+  }, [playingPath, rows])
+  React.useEffect(
+    () =>
+      setQueue(
+        rows.map((row) => ({
+          path: row.path,
+          title: display(row.metadata.title) === '—' ? row.name : display(row.metadata.title),
+          artist: display(row.metadata.artist),
+          bpm: row.bpm ?? null,
+          key: row.key ?? null,
+        })),
+      ),
+    [setQueue, rows],
+  )
   const undoSnapshot = React.useRef<{ rows: MetadataRow[]; identified: string[] } | null>(null)
   const selection = useRowSelection({
     items: rows,
@@ -535,9 +554,14 @@ export function Metadata() {
                     key={row.id}
                     row={row}
                     index={index}
+                    isPlaying={row.path === playingPath}
                     selected={row.id === selected?.id}
                     processing={busy && progress.file === row.name}
                     onSelect={() => setSelectedId(row.id)}
+                    onPlay={() => {
+                      setSelectedId(row.id)
+                      toggle(row.path)
+                    }}
                     checked={selection.selected.includes(row.id)}
                     disabled={busy && progress.file === row.name}
                     onCheck={(shiftKey) => selection.toggle(row.id, shiftKey)}
@@ -642,18 +666,22 @@ function MetadataField({
 function MetadataRowView({
   row,
   index,
+  isPlaying,
   selected,
   processing,
   onSelect,
+  onPlay,
   checked,
   disabled,
   onCheck,
 }: {
   row: MetadataRow
   index: number
+  isPlaying: boolean
   selected: boolean
   processing: boolean
   onSelect: () => void
+  onPlay: () => void
   checked: boolean
   disabled: boolean
   onCheck: (shiftKey: boolean) => void
@@ -661,6 +689,7 @@ function MetadataRowView({
   return (
     <tr
       onClick={onSelect}
+      onDoubleClick={onPlay}
       className={`h-12 cursor-pointer ${selected ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}
     >
       <td className="text-center font-mono text-[11px] text-zinc-500">
@@ -669,6 +698,8 @@ function MetadataRowView({
       <td className="text-center font-mono text-[11px] text-zinc-500">
         {processing ? (
           <span className="mx-auto block size-2 rounded-full bg-brand" />
+        ) : isPlaying ? (
+          <AudioLines className="mx-auto size-4 text-brand" />
         ) : (
           String(index + 1).padStart(2, '0')
         )}

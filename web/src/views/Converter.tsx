@@ -1,6 +1,7 @@
 import * as React from 'react'
 import {
   ArrowRightLeft,
+  AudioLines,
   CheckCircle2,
   FileAudio,
   FolderOpen,
@@ -30,6 +31,7 @@ import { normalizeCamelot } from '@/lib/camelot'
 import { appendResults, mergeUnique, pendingItems } from '@/lib/list'
 import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
+import { usePlayer } from '@/lib/player'
 
 export type ConversionFormat = 'mp3' | 'wav' | 'aiff' | 'flac'
 
@@ -119,6 +121,7 @@ async function readConversionMetadata(
 }
 
 export function Converter() {
+  const { setQueue, toggle, path: playingPath } = usePlayer()
   const t = useT()
   const { setView } = useView()
   const { state, run, cancel } = useProcessStream()
@@ -136,6 +139,25 @@ export function Converter() {
   const undoSnapshot = React.useRef<{ files: string[]; results: ConverterResult[] } | null>(null)
   const isBusy = state.status === 'running' || state.status === 'paused'
   const selected = results.find((result) => result.input === selectedId) ?? results[0] ?? null
+  React.useEffect(() => {
+    const active = results.find((result) => result.output === playingPath)
+    if (active) setSelectedId(active.input)
+  }, [playingPath, results])
+  React.useEffect(
+    () =>
+      setQueue(
+        results
+          .filter((item) => item.ok)
+          .map((item) => ({
+            path: item.output,
+            title: item.title || fileName(item.output),
+            artist: item.artist || '—',
+            bpm: item.bpm ?? null,
+            key: item.key ?? null,
+          })),
+      ),
+    [setQueue, results],
+  )
   const summary = summarizeConversionResults(results)
   const selection = useRowSelection({
     items: results,
@@ -454,7 +476,12 @@ export function Converter() {
           <ResultsTable
             results={results}
             selected={selected}
+            playingPath={playingPath}
             onSelect={setSelectedId}
+            onPlay={(result) => {
+              setSelectedId(result.input)
+              if (result.ok) toggle(result.output)
+            }}
             t={t}
             selection={selection}
           />
@@ -504,13 +531,17 @@ export function Converter() {
 function ResultsTable({
   results,
   selected,
+  playingPath,
   onSelect,
+  onPlay,
   t,
   selection,
 }: {
   results: ConverterResult[]
   selected: ConverterResult | null
+  playingPath: string | null
   onSelect: (id: string) => void
+  onPlay: (track: ConverterResult) => void
   t: ReturnType<typeof useT>
   selection: ReturnType<typeof useRowSelection<ConverterResult>>
 }) {
@@ -534,6 +565,7 @@ function ResultsTable({
             <tr
               key={`${result.input}-${index}`}
               onClick={() => onSelect(result.input)}
+              onDoubleClick={() => onPlay(result)}
               className={`group h-12 cursor-pointer ${
                 selected?.input === result.input ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'
               }`}
@@ -547,7 +579,11 @@ function ResultsTable({
                 />
               </td>
               <td className="text-center font-mono text-[11px] text-zinc-500">
-                {String(index + 1).padStart(2, '0')}
+                {result.output === playingPath ? (
+                  <AudioLines className="mx-auto size-4 text-brand" />
+                ) : (
+                  String(index + 1).padStart(2, '0')
+                )}
               </td>
               <td className="min-w-0 pr-4">
                 <div className="flex min-w-0 items-center gap-3">

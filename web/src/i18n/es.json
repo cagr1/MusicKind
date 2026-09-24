@@ -68,6 +68,15 @@
     "key": "KEY",
     "tag": "etiqueta"
   },
+  "player": {
+    "title": "Reproductor",
+    "previous": "Pista anterior",
+    "next": "Pista siguiente",
+    "seek": "Buscar en la pista",
+    "volume": "Volumen",
+    "mute": "Silenciar",
+    "unmute": "Activar sonido"
+  },
   "bpm": {
     "title": "Analizador BPM",
     "tracks": "pistas",

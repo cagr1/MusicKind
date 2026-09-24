@@ -68,6 +68,15 @@
     "key": "KEY",
     "tag": "tag"
   },
+  "player": {
+    "title": "Player",
+    "previous": "Previous track",
+    "next": "Next track",
+    "seek": "Seek in track",
+    "volume": "Volume",
+    "mute": "Mute",
+    "unmute": "Unmute"
+  },
   "bpm": {
     "title": "BPM analyzer",
     "tracks": "tracks",

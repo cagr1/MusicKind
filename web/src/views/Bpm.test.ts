@@ -17,6 +17,7 @@ const { toastMock, setActiveMock, setResultMock, processResult } = vi.hoisted(()
 }))
 
 vi.mock('sonner', () => ({ toast: toastMock }))
+vi.mock('@/lib/player', () => ({ usePlayer: () => ({ setQueue: vi.fn(), toggle: vi.fn() }) }))
 vi.mock('@/lib/api', () => ({
   getJson: vi.fn(async () => ({ metadata: {} })),
   postJson: vi.fn(async () => ({})),

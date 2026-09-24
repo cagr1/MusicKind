@@ -1,5 +1,16 @@
 import * as React from 'react'
-import { Activity, Check, FolderOpen, Pause, Play, Plus, Save, Tags, X } from 'lucide-react'
+import {
+  Activity,
+  AudioLines,
+  Check,
+  FolderOpen,
+  Pause,
+  Play,
+  Plus,
+  Save,
+  Tags,
+  X,
+} from 'lucide-react'
 import * as SwitchPrimitive from '@radix-ui/react-switch'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,6 +34,7 @@ import { Popover } from 'radix-ui'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
+import { usePlayer } from '@/lib/player'
 
 const SOURCE_LABEL_KEYS: Record<string, TranslationKey> = {
   embedded: 'classifier.sourceLabels.embedded',
@@ -112,6 +124,7 @@ async function readTrackMetadata(
 }
 
 export function Classifier() {
+  const { setQueue, toggle, path: playingPath } = usePlayer()
   const t = useT()
   const { view, setView } = useView()
   const { state, run, pause, resume, cancel } = useProcessStream()
@@ -127,6 +140,23 @@ export function Classifier() {
   const [configError, setConfigError] = React.useState<string | null>(null)
   const isBusy = state.status === 'running' || state.status === 'paused'
   const selected = results.find((result) => result.id === selectedId) ?? results[0] ?? null
+  React.useEffect(() => {
+    const active = results.find((result) => result.path === playingPath)
+    if (active) setSelectedId(active.id)
+  }, [playingPath, results])
+  React.useEffect(
+    () =>
+      setQueue(
+        results.map((track) => ({
+          path: track.path,
+          title: track.title,
+          artist: track.artist,
+          bpm: track.bpm,
+          key: track.key,
+        })),
+      ),
+    [setQueue, results],
+  )
   const distribution = React.useMemo(() => genreDistribution(results), [results])
   const undoSnapshot = React.useRef<ClassifierResult[] | null>(null)
   const selection = useRowSelection({
@@ -424,7 +454,12 @@ export function Classifier() {
           <ResultsTable
             results={results}
             selectedId={selected?.id ?? null}
+            playingPath={playingPath}
             onSelect={setSelectedId}
+            onPlay={(track) => {
+              setSelectedId(track.id)
+              toggle(track.path)
+            }}
             onGenreChange={updateGenre}
             genres={genres}
             t={t}
@@ -477,7 +512,9 @@ export function Classifier() {
 function ResultsTable({
   results,
   selectedId,
+  playingPath,
   onSelect,
+  onPlay,
   onGenreChange,
   genres,
   t,
@@ -486,7 +523,9 @@ function ResultsTable({
 }: {
   results: ClassifierResult[]
   selectedId: string | null
+  playingPath: string | null
   onSelect: (id: string) => void
+  onPlay: (track: ClassifierResult) => void
   onGenreChange: (id: string, genre: string) => void
   genres: string[]
   t: ReturnType<typeof useT>
@@ -519,6 +558,7 @@ function ResultsTable({
             <tr
               key={result.id}
               onClick={() => onSelect(result.id)}
+              onDoubleClick={() => onPlay(result)}
               className={`group h-12 cursor-pointer ${selectedId === result.id ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}
             >
               <td className="text-center font-mono text-[11px] text-zinc-500">
@@ -530,7 +570,11 @@ function ResultsTable({
                 />
               </td>
               <td className="text-center font-mono text-[11px] text-zinc-500">
-                {String(index + 1).padStart(2, '0')}
+                {result.path === playingPath ? (
+                  <AudioLines className="mx-auto size-4 text-brand" />
+                ) : (
+                  String(index + 1).padStart(2, '0')
+                )}
               </td>
               <td className="min-w-0 pr-3">
                 <div className="flex min-w-0 items-center gap-3">

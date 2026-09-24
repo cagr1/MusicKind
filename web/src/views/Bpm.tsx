@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Activity, Check, FolderOpen, Pause, Play, Plus, Save, X } from 'lucide-react'
+import { Activity, AudioLines, Check, FolderOpen, Pause, Play, Plus, Save, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
@@ -20,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Checkbox } from '@/components/ui/checkbox'
 import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
+import { usePlayer } from '@/lib/player'
 
 interface BpmResult extends InspectorTrack {
   file: string
@@ -65,6 +66,7 @@ async function readTrackMetadata(
 }
 
 export function Bpm() {
+  const { setQueue, toggle, path: playingPath } = usePlayer()
   const t = useT()
   const { view } = useView()
   const { state, run, pause, resume, cancel } = useProcessStream()
@@ -164,6 +166,23 @@ export function Bpm() {
   }, [state.result, setResult, t, view])
 
   const selected = tracks.find((track) => track.id === selectedId) ?? tracks[0] ?? null
+  React.useEffect(() => {
+    const active = tracks.find((track) => track.file === playingPath)
+    if (active) setSelectedId(active.id)
+  }, [playingPath, tracks])
+  React.useEffect(
+    () =>
+      setQueue(
+        tracks.map((track) => ({
+          path: track.file,
+          title: track.title,
+          artist: track.artist,
+          bpm: track.bpm,
+          key: track.key,
+        })),
+      ),
+    [setQueue, tracks],
+  )
   const changed = tracks.filter(
     (track) =>
       original[track.id] &&
@@ -460,6 +479,7 @@ export function Bpm() {
                     key={track.id}
                     track={track}
                     index={index}
+                    isPlaying={track.file === playingPath}
                     selected={track.id === selectedId}
                     processing={state.progress?.file === track.file && isBusy}
                     changed={Boolean(
@@ -468,6 +488,10 @@ export function Bpm() {
                         original[track.id].key !== track.key),
                     )}
                     onSelect={() => setSelectedId(track.id)}
+                    onPlay={() => {
+                      setSelectedId(track.id)
+                      toggle(track.file)
+                    }}
                     onUpdate={update}
                     onSave={() => void save([track])}
                     checked={selection.selected.includes(track.id)}
@@ -542,10 +566,12 @@ function DropOverlay({ label }: { label: string }) {
 function BpmRow({
   track,
   index,
+  isPlaying,
   selected,
   processing,
   changed,
   onSelect,
+  onPlay,
   onUpdate,
   onSave,
   t,
@@ -555,10 +581,12 @@ function BpmRow({
 }: {
   track: BpmResult
   index: number
+  isPlaying: boolean
   selected: boolean
   processing: boolean
   changed: boolean
   onSelect: () => void
+  onPlay: () => void
   onUpdate: (id: string, patch: Partial<BpmResult>) => void
   onSave: () => void
   t: ReturnType<typeof useT>
@@ -585,6 +613,7 @@ function BpmRow({
   return (
     <tr
       onClick={onSelect}
+      onDoubleClick={onPlay}
       className={`h-12 cursor-pointer ${selected ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}
     >
       <td
@@ -596,6 +625,8 @@ function BpmRow({
       <td className="text-center font-mono text-[11px] text-zinc-500">
         {processing ? (
           <span className="mx-auto block size-2 rounded-full bg-brand" />
+        ) : isPlaying ? (
+          <AudioLines className="mx-auto size-4 text-brand" />
         ) : (
           String(index + 1).padStart(2, '0')
         )}

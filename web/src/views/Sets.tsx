@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Activity, FolderOpen, Pause, Play, Sparkles, X } from 'lucide-react'
+import { Activity, AudioLines, FolderOpen, Pause, Play, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { CamelotBadge } from '@/components/music/CamelotBadge'
@@ -13,6 +13,7 @@ import { useView } from '@/hooks/useView'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
+import { usePlayer } from '@/lib/player'
 
 export interface SetResult {
   file: string
@@ -90,6 +91,7 @@ async function readMetadata(
 }
 
 export function Sets() {
+  const { setQueue, toggle, path: playingPath } = usePlayer()
   const t = useT()
   const { view } = useView()
   const { state, run, pause, resume, cancel } = useProcessStream()
@@ -108,6 +110,23 @@ export function Sets() {
   const [error, setError] = React.useState<string | null>(null)
   const isBusy = state.status === 'running' || state.status === 'paused'
   const selected = results.find((track) => track.file === selectedId) ?? results[0] ?? null
+  React.useEffect(() => {
+    const active = results.find((track) => track.file === playingPath)
+    if (active) setSelectedId(active.file)
+  }, [playingPath, results])
+  React.useEffect(
+    () =>
+      setQueue(
+        results.map((track) => ({
+          path: track.file,
+          title: track.title || fileName(track.file),
+          artist: track.artist || '—',
+          bpm: track.bpm,
+          key: track.camelot,
+        })),
+      ),
+    [setQueue, results],
+  )
   const groups = React.useMemo(() => groupSetResults(results), [results])
   const ordered = React.useMemo(() => groups.flatMap((group) => group.tracks), [groups])
   const undoSnapshot = React.useRef<SetResult[] | null>(null)
@@ -337,8 +356,13 @@ export function Sets() {
                         key={track.file}
                         track={track}
                         index={index}
+                        isPlaying={track.file === playingPath}
                         selected={track.file === selectedId}
                         onSelect={() => setSelectedId(track.file)}
+                        onPlay={() => {
+                          setSelectedId(track.file)
+                          toggle(track.file)
+                        }}
                         checked={selection.selected.includes(track.file)}
                         disabled={isBusy}
                         onCheck={(shiftKey) => selection.toggle(track.file, shiftKey)}
@@ -391,8 +415,10 @@ function EmptyState({
 function SetRow({
   track,
   index,
+  isPlaying,
   selected,
   onSelect,
+  onPlay,
   t,
   checked,
   disabled,
@@ -400,8 +426,10 @@ function SetRow({
 }: {
   track: SetResult
   index: number
+  isPlaying: boolean
   selected: boolean
   onSelect: () => void
+  onPlay: () => void
   t: ReturnType<typeof useT>
   checked: boolean
   disabled: boolean
@@ -411,6 +439,7 @@ function SetRow({
   return (
     <tr
       onClick={onSelect}
+      onDoubleClick={onPlay}
       className={`h-12 cursor-pointer ${selected ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}
     >
       <td className="text-center font-mono text-[11px] text-zinc-500">
@@ -422,7 +451,11 @@ function SetRow({
         />
       </td>
       <td className="text-center font-mono text-[11px] text-zinc-500">
-        {String(index + 1).padStart(2, '0')}
+        {isPlaying ? (
+          <AudioLines className="mx-auto size-4 text-brand" />
+        ) : (
+          String(index + 1).padStart(2, '0')
+        )}
       </td>
       <td>
         <div className="flex items-center gap-3">
