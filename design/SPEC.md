@@ -570,6 +570,10 @@ así que se oye la mezcla completa; no hay forma práctica de oír solo voces. `
 4. Tests vitest de `createStemAudioController`: exclusivo por defecto, clic cambia de carril, Shift suma, volúmenes efectivos correctos;
    y de que `stems` enviado coincide con la opción elegida.
 
+### S1.1 · Ocultar carriles no generados
+QA: con "Voces" el carril Instrumental aparece vacío. Mostrar solo Original + los carriles realmente devueltos (`vocals`/`instrumental`
+no nulos); ajustar la regla de tiempo y el Inspector (fila del stem ausente oculta). Test vitest.
+
 ### C1 · Chromaprint instalable (electron + web)
 `fpcalc` (Chromaprint) solo se usa para identificar por huella con clave de AcoustID. Hoy Configuración muestra "No instalado" sin acción.
 1. `electron/main.cjs`: handler `install-chromaprint` análogo a la instalación de FFmpeg (macOS: `brew install chromaprint`; Windows: `winget
