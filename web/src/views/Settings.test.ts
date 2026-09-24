@@ -4,6 +4,7 @@ import {
   dependencyBusy,
   dependencyGroup,
   dependencyLabel,
+  installChromaprintAndVerify,
   normalizeSettings,
 } from './Settings'
 
@@ -40,6 +41,21 @@ describe('settings helpers', () => {
   it('verifies installed dependencies instead of reinstalling them', () => {
     expect(dependencyAction('librosa', true, 'audio')).toBe('verify')
     expect(dependencyAction('librosa', false, 'audio')).toBe('install')
-    expect(dependencyAction('acoustid', false, null)).toBeNull()
+    expect(dependencyAction('acoustid', false, null)).toBe('install')
+    expect(dependencyAction('acoustid', true, null)).toBe('verify')
+  })
+
+  it('installs Chromaprint and then rechecks dependency status', async () => {
+    const order: string[] = []
+    await installChromaprintAndVerify(
+      async () => {
+        order.push('install')
+        return { success: true }
+      },
+      async () => {
+        order.push('verify')
+      },
+    )
+    expect(order).toEqual(['install', 'verify'])
   })
 })

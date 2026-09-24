@@ -33,7 +33,8 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
 
 7. [x] **Lote 4** — A1 AIFF→FLAC en caché + `/api/artwork` · A2 errores visibles + carátulas · A3 onda del deck en SVG · A4 deck independiente de la lista (limpiar no corta la pista; X cierra). Verificado en vivo con AIFF reales: suenan (00:02→00:05), carátulas en filas/Inspector/deck, clic al 75% → 05:43/07:35 (0.754) con la línea a 3 px del clic.
 
-8. [ ] **Lote 5** (`design/SPEC.md` § Lote 5): S1 stems a elección + escucha por carril · C1 Chromaprint instalable.
+8. [x] **Lote 5** — S1 stems a elección + escucha por carril (verificado en vivo: envía `stems:"vocals"`, solo Voces audible) · S1.1 carriles no generados ocultos · C1 botón Instalar Chromaprint (brew/winget).
+   **Antes de distribuir:** la app empaquetada abierta desde Finder no hereda el PATH de la terminal → no encontrará `ffmpeg`/`fpcalc`/`brew` en `/opt/homebrew/bin`. Resolver con rutas conocidas o binarios incluidos (junto con fijar versiones y Python propio).
 
 **Siguiente (propuesto):** QA manual de Carlos en Electron (audio audible, arrastrar carpetas) → Back 3 (puntajes de Sets normalizados) → P2 del clasificador (ordenar/deshacer con manifiesto) → F9 corte `ui/`→`web/dist`. Back 1b (libkeyfinder) y la pérdida de remixer en `identify` como mejoras.
 

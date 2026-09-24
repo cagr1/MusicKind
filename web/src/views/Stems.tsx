@@ -108,6 +108,10 @@ export function createStemSeparationRequest(
   return { files: [input], outputDir, stems, format }
 }
 
+export function generatedStemLanes(result: StemResult | null) {
+  return STEM_LANES.filter((lane) => lane === 'original' || Boolean(result?.[lane]))
+}
+
 function fileName(path: string) {
   return path.split(/[\\/]/).pop() ?? path
 }
@@ -227,6 +231,9 @@ export function Stems() {
     if (!lanePaths[1] && lanePaths[2]) {
       initialLaneState.vocals.audible = false
       initialLaneState.instrumental.audible = true
+    } else if (!lanePaths[1] && !lanePaths[2]) {
+      initialLaneState.original.audible = true
+      initialLaneState.vocals.audible = false
     }
     setLaneState(initialLaneState)
     const controller = createStemAudioController(audio, initialLaneState)
@@ -351,6 +358,7 @@ export function Stems() {
       color: 'bg-zinc-300',
     },
   ]
+  const visibleLanes = new Set(generatedStemLanes(result))
 
   return (
     <div className="flex h-full min-w-0 overflow-hidden">
@@ -499,47 +507,51 @@ export function Stems() {
                 <span>{formatTime(duration)}</span>
               </div>
               <div className="space-y-2">
-                {laneItems.map((lane) => (
-                  <StemLane
-                    key={lane.key}
-                    lane={lane.key}
-                    label={lane.label}
-                    icon={lane.icon}
-                    path={lane.path}
-                    color={lane.color}
-                    state={laneState[lane.key]}
-                    active={laneState[lane.key].audible}
-                    disabled={!lane.path}
-                    currentTime={currentTime}
-                    duration={duration}
-                    onSeek={seek}
-                    onUpdate={updateLane}
-                    onShow={
-                      lane.path ? () => void electron.showInFolder(lane.path as string) : undefined
-                    }
-                    t={t}
-                  />
-                ))}
+                {laneItems
+                  .filter((lane) => visibleLanes.has(lane.key))
+                  .map((lane) => (
+                    <StemLane
+                      key={lane.key}
+                      lane={lane.key}
+                      label={lane.label}
+                      icon={lane.icon}
+                      path={lane.path}
+                      color={lane.color}
+                      state={laneState[lane.key]}
+                      active={laneState[lane.key].audible}
+                      disabled={!lane.path}
+                      currentTime={currentTime}
+                      duration={duration}
+                      onSeek={seek}
+                      onUpdate={updateLane}
+                      onShow={
+                        lane.path
+                          ? () => void electron.showInFolder(lane.path as string)
+                          : undefined
+                      }
+                      t={t}
+                    />
+                  ))}
               </div>
             </div>
           </>
         )}
       </section>
       <TrackInspector track={metadata}>
-        {result ? (
+        {result && (result.vocals || result.instrumental) ? (
           <div className="space-y-2 rounded border border-line bg-surface-panel p-3 text-[11px]">
-            <div className="flex justify-between">
-              <span className="text-zinc-500">{t('stems.vocals')}</span>
-              <span className="max-w-40 truncate font-mono">
-                {result.vocals ? fileName(result.vocals) : '—'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-zinc-500">{t('stems.instrumental')}</span>
-              <span className="max-w-40 truncate font-mono">
-                {result.instrumental ? fileName(result.instrumental) : '—'}
-              </span>
-            </div>
+            {result.vocals ? (
+              <div className="flex justify-between">
+                <span className="text-zinc-500">{t('stems.vocals')}</span>
+                <span className="max-w-40 truncate font-mono">{fileName(result.vocals)}</span>
+              </div>
+            ) : null}
+            {result.instrumental ? (
+              <div className="flex justify-between">
+                <span className="text-zinc-500">{t('stems.instrumental')}</span>
+                <span className="max-w-40 truncate font-mono">{fileName(result.instrumental)}</span>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </TrackInspector>
@@ -608,6 +620,7 @@ function StemLane({
             className={`flex size-5 items-center justify-center rounded ${active ? 'text-brand' : 'text-zinc-400'} disabled:opacity-30`}
             aria-label={t('stems.listenLane')}
             title={t('stems.listenLane')}
+            aria-pressed={active}
           >
             <Headphones className="size-3.5" />
           </button>

@@ -17,6 +17,7 @@ export interface InstallFFmpegResult {
   message?: string
   error?: string
 }
+export type InstallChromaprintResult = InstallFFmpegResult
 
 interface ElectronApi {
   getPathForFile: (file: File) => string | Promise<string>
@@ -26,6 +27,7 @@ interface ElectronApi {
   checkPipPackage: (pkg: string) => Promise<PipPackageCheckResult>
   checkFFmpeg: () => Promise<boolean>
   installFFmpeg: () => Promise<InstallFFmpegResult>
+  installChromaprint: () => Promise<InstallChromaprintResult>
   isElectron: () => Promise<boolean>
   showInFolder: (filePath: string) => Promise<void>
   openExternal: (targetUrl: string) => Promise<void>
@@ -88,6 +90,12 @@ export const electron = {
     const api = getApi()
     if (!api) return { success: false, error: 'not-electron' }
     return api.installFFmpeg()
+  },
+
+  async installChromaprint(): Promise<InstallChromaprintResult> {
+    const api = getApi()
+    if (!api) return { success: false, error: 'not-electron' }
+    return api.installChromaprint()
   },
 
   // Round trip to the main process, kept for parity with the full preload

@@ -77,17 +77,16 @@ export function dependencyAction(
   value: boolean | null,
   group: InstallGroup | null,
 ): DependencyAction {
-  if (key === 'acoustid') return null
   if (value === true) return 'verify'
-  return key === 'ffmpeg' || group ? 'install' : null
+  return key === 'ffmpeg' || key === 'acoustid' || group ? 'install' : null
 }
 export function dependencyBusy(
   key: DependencyKey,
   group: InstallGroup | null,
   checking: boolean,
-  installing: InstallGroup | 'ffmpeg' | null,
+  installing: InstallGroup | 'ffmpeg' | 'chromaprint' | null,
 ): boolean {
-  const target = key === 'ffmpeg' ? 'ffmpeg' : group
+  const target = key === 'ffmpeg' ? 'ffmpeg' : key === 'acoustid' ? 'chromaprint' : group
   return checking || (installing !== null && installing === target)
 }
 export function dependencyLabel(
@@ -97,6 +96,16 @@ export function dependencyLabel(
   if (value === true) return labels.installed
   if (value === false) return labels.missing
   return labels.checking || labels.unavailable
+}
+
+export async function installChromaprintAndVerify(
+  install: () => Promise<{ success: boolean; error?: string; message?: string }>,
+  verify: () => Promise<void>,
+): Promise<void> {
+  const result = await install()
+  if (!result.success)
+    throw new Error(result.message || result.error || 'Chromaprint installation failed')
+  await verify()
 }
 
 function SecretInput({
@@ -142,7 +151,9 @@ export function Settings() {
   const [error, setError] = React.useState<string | null>(null)
   const [saving, setSaving] = React.useState(false)
   const [checking, setChecking] = React.useState(false)
-  const [installing, setInstalling] = React.useState<InstallGroup | 'ffmpeg' | null>(null)
+  const [installing, setInstalling] = React.useState<
+    InstallGroup | 'ffmpeg' | 'chromaprint' | null
+  >(null)
   const [visibleSecrets, setVisibleSecrets] = React.useState<Record<string, boolean>>({})
   const checkDependencies = React.useCallback(async () => {
     setChecking(true)
@@ -213,8 +224,20 @@ export function Settings() {
     setInstalling('ffmpeg')
     try {
       const result = await electron.installFFmpeg()
-      if (!result.success) throw new Error(result.error || t('settings.installError'))
+      if (!result.success)
+        throw new Error(result.message || result.error || t('settings.installError'))
       await checkDependencies()
+      toast.success(t('settings.installDone'))
+    } catch (installError) {
+      toast.error(installError instanceof Error ? installError.message : t('settings.installError'))
+    } finally {
+      setInstalling(null)
+    }
+  }
+  const installChromaprint = async () => {
+    setInstalling('chromaprint')
+    try {
+      await installChromaprintAndVerify(() => electron.installChromaprint(), checkDependencies)
       toast.success(t('settings.installDone'))
     } catch (installError) {
       toast.error(installError instanceof Error ? installError.message : t('settings.installError'))
@@ -371,12 +394,15 @@ export function Settings() {
                     ? () => void checkDependencies()
                     : key === 'ffmpeg'
                       ? () => void installFfmpeg()
-                      : group
-                        ? () => void install(group)
-                        : undefined
+                      : key === 'acoustid'
+                        ? () => void installChromaprint()
+                        : group
+                          ? () => void install(group)
+                          : undefined
                 }
                 actionLabel={deps[key] === true ? t('settings.verify') : t('settings.install')}
                 busy={dependencyBusy(key, group, checking, installing)}
+                hint={key === 'acoustid' ? t('settings.acoustidHint') : undefined}
               />
             ))}
           </SettingsSection>
@@ -434,6 +460,7 @@ function DependencyRow({
   action,
   actionLabel,
   busy,
+  hint,
 }: {
   label: string
   value: boolean | null
@@ -441,6 +468,7 @@ function DependencyRow({
   action?: () => void
   actionLabel: string
   busy: boolean
+  hint?: string
 }) {
   return (
     <div className="flex min-h-11 items-center justify-between px-3 py-2">
@@ -449,7 +477,18 @@ function DependencyRow({
           className={`size-1.5 rounded-full ${value === true ? 'bg-emerald-500' : value === false ? 'bg-zinc-600' : 'bg-amber-500'}`}
         />
         <div>
-          <p className="text-[11px] font-medium text-zinc-300">{label}</p>
+          {hint ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p tabIndex={0} className="cursor-help text-[11px] font-medium text-zinc-300">
+                  {label}
+                </p>
+              </TooltipTrigger>
+              <TooltipContent>{hint}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <p className="text-[11px] font-medium text-zinc-300">{label}</p>
+          )}
           <p className="text-[10px] text-zinc-600">{status}</p>
         </div>
       </div>

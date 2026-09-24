@@ -20,3 +20,26 @@ describe('getDroppedFilePath', () => {
     await expect(resolveDroppedFiles(files)).resolves.toEqual(['/Music/one.mp3', '/Music/two.wav'])
   })
 })
+
+describe('installChromaprint', () => {
+  it('returns a safe failure in a plain browser', async () => {
+    const original = window.electronAPI
+    delete window.electronAPI
+    await expect(electron.installChromaprint()).resolves.toEqual({
+      success: false,
+      error: 'not-electron',
+    })
+    window.electronAPI = original
+  })
+
+  it('calls the Electron install bridge when available', async () => {
+    const original = window.electronAPI
+    window.electronAPI = {
+      ...({} as NonNullable<typeof window.electronAPI>),
+      installChromaprint: vi.fn().mockResolvedValue({ success: true }),
+    }
+    await expect(electron.installChromaprint()).resolves.toEqual({ success: true })
+    expect(window.electronAPI.installChromaprint).toHaveBeenCalledOnce()
+    window.electronAPI = original
+  })
+})

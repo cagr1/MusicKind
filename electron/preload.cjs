@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkPipPackage: (pkg) => ipcRenderer.invoke('check-pip-package', pkg),
   checkFFmpeg: () => ipcRenderer.invoke('check-ffmpeg'),
   installFFmpeg: () => ipcRenderer.invoke('install-ffmpeg'),
+  installChromaprint: () => ipcRenderer.invoke('install-chromaprint'),
   isElectron: () => ipcRenderer.invoke('is-electron'),
   showInFolder: (filePath) => ipcRenderer.invoke('show-in-folder', filePath),
   openExternal: (targetUrl) => ipcRenderer.invoke('open-external', targetUrl)

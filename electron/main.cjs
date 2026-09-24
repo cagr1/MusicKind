@@ -388,6 +388,59 @@ ipcMain.handle('install-ffmpeg', async () => {
   });
 });
 
+// Install Chromaprint (fpcalc) using the platform package manager.
+ipcMain.handle('install-chromaprint', async () => {
+  const platform = process.platform;
+  let command;
+  let args;
+  if (platform === 'darwin') {
+    command = 'brew';
+    args = ['install', 'chromaprint'];
+  } else if (platform === 'win32') {
+    command = 'winget';
+    args = ['install', '-e', '--id', 'AcoustID.Chromaprint', '--accept-package-agreements', '--accept-source-agreements'];
+  } else {
+    return {
+      success: false,
+      output: '',
+      message: 'Instalación automática no disponible. Instala Chromaprint (fpcalc) con el gestor de paquetes de tu sistema.',
+    };
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let output = '';
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    let child;
+    try {
+      child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    } catch (error) {
+      finish({ success: false, output, message: `${command} no está disponible. Instala Chromaprint manualmente (${command} install chromaprint).` });
+      return;
+    }
+    child.stdout?.on('data', (data) => { output += typeof data === 'string' ? data : stdoutDecoder.write(data); });
+    child.stderr?.on('data', (data) => { output += typeof data === 'string' ? data : stderrDecoder.write(data); });
+    child.on('error', () => {
+      const manual = platform === 'darwin'
+        ? 'Instala Homebrew desde https://brew.sh y ejecuta "brew install chromaprint".'
+        : 'Winget no está disponible. Instala Chromaprint (fpcalc) manualmente desde https://acoustid.org/chromaprint.';
+      finish({ success: false, output, message: manual });
+    });
+    child.on('close', (code) => {
+      output += stdoutDecoder.end() + stderrDecoder.end();
+      finish(code === 0
+        ? { success: true, output, message: 'Chromaprint instalado correctamente.' }
+        : { success: false, output, message: `No se pudo instalar Chromaprint. Ejecuta "${command} ${args.join(' ')}" manualmente.` });
+    });
+  });
+});
+
 // Check if running in Electron environment
 ipcMain.handle('is-electron', () => {
   return true;

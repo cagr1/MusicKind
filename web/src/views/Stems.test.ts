@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createStemAudioController, createStemSeparationRequest } from './Stems'
+import { createStemAudioController, createStemSeparationRequest, generatedStemLanes } from './Stems'
 
 class FakeAudio {
   currentTime = 0
@@ -62,5 +62,17 @@ describe('createStemAudioController', () => {
       stems: 'instrumental',
       format: 'mp3',
     })
+  })
+})
+
+describe('generatedStemLanes', () => {
+  it('shows the original and only stems returned by the separator', () => {
+    expect(
+      generatedStemLanes({ ok: true, input: '/music/a.mp3', vocals: '/out/vocals.wav' }),
+    ).toEqual(['original', 'vocals'])
+    expect(
+      generatedStemLanes({ ok: true, input: '/music/a.mp3', instrumental: '/out/music.wav' }),
+    ).toEqual(['original', 'instrumental'])
+    expect(generatedStemLanes(null)).toEqual(['original'])
   })
 })
