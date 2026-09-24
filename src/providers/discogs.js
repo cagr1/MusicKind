@@ -1,4 +1,4 @@
-import { cached, fetchJson, USER_AGENT } from './http.js';
+import { cached, cleanTrackTitle, fetchJson, USER_AGENT } from './http.js';
 export class DiscogsClient {
   constructor({ key, secret, cache, fetcher = fetchJson } = {}) {
     this.key = key;
@@ -22,11 +22,7 @@ export class DiscogsClient {
     const structured = await this.searchQuery(`artist=${artist}|track=${track}`, { artist, track });
     if (structured.length) return structured;
 
-    const cleanTrack = track
-      .replace(/\[[^\]]*\]/g, ' ')
-      .replace(/\s*\((?:original|extended)\s+mix\)\s*/gi, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const cleanTrack = cleanTrackTitle(track);
     const query = `${artist} ${cleanTrack}`.trim();
     return this.searchQuery(`q=${query}`, { q: query });
   }

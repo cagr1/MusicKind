@@ -741,6 +741,12 @@ Last.fm `electronic` (6) y `dance`→Dance Pop (4). Solo 13 útiles.
    el más frecuente en los 3 resultados de Discogs (empate: el primero).
 Tests node con mocks para 1-3.
 
+### Back 4.4 · Deezer: búsqueda por texto libre
+Medido en vivo 2026-09-24: `q=artist:"Fisher" track:"Losing It"` → total 0; `q=Fisher Losing It` → "Losing It | Fisher".
+`src/providers/deezer.js`: si la búsqueda avanzada da 0, repetir con `q="<artist> <title>"` (título limpio como en Discogs 4.2:
+sin corchetes ni "(Original/Extended Mix)"). Aceptar el primer resultado solo si el artista coincide (sin mayúsculas/acentos, contiene)
+con alguno de los artistas del tag. Test con mock.
+
 ### E2 · Vista "Clasificar por etiquetas" (front)
 Modo por defecto del Clasificador (el método viejo queda en un `Select` "Método: Etiquetas (recomendado) · Reglas online").
 1. Tres carpetas: Carpeta a clasificar · Ejemplos protegidos (excluidas; se guardan en `localStorage` como conveniencia) · Destino

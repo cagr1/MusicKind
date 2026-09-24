@@ -21,3 +21,15 @@ export function cached(cache, key, fetcher) {
   if (previous) return Promise.resolve(previous);
   return fetcher().then(value => { cache?.set(key, value); return value; });
 }
+
+export function cleanTrackTitle(title = '') {
+  return String(title)
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\s*\((?:original|extended)\s+mix\)\s*/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function normalizeArtistName(name = '') {
+  return String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim();
+}

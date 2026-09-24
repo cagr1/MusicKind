@@ -60,6 +60,24 @@ test('Deezer resolves track metadata using injected fetcher', async () => {
   assert.deepEqual(await client.search('Artist', 'Track'), { artist: 'Artist', title: 'Track', album: 'Album', isrc: 'ISRC', bpm: 124, cover: 'cover', releaseDate: '2024-01-01' });
 });
 
+test('Deezer retries an empty advanced search with cleaned free text and checks artist identity', async () => {
+  const urls = [];
+  const responses = [
+    { data: [] },
+    { data: [{ id: 42, title: 'Losing It', artist: { name: 'FÍSHER' }, album: { title: 'Boom' } }] },
+    { bpm: 125, release_date: '2018-06-01' },
+  ];
+  const client = new DeezerClient({ fetcher: async url => { urls.push(new URL(url)); return responses.shift(); } });
+
+  assert.equal((await client.search('Fisher', 'Losing It (Original Mix) [Extended]')).artist, 'FÍSHER');
+  assert.equal(urls.length, 3);
+  assert.match(urls[0].searchParams.get('q'), /artist:/);
+  assert.equal(urls[1].searchParams.get('q'), 'Fisher Losing It');
+
+  const wrongArtist = new DeezerClient({ fetcher: async () => ({ data: [{ title: 'Losing It', artist: { name: 'Someone Else' } }] }) });
+  assert.equal(await wrongArtist.search('Fisher', 'Losing It'), null);
+});
+
 test('provider HTTP honors Retry-After on 429', async () => {
   const { fetchJson } = await import('../src/providers/http.js');
   let attempts = 0;
