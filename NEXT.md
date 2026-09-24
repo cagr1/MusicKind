@@ -27,6 +27,8 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
    -
    - [x] L5 Stems — vista DAW (3 carriles con onda real, regla de tiempo, M/S, volumen, Inspector); QA con `/api/stem-separate` simulado en el navegador (demucs no instalado) + estado real "falta demucs". Pendiente: prueba real tras instalar demucs (~2 GB).
 
+5. [x] **F9a** — el servidor sirve `web/dist` (UI nueva) en Electron; `npm run electron`/`dev` compilan la web antes; `npm run electron:legacy` abre `ui/`. Verificado: `:3030/` entrega la UI nueva, CSS y woff2 con MIME correcto; node 57/57.
+
 **Siguiente (propuesto):** QA manual de Carlos en Electron (audio audible, arrastrar carpetas) → Back 3 (puntajes de Sets normalizados) → P2 del clasificador (ordenar/deshacer con manifiesto) → F9 corte `ui/`→`web/dist`. Back 1b (libkeyfinder) y la pérdida de remixer en `identify` como mejoras.
 
 Sigue pendiente en paralelo: revisión Terra del back (`e0c0424`), P1/P2 del clasificador, F3 contrato de escritura de tags.

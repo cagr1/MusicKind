@@ -410,6 +410,20 @@ QA: dry-run real sobre copias, nada se movió, `config/` intacto; tabla, género
   3 `HTMLAudioElement` sincronizados (re-sincronizar `currentTime` al buscar). Abrir / mostrar en carpeta por carril.
 - Sin demucs (`/api/check-deps` demucs=false): estado vacío con botón a Configuración. (En la máquina de QA demucs no está instalado.)
 
+## F9a · Servir la UI nueva en Electron (2026-09-24)
+
+Problema: `npm run electron` / `npm run dev` muestran la UI vieja: Electron carga `SERVER_ORIGIN` (`electron/main.cjs:72`) y el servidor
+sirve `ui/` (`src/server.js:23` `uiRoot`, `:98-105`). La UI nueva solo existía en Vite (5173). Cambios (sin borrar `ui/`):
+1. `src/server.js`: raíz estática = `web/dist` si existe `web/dist/index.html` y `process.env.MUSIC_KIND_UI !== 'legacy'`; si no, `ui/`.
+   Mantener la protección de path traversal (`filePath.startsWith(root)`).
+2. `serveFile` (`src/server.js:861`): MIME `.woff2` `font/woff2`, `.woff` `font/woff`, `.json` `application/json`, `.webp` `image/webp`,
+   `.ico` `image/x-icon`, `.map` `application/json`.
+3. `package.json` raíz: script `"build:web": "npm --prefix web run build"`; `"electron"` y `"dev"` ejecutan `npm run build:web &&` antes de
+   `electron .`; script `"electron:legacy": "MUSIC_KIND_UI=legacy electron ."`. `build.files` incluye `web/dist/**/*`.
+4. Test node (`tests/`): con un `web/dist` temporal (o el real si existe) `GET /` devuelve el `index.html` de web/dist; con
+   `MUSIC_KIND_UI=legacy` devuelve `ui/index.html`; `GET /assets/x.woff2` → `font/woff2`; `GET /../package.json` → 404.
+**Gate:** `node --test tests/*.test.js` exit 0 · `npm run build:web` exit 0 · el cerebro abre Electron y comprueba la UI nueva.
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)

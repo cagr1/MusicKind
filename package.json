@@ -10,10 +10,12 @@
   },
   "scripts": {
     "start": "node src/cli.js",
-    "dev": "NODE_ENV=development electron .",
+    "dev": "npm run build:web && NODE_ENV=development electron .",
     "dashboard": "node src/server.js",
-    "electron": "electron .",
+    "electron": "npm run build:web && electron .",
+    "electron:legacy": "MUSIC_KIND_UI=legacy electron .",
     "electron-dev": "NODE_ENV=development electron .",
+    "build:web": "npm --prefix web run build",
     "build": "electron-builder",
     "test": "jest",
     "test:audio-ingestion": "node --test tests/audio-ingestion.test.js",
@@ -37,6 +39,7 @@
     "files": [
       "electron/**/*",
       "ui/**/*",
+      "web/dist/**/*",
       "src/**/*",
       "config/**/*"
     ],

@@ -21,7 +21,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
 loadEnv({ path: path.join(projectRoot, ".env.local"), override: false });
-const uiRoot = path.join(projectRoot, "ui");
+const legacyUiRoot = path.join(projectRoot, "ui");
+const webUiRoot = path.join(projectRoot, "web", "dist");
 const genresPath = path.join(projectRoot, "config", "genres.json");
 const settingsPath = path.join(projectRoot, "config", "settings.json");
 const pythonDependenciesPath = path.join(projectRoot, "config", "python-dependencies.json");
@@ -87,6 +88,14 @@ const installPythonDependencies = createPythonInstallHandler({ projectRoot, depe
 // Registry for running processes (for cancellation)
 const runningProcesses = new Map();
 
+function getUiRoot() {
+  if (process.env.MUSIC_KIND_UI !== "legacy"
+    && fs.existsSync(path.join(webUiRoot, "index.html"))) {
+    return webUiRoot;
+  }
+  return legacyUiRoot;
+}
+
 export function createServer({ installHandler = installPythonDependencies } = {}) {
   return http.createServer(async (req, res) => {
   try {
@@ -96,12 +105,13 @@ export function createServer({ installHandler = installPythonDependencies } = {}
       return;
     }
 
+    const uiRoot = getUiRoot();
     if (url.pathname === "/" || url.pathname === "/index.html") {
       return serveFile(res, path.join(uiRoot, "index.html"));
     }
 
     const filePath = path.join(uiRoot, url.pathname);
-    if (filePath.startsWith(uiRoot)) {
+    if (filePath.startsWith(`${uiRoot}${path.sep}`)) {
       return serveFile(res, filePath);
     }
 
@@ -872,7 +882,13 @@ function serveFile(res, filePath) {
     ".svg": "image/svg+xml",
     ".png": "image/png",
     ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg"
+    ".jpeg": "image/jpeg",
+    ".woff2": "font/woff2",
+    ".woff": "font/woff",
+    ".json": "application/json",
+    ".webp": "image/webp",
+    ".ico": "image/x-icon",
+    ".map": "application/json"
   };
   res.writeHead(200, {
     "Content-Type": types[ext] || "application/octet-stream",
