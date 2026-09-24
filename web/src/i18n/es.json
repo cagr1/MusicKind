@@ -242,5 +242,27 @@
     "retry": "Intentar de nuevo",
     "installError": "No se pudo instalar la dependencia.",
     "installDone": "Dependencia instalada"
+  },
+  "stems": {
+    "title": "Separador de stems",
+    "chooseFile": "Elige una pista para separar",
+    "selectFile": "Elegir archivo de audio",
+    "separate": "Separar stems",
+    "format": "Formato",
+    "original": "Original",
+    "vocals": "Voces",
+    "instrumental": "Instrumental",
+    "mute": "Silenciar carril",
+    "solo": "Escuchar solo este carril",
+    "volume": "Volumen",
+    "showInFolder": "Mostrar en carpeta",
+    "demucsMissing": "Instala Demucs para separar stems",
+    "openSettings": "Ir a Configuración",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "cancel": "Cancelar",
+    "retry": "Intentar de nuevo",
+    "error": "No se pudo separar la pista",
+    "playbackError": "No se pudo reproducir la pista"
   }
 }

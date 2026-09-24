@@ -242,5 +242,27 @@
     "retry": "Try again",
     "installError": "The dependency could not be installed.",
     "installDone": "Dependency installed"
+  },
+  "stems": {
+    "title": "Stem separator",
+    "chooseFile": "Choose a track to separate",
+    "selectFile": "Choose an audio file",
+    "separate": "Separate stems",
+    "format": "Format",
+    "original": "Original",
+    "vocals": "Vocals",
+    "instrumental": "Instrumental",
+    "mute": "Mute lane",
+    "solo": "Solo this lane",
+    "volume": "Volume",
+    "showInFolder": "Show in folder",
+    "demucsMissing": "Install Demucs to separate stems",
+    "openSettings": "Go to Settings",
+    "pause": "Pause",
+    "resume": "Resume",
+    "cancel": "Cancel",
+    "retry": "Try again",
+    "error": "The track could not be separated",
+    "playbackError": "The track could not be played"
   }
 }

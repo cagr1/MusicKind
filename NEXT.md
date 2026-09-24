@@ -16,7 +16,7 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
 3. [x] **Front 1** — tokens (`brand`), Inspector completo, reproductor, shell, `ProcessProvider`, vista BPM. Ejecutado por: Luna (6 corridas: 1a, 1a.1, 1b, 1b.1, 1b.2, chip) · Spec: `design/SPEC.md` § Front 1.
    Verificado por el cerebro 2026-09-23: build 0, lint 0 errores, vitest 35/35, sin hex en tsx. QA en vivo (Chrome headless + backend real + `electronAPI` simulado, copias): flujo vacío→analizar→resultados, títulos/artistas del tag, tonalidad tag vs estimada (borde punteado), ondas reales, Inspector completo; guardar escribe TBPM/TKEY y conserva título y carátula. Falta QA manual de Carlos en Electron (audio audible, arrastrar carpeta). Sin commit.
    Nota: el plugin `impeccable` del entorno Codex crea `.impeccable/` en la raíz y empuja a Luna a añadir supresiones; se borró. Ignorado en `.gitignore`.
-4. [~] **Front 2** — lote en `design/SPEC.md` § "Lote Front 2 (resto)".
+4. [x] **Front 2** — lote en `design/SPEC.md` § "Lote Front 2 (resto)".
    - [x] Convertidor — verificado en vivo (MP3→WAV, tags en fila/Inspector, tonalidad nula = —). Commit `9f90ea2`.
    - [x] L1 Metadatos — `identify` con `preview` (no escribe ni renombra; verificado con Spotify real, mtime igual), formulario con original tachado, tonalidad del tag (`Amin`→8A). Pendiente de producto: identify reemplaza "Chocolate Spread, Oscar P" por "Chocolate Spread" (pierde remixer).
    - [ ] L2 Configuración ·
@@ -24,7 +24,10 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
      **Mejora de back pendiente (Back 3):** `style_analyzer.py` da 93–100% a casi todo (cosine sobre features sin normalizar; tempo domina) → estandarizar features (z-score por feature sobre las referencias) antes del coseno y medir separación.
    -
    - [x] L4 Clasificador — solo análisis (dryRun fijo), verificado en vivo sobre copias: nada se mueve, `config/` intacto; fuente i18n, chip Camelot, Select/Switch de radix, sin destino falso.
-   - [ ] L5 Stems (demucs no instalado en QA)
+   -
+   - [x] L5 Stems — vista DAW (3 carriles con onda real, regla de tiempo, M/S, volumen, Inspector); QA con `/api/stem-separate` simulado en el navegador (demucs no instalado) + estado real "falta demucs". Pendiente: prueba real tras instalar demucs (~2 GB).
+
+**Siguiente (propuesto):** QA manual de Carlos en Electron (audio audible, arrastrar carpetas) → Back 3 (puntajes de Sets normalizados) → P2 del clasificador (ordenar/deshacer con manifiesto) → F9 corte `ui/`→`web/dist`. Back 1b (libkeyfinder) y la pérdida de remixer en `identify` como mejoras.
 
 Sigue pendiente en paralelo: revisión Terra del back (`e0c0424`), P1/P2 del clasificador, F3 contrato de escritura de tags.
 
