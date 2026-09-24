@@ -10,6 +10,7 @@ import {
   Tags,
   Terminal,
 } from 'lucide-react'
+import { Suspense } from 'react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
 import { CommandMenu } from '@/components/command-menu'
@@ -22,11 +23,23 @@ import logo from '@/assets/musickind-logo.svg'
 import { Popover } from 'radix-ui'
 import { PlayerProvider } from '@/lib/player'
 import { ProcessProvider, useProcess } from '@/lib/process'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const DOT_CLASS: Record<StatusState, string> = {
   ok: 'bg-emerald-500',
   warn: 'bg-amber-500',
   error: 'bg-red-500',
+}
+
+function ViewFallback() {
+  return (
+    <div className="flex h-full flex-col gap-4 p-6" aria-busy="true">
+      <Skeleton className="h-8 w-48 bg-white/[0.06]" />
+      <Skeleton className="h-12 w-full bg-white/[0.06]" />
+      <Skeleton className="h-12 w-full bg-white/[0.06]" />
+      <Skeleton className="h-12 w-full bg-white/[0.06]" />
+    </div>
+  )
 }
 
 function StatusIndicator({
@@ -108,10 +121,10 @@ function Shell() {
                     key={item.key}
                     type="button"
                     onClick={() => setView(item.key)}
-                    className={`flex h-8 w-full items-center gap-2.5 rounded border-l-2 px-3 text-left text-[12px] font-medium ${
+                    className={`flex h-8 w-full items-center gap-2.5 rounded px-3 text-left text-[12px] font-medium ${
                       isActive
-                        ? 'border-brand bg-white/[0.06] text-zinc-100'
-                        : 'border-transparent text-zinc-500 hover:bg-white/[0.03] hover:text-zinc-300'
+                        ? 'bg-white/[0.07] text-zinc-50'
+                        : 'text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-300'
                     }`}
                   >
                     <Icon className={`size-4 ${isActive ? 'text-brand' : ''}`} />
@@ -192,7 +205,9 @@ function Shell() {
           </div>
         </aside>
         <main className="min-w-0 flex-1 overflow-hidden">
-          <ActiveView />
+          <Suspense fallback={<ViewFallback />}>
+            <ActiveView />
+          </Suspense>
         </main>
       </div>
       <CommandMenu />

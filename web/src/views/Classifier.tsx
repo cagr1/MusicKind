@@ -470,7 +470,7 @@ function ResultsTable({
             <tr
               key={result.id}
               onClick={() => onSelect(result.id)}
-              className={`group h-12 cursor-pointer border-l-2 ${selectedId === result.id ? 'border-brand bg-white/[0.05]' : 'border-transparent hover:bg-white/[0.03]'}`}
+              className={`group h-12 cursor-pointer ${selectedId === result.id ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}
             >
               <td className="text-center font-mono text-[11px] text-zinc-500">
                 {String(index + 1).padStart(2, '0')}

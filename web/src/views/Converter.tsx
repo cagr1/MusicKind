@@ -439,10 +439,8 @@ function ResultsTable({
             <tr
               key={`${result.input}-${index}`}
               onClick={() => onSelect(result.input)}
-              className={`group h-12 cursor-pointer border-l-2 ${
-                selected?.input === result.input
-                  ? 'border-brand bg-white/[0.05]'
-                  : 'border-transparent hover:bg-white/[0.03]'
+              className={`group h-12 cursor-pointer ${
+                selected?.input === result.input ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'
               }`}
             >
               <td className="text-center font-mono text-[11px] text-zinc-500">

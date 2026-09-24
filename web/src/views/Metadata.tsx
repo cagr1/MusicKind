@@ -522,7 +522,7 @@ function MetadataRowView({
   return (
     <tr
       onClick={onSelect}
-      className={`h-12 cursor-pointer border-l-2 ${selected ? 'border-brand bg-white/[0.05]' : 'border-transparent hover:bg-white/[0.03]'}`}
+      className={`h-12 cursor-pointer ${selected ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}
     >
       <td className="text-center font-mono text-[11px] text-zinc-500">
         {processing ? (
