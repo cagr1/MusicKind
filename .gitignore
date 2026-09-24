@@ -52,3 +52,4 @@ guide.txt
 
 # Artefacto del plugin impeccable del entorno Codex
 .impeccable/
+config/app-keys.json

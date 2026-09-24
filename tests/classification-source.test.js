@@ -6,7 +6,7 @@ test("sourceFromReason distingue origen embebido, online y filtrado", () => {
   const cases = {
     "id3:House": "embedded",
     "tag:house": "online",
-    "spotify:pop": "spotify",
+    "discogs:pop": "discogs",
     "local:128": "bpm",
     "override:House": "override",
     "filtered:disabled-genre": "filtered",

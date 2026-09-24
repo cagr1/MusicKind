@@ -2,25 +2,24 @@ export interface TagResult {
   path: string
   tagGenre: string | null
   genre: string | null
-  status: 'ok' | 'review' | 'duplicate'
+  status: 'ok' | 'review'
   reason?: string | null
-  possibleDuplicate?: boolean
   destination: string | null
   title?: string
   artist?: string
   bpm?: number | null
   key?: string | null
-  genreSource?: 'tag' | 'lastfm' | 'spotify' | null
+  genreSource?: 'tag' | 'lastfm' | 'discogs' | null
   onlineTag?: string | null
 }
 
-export type TagStatusFilter = 'all' | TagResult['status'] | 'possibleDuplicate' | 'online'
+export type TagStatusFilter = 'all' | TagResult['status'] | 'online'
 
 export function buildClassifyMoves(results: TagResult[]) {
   return results
     .filter(
       (result) =>
-        result.status === 'ok' && !result.possibleDuplicate && result.genre && result.destination,
+        result.status === 'ok' && result.genre && result.destination,
     )
     .map((result) => ({ from: result.path, to: result.destination as string }))
 }
@@ -29,11 +28,9 @@ export function filterTagResults(results: TagResult[], status: TagStatusFilter, 
   return results.filter((result) => {
     const statusMatches =
       status === 'all' ||
-      (status === 'possibleDuplicate'
-        ? result.possibleDuplicate || result.status === 'duplicate'
-        : result.status === status)
+      result.status === status
     const onlineMatches = status === 'online'
-      ? result.status === 'ok' && (result.genreSource === 'lastfm' || result.genreSource === 'spotify')
+      ? result.status === 'ok' && (result.genreSource === 'lastfm' || result.genreSource === 'discogs')
       : statusMatches
     return onlineMatches && (genre === 'all' || (result.genre ?? 'review') === genre)
   })
@@ -44,9 +41,7 @@ export function tagResultCounts(results: TagResult[]) {
     all: results.length,
     ok: results.filter((result) => result.status === 'ok').length,
     review: results.filter((result) => result.status === 'review').length,
-    duplicate: results.filter((result) => result.status === 'duplicate').length,
-    possibleDuplicate: results.filter((result) => result.possibleDuplicate).length,
-    online: results.filter((result) => result.status === 'ok' && (result.genreSource === 'lastfm' || result.genreSource === 'spotify')).length,
+    online: results.filter((result) => result.status === 'ok' && (result.genreSource === 'lastfm' || result.genreSource === 'discogs')).length,
   }
 }
 
@@ -79,8 +74,7 @@ export function changeTagGenre(
   const selected = new Set(paths)
   return results.map((result) => {
     if (!selected.has(result.path)) return result
-    const status: TagResult['status'] =
-      result.status === 'duplicate' ? 'duplicate' : genre === 'review' ? 'review' : 'ok'
+    const status: TagResult['status'] = genre === 'review' ? 'review' : 'ok'
     return {
       ...result,
       genre: genre === 'review' ? null : genre,

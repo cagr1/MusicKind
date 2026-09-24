@@ -34,24 +34,6 @@ export function classifyFromTags(tags) {
   return null;
 }
 
-export function classifyFromAudio({ tempo, energy }) {
-  if (!tempo || energy == null) return null;
-
-  if (tempo >= 110 && tempo <= 123 && energy >= 0.6) {
-    return { genre: "Afro House", reason: `spotify:audio:tempo=${tempo.toFixed(1)} energy=${energy.toFixed(2)}` };
-  }
-
-  if (tempo >= 122 && tempo <= 128 && energy >= 0.65) {
-    return { genre: "Tech House", reason: `spotify:audio:tempo=${tempo.toFixed(1)} energy=${energy.toFixed(2)}` };
-  }
-
-  if (tempo >= 118 && tempo <= 130 && energy >= 0.35 && energy < 0.65) {
-    return { genre: "Melodic Techno", reason: `spotify:audio:tempo=${tempo.toFixed(1)} energy=${energy.toFixed(2)}` };
-  }
-
-  return null;
-}
-
 function hasTag(tags, phrase) {
   const target = normalizeTag(phrase);
   return tags.some((t) => t === target || t.includes(target));

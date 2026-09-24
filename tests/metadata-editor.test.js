@@ -188,6 +188,18 @@ test("writeMetadata no escribe bpm/key cuando no se proveen", { skip: !ffmpegAva
   assert.ok(!lowerKeys.includes("tkey") && !lowerKeys.includes("initialkey"));
 });
 
+test("identifyAndTag usa Deezer por nombre de archivo cuando faltan tags", { skip: !ffmpegAvailable() }, async () => {
+  const dir = makeTempDir();
+  const filePath = path.join(dir, "Bicep - Glue.mp3");
+  spawnSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-loglevel", "error", filePath]);
+  const calls = [];
+  const deezer = { async search(artist, title) { calls.push([artist, title]); return { artist: "Bicep", title: "Glue", album: "Isles", releaseDate: "2021-01-01" }; } };
+  const result = await identifyAndTag(filePath, deezer, null, { preview: true });
+  assert.deepEqual(calls, [["Bicep", "Glue"]]);
+  assert.deepEqual(result.metadata, { title: "Glue", artist: "Bicep", album: "Isles", year: 2021, genre: "", track: null });
+  assert.equal(fs.existsSync(path.join(dir, "Bicep - Glue.mp3")), true);
+});
+
 test("identifyAndTag preview no escribe ni renombra el archivo", { skip: !ffmpegAvailable() }, async () => {
   const dir = makeTempDir();
   const filePath = makeToneFile(dir);

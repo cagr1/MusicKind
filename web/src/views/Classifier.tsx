@@ -59,7 +59,7 @@ import { toast } from 'sonner'
 const SOURCE_LABEL_KEYS: Record<string, TranslationKey> = {
   embedded: 'classifier.sourceLabels.embedded',
   online: 'classifier.sourceLabels.online',
-  spotify: 'classifier.sourceLabels.spotify',
+  discogs: 'classifier.sourceLabels.discogs',
   lastfm: 'classifier.sourceLabels.lastfm',
   bpm: 'classifier.sourceLabels.bpm',
   override: 'classifier.sourceLabels.override',
@@ -155,7 +155,7 @@ export function Classifier() {
 function LegacyClassifier({ method, onMethodChange }: { method: string; onMethodChange: (method: string) => void }) {
   const { setQueue, toggle, path: playingPath } = usePlayer()
   const t = useT()
-  const { view, setView } = useView()
+  const { view } = useView()
   const { state, run, pause, resume, cancel } = useProcessStream()
   const { results: savedResults, setActive, setResult } = useProcess()
   const [results, setResults] = React.useState<ClassifierResult[]>(
@@ -165,7 +165,6 @@ function LegacyClassifier({ method, onMethodChange }: { method: string; onMethod
   const [selectedId, setSelectedId] = React.useState<string | null>(results[0]?.id ?? null)
   const [genres, setGenres] = React.useState<string[]>([])
   const [genreDraft, setGenreDraft] = React.useState('')
-  const [settings, setSettings] = React.useState({ hasSpotify: true })
   const [configError, setConfigError] = React.useState<string | null>(null)
   const isBusy = state.status === 'running' || state.status === 'paused'
   const selected = results.find((result) => result.id === selectedId) ?? results[0] ?? null
@@ -242,18 +241,13 @@ function LegacyClassifier({ method, onMethodChange }: { method: string; onMethod
       getJson<{
         settings?: {
           defaultOutputDir?: string
-          spotifyClientId?: string
-          spotifyClientSecret?: string
         }
       }>('/api/settings'),
     ])
       .then(([genreResponse, settingsResponse]) => {
         if (cancelled) return
         setGenres(genreResponse.genres ?? [])
-        const saved = settingsResponse.settings ?? {}
-        setSettings({
-          hasSpotify: Boolean(saved.spotifyClientId && saved.spotifyClientSecret),
-        })
+        void settingsResponse
       })
       .catch(() => {
         if (!cancelled) setConfigError(t('classifier.settingsError'))
@@ -507,18 +501,6 @@ function LegacyClassifier({ method, onMethodChange }: { method: string; onMethod
             {configError}
           </div>
         )}
-        {!settings.hasSpotify && (
-          <div className="border-t border-amber-500/30 bg-amber-500/5 px-6 py-2 text-[11px] text-amber-200">
-            {t('classifier.noSpotify')}{' '}
-            <button
-              type="button"
-              className="underline underline-offset-2"
-              onClick={() => setView('settings')}
-            >
-              {t('classifier.openSettings')}
-            </button>
-          </div>
-        )}
         {distribution.length > 0 && <Distribution distribution={distribution} />}
       </section>
       <TrackInspector track={selectedTrack}>
@@ -546,9 +528,7 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
   const t = useT()
   const { toggle, path: playingPath, setQueue } = usePlayer()
   const [inputRoot, setInputRoot] = React.useState('')
-  const [excludeRoots, setExcludeRoots] = React.useState<string[]>([])
   const [genres, setGenres] = React.useState<string[]>([])
-  const [protectedLoaded, setProtectedLoaded] = React.useState(false)
   const [destRoot, setDestRoot] = React.useState('')
   const [results, setResults] = React.useState<TagResult[]>([])
   const [selectedPath, setSelectedPath] = React.useState<string | null>(null)
@@ -572,7 +552,7 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
   const moves = React.useMemo(() => buildClassifyMoves(results), [results])
   const onlineMoveCount = React.useMemo(() => moves.filter((move) => {
     const row = results.find((item) => item.path === move.from)
-    return row?.genreSource === 'lastfm' || row?.genreSource === 'spotify'
+    return row?.genreSource === 'lastfm' || row?.genreSource === 'discogs'
   }).length, [moves, results])
   const selected = results.find((item) => item.path === selectedPath) ?? results[0] ?? null
   const virtualizer = useVirtualizer({
@@ -583,14 +563,9 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
   })
   React.useEffect(() => {
     let cancelled = false
-    void Promise.all([
-      getJson<{ settings?: { protectedRoots?: string[] } }>('/api/settings'),
-      getJson<{ canonical?: string[] }>('/api/genre-aliases'),
-    ]).then(([settings, aliases]) => {
+    void getJson<{ canonical?: string[] }>('/api/genre-aliases').then((aliases) => {
       if (cancelled) return
-      setExcludeRoots(settings.settings?.protectedRoots ?? [])
       setGenres(aliases.canonical ?? [])
-      setProtectedLoaded(true)
     }).catch((e) => setError(e instanceof Error ? e.message : String(e)))
     return () => { cancelled = true }
   }, [])
@@ -616,7 +591,7 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
     setBusy(true)
     await streamProcess(
       '/api/classify-by-tags',
-      { inputRoot, excludeRoots, destRoot },
+      { inputRoot, destRoot },
       {
         onProgress: (p) => setProgress(`${p.current}/${p.total} · ${p.file}`),
         onResult: (value) => {
@@ -743,27 +718,16 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
               <Activity />
               {t('classifier.analyze')}
             </Button>
-            <TooltipProvider delayDuration={0}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span tabIndex={excludeRoots.length === 0 && moves.length > 0 ? 0 : -1}>
-                    <Button
-                      size="sm"
-                      onClick={() => setConfirmOpen(true)}
-                      disabled={busy || moves.length === 0}
-                    >
-                      {t('classifier.move')} · {moves.length}
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {excludeRoots.length === 0 && (
-                  <TooltipContent>{t('classifier.noProtectedWarning')}</TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
+            <Button
+              size="sm"
+              onClick={() => setConfirmOpen(true)}
+              disabled={busy || moves.length === 0}
+            >
+              {t('classifier.move')} · {moves.length}
+            </Button>
           </div>
         </header>
-        <div className="grid shrink-0 gap-2 border-b border-line px-5 py-3 text-[11px] md:grid-cols-3">
+        <div className="grid shrink-0 gap-2 border-b border-line px-5 py-3 text-[11px] md:grid-cols-2">
           <FolderField
             label={t('classifier.inputRoot')}
             value={inputRoot}
@@ -775,38 +739,11 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
             }
           />
           <FolderField
-            label={`${t('classifier.excludeRoots')}${excludeRoots.length === 0 ? ` · ${t('classifier.addProtected')}` : ''}`}
-            value={excludeRoots.join(' · ') || t('classifier.noProtected')}
-            onClick={async () => {
-              const p = await electron.openDirectory(t('classifier.addProtected'))
-              if (p && !excludeRoots.includes(p)) {
-                const next = [...excludeRoots, p]
-                await postJson('/api/settings', { protectedRoots: next })
-                setExcludeRoots(next)
-              }
-            }}
-          />
-          <FolderField
             label={t('classifier.destRoot')}
             value={destRoot}
             onClick={() => void choose(t('classifier.destRoot'), setDestRoot)}
           />
         </div>
-        {protectedLoaded && excludeRoots.length === 0 && (
-          <div className="border-b border-red-500/30 bg-red-500/5 px-5 py-2 text-[11px] text-red-200">{t('classifier.noProtectedWarning')}</div>
-        )}
-        {excludeRoots.length > 0 && (
-          <div className="flex flex-wrap gap-1 border-b border-line px-5 py-2">
-            {excludeRoots.map((root) => (
-              <span
-                key={root}
-                className="rounded border border-line px-2 py-1 text-[10px] text-zinc-400"
-              >
-                {root}
-              </span>
-            ))}
-          </div>
-        )}
         {busy && (
           <div className="border-b border-line px-5 py-2 font-mono text-[11px] text-zinc-400">
             {progress || t('classifier.running')}
@@ -846,7 +783,7 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
                 </SelectTrigger>
                 <SelectContent>
                   {(
-                    ['all', 'ok', 'online', 'review', 'duplicate', 'possibleDuplicate'] as TagStatusFilter[]
+                    ['all', 'ok', 'online', 'review'] as TagStatusFilter[]
                   ).map((v) => (
                     <SelectItem key={v} value={v}>
                       {t(`classifier.statuses.${v}` as TranslationKey)} ·{' '}
@@ -988,7 +925,7 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
                           </Select>
                         </td>
                         <td className="truncate">
-                          {t(row.genreSource === 'lastfm' || row.genreSource === 'spotify' ? 'classifier.statuses.online' : `classifier.statuses.${row.possibleDuplicate && row.status !== 'duplicate' ? 'possibleDuplicate' : row.status}` as TranslationKey)}
+                          {t(row.genreSource === 'lastfm' || row.genreSource === 'discogs' ? 'classifier.statuses.online' : `classifier.statuses.${row.status}` as TranslationKey)}
                         </td>
                         <td
                           className="truncate font-mono text-zinc-500"
@@ -1014,7 +951,7 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
             <p>
               {t('classifier.destination')}: {selected.destination || '—'}
             </p>
-            {(selected.genreSource === 'lastfm' || selected.genreSource === 'spotify') && <p>{selected.onlineTag} · {t(`classifier.sourceLabels.${selected.genreSource}` as TranslationKey)}</p>}
+            {(selected.genreSource === 'lastfm' || selected.genreSource === 'discogs') && <p>{selected.onlineTag} · {t(`classifier.sourceLabels.${selected.genreSource}` as TranslationKey)}</p>}
           </div>
         )}
       </TrackInspector>
@@ -1026,9 +963,6 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
           <p className="text-sm text-zinc-400">
             {moves.length} {t('classifier.move')} · {moves.length - onlineMoveCount} {t('classifier.moveFromTags')} · {onlineMoveCount} {t('classifier.moveFromOnline')} · {destRoot}
           </p>
-          <div className={`max-h-20 overflow-auto text-xs ${excludeRoots.length ? 'text-zinc-400' : 'text-red-300'}`}>
-            <p>{t('classifier.protectedRoots')} · {excludeRoots.length ? excludeRoots.join(' · ') : t('classifier.none')}</p>
-          </div>
           <div className="max-h-48 overflow-auto text-xs">
             {Object.entries(
               moves.reduce<Record<string, number>>((acc, move) => {
@@ -1050,7 +984,7 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
               onClick={() =>
                 void runApply(
                   '/api/classify-apply',
-                  { moves, excludeRoots, destRoot },
+                  { moves, destRoot },
                   t('classifier.moveDone'),
                 )
               }

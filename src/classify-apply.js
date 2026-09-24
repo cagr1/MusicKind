@@ -19,11 +19,6 @@ function realPathIfExists(value) {
   return path.join(realPathIfExists(parent), path.basename(absolute));
 }
 
-function isProtected(file, excludes) {
-  const candidate = realPathIfExists(file);
-  return excludes.some((root) => within(candidate, realPathIfExists(root)));
-}
-
 function manifestDirectory(destRoot) {
   return path.join(destRoot, ".musickind", "manifests");
 }
@@ -34,14 +29,11 @@ function writeManifest(file, manifest) {
   fs.renameSync(temporary, file);
 }
 
-export function validateMoves({ moves, excludeRoots = [], destRoot }) {
+export function validateMoves({ moves, destRoot }) {
   if (!Array.isArray(moves) || moves.length === 0) throw new Error("moves debe contener al menos un movimiento");
   if (typeof destRoot !== "string" || !path.isAbsolute(destRoot)) throw new Error("destRoot debe ser una ruta absoluta");
-  if (!Array.isArray(excludeRoots) || excludeRoots.some((root) => typeof root !== "string" || !path.isAbsolute(root))) throw new Error("excludeRoots debe contener rutas absolutas");
   const destination = path.resolve(destRoot);
   const realDestination = realPathIfExists(destination);
-  const excludes = excludeRoots.map((root) => path.resolve(root));
-  if (excludes.some((root) => within(realDestination, realPathIfExists(root)))) throw new Error("destRoot no puede estar dentro de excludeRoots");
   const seenSources = new Set();
   for (const [index, move] of moves.entries()) {
     if (!move || typeof move.from !== "string" || typeof move.to !== "string" || !path.isAbsolute(move.from) || !path.isAbsolute(move.to)) throw new Error(`Movimiento ${index + 1}: from y to deben ser rutas absolutas`);
@@ -52,11 +44,9 @@ export function validateMoves({ moves, excludeRoots = [], destRoot }) {
     seenSources.add(from);
     if (!fs.existsSync(from) || !fs.statSync(from).isFile()) throw new Error(`Origen inexistente o no es archivo: ${from}`);
     if (!isAudio(from)) throw new Error(`Formato de audio no soportado: ${from}`);
-    if (isProtected(from, excludes)) throw new Error(`Origen dentro de excludeRoots: ${from}`);
     if (!within(to, destination) || to === destination || !within(realPathIfExists(to), realDestination)) throw new Error(`Destino fuera de destRoot: ${to}`);
-    if (isProtected(to, excludes)) throw new Error(`Destino dentro de excludeRoots: ${to}`);
   }
-  return { destination, excludes };
+  return { destination };
 }
 
 function availableDestination(requested) {
@@ -84,11 +74,11 @@ async function moveFile(from, to, renameSync = fs.renameSync) {
   }
 }
 
-export async function applyClassifyMoves({ moves, excludeRoots = [], destRoot, cancelled = () => false, onProgress = () => {}, renameSync = fs.renameSync }) {
-  const { destination, excludes } = validateMoves({ moves, excludeRoots, destRoot });
+export async function applyClassifyMoves({ moves, destRoot, cancelled = () => false, onProgress = () => {}, renameSync = fs.renameSync }) {
+  const { destination } = validateMoves({ moves, destRoot });
   const directory = manifestDirectory(destination);
   const manifestPath = path.join(directory, `${new Date().toISOString().replace(/[:.]/g, "-")}-${process.pid}-${Math.random().toString(36).slice(2, 8)}.json`);
-  const manifest = { createdAt: new Date().toISOString(), destRoot: destination, excludeRoots: excludes, undone: false,
+  const manifest = { createdAt: new Date().toISOString(), destRoot: destination, undone: false,
     moves: moves.map(({ from, to }) => ({ from: path.resolve(from), to: path.resolve(to), status: "pending" })) };
   fs.mkdirSync(directory, { recursive: true });
   writeManifest(manifestPath, manifest);
@@ -96,7 +86,7 @@ export async function applyClassifyMoves({ moves, excludeRoots = [], destRoot, c
     const move = manifest.moves[index];
     if (cancelled()) break;
     try {
-      if (!fs.existsSync(move.from) || isProtected(move.from, excludes)) throw new Error("El origen cambió o quedó protegido antes del movimiento");
+      if (!fs.existsSync(move.from) || !fs.statSync(move.from).isFile()) throw new Error("El origen cambió antes del movimiento");
       const actualTo = availableDestination(move.to);
       move.to = actualTo;
       await moveFile(move.from, actualTo, renameSync);
@@ -123,7 +113,7 @@ export function listClassifyManifests(destRoot) {
   });
 }
 
-export async function undoClassifyManifest({ manifestPath, excludeRoots = [], cancelled = () => false, onProgress = () => {}, renameSync = fs.renameSync }) {
+export async function undoClassifyManifest({ manifestPath, cancelled = () => false, onProgress = () => {}, renameSync = fs.renameSync }) {
   if (typeof manifestPath !== "string" || !path.isAbsolute(manifestPath) || path.extname(manifestPath) !== ".json") throw new Error("manifestPath inválido");
   const resolved = path.resolve(manifestPath);
   const manifest = JSON.parse(fs.readFileSync(resolved, "utf8"));
@@ -135,7 +125,7 @@ export async function undoClassifyManifest({ manifestPath, excludeRoots = [], ca
     if (cancelled()) break;
     try {
       if (!within(move.to, manifest.destRoot)) throw new Error("Destino del movimiento fuera de destRoot del manifiesto");
-      if (!fs.existsSync(move.to) || fs.existsSync(move.from) || isProtected(move.from, [...(manifest.excludeRoots || []), ...excludeRoots])) throw new Error("Destino ausente, origen ocupado o ruta protegida");
+      if (!fs.existsSync(move.to) || fs.existsSync(move.from)) throw new Error("Destino ausente u origen ocupado");
       await moveFile(move.to, move.from, renameSync);
       move.status = "undone";
       delete move.undoReason;

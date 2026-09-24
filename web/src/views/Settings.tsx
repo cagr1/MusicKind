@@ -26,13 +26,12 @@ import { getJson, installDependency, postJson } from '@/lib/api'
 import { electron } from '@/lib/electron'
 
 export interface SettingsData {
-  spotifyClientId: string
-  spotifyClientSecret: string
+  discogsKey: string
+  discogsSecret: string
   lastfmApiKey: string
   acoustidApiKey: string
   language: Lang
   defaultOutputDir: string
-  protectedRoots: string[]
 }
 export interface DependencyState {
   ffmpeg: boolean | null
@@ -45,13 +44,12 @@ type DependencyKey = keyof DependencyState
 export type InstallGroup = 'audio' | 'stems'
 export type DependencyAction = 'verify' | 'install' | null
 const EMPTY_SETTINGS: SettingsData = {
-  spotifyClientId: '',
-  spotifyClientSecret: '',
+  discogsKey: '',
+  discogsSecret: '',
   lastfmApiKey: '',
   acoustidApiKey: '',
   language: 'es',
   defaultOutputDir: 'output',
-  protectedRoots: [],
 }
 const EMPTY_DEPS: DependencyState = {
   ffmpeg: null,
@@ -210,11 +208,6 @@ export function Settings() {
     const directory = await electron.openDirectory(t('settings.chooseFolder'))
     if (directory) setField('defaultOutputDir', directory)
   }
-  const addProtectedRoot = async () => {
-    const directory = await electron.openDirectory(t('settings.protectedRoots'))
-    if (directory && !form.protectedRoots.includes(directory))
-      setField('protectedRoots', [...form.protectedRoots, directory])
-  }
   const install = async (group: InstallGroup) => {
     setInstalling(group)
     try {
@@ -255,7 +248,7 @@ export function Settings() {
   const toggleSecret = (key: string) =>
     setVisibleSecrets((current) => ({ ...current, [key]: !current[key] }))
   const secretRows: Array<{ key: keyof SettingsData; label: string }> = [
-    { key: 'spotifyClientSecret', label: t('settings.spotifyClientSecret') },
+    { key: 'discogsSecret', label: t('settings.discogsSecret') },
     { key: 'lastfmApiKey', label: t('settings.lastfmApiKey') },
     { key: 'acoustidApiKey', label: t('settings.acoustidApiKey') },
   ]
@@ -311,26 +304,19 @@ export function Settings() {
               </Button>
             </div>
           ) : null}
-          <SettingsSection title={t('settings.apiKeys')}>
-            <SettingRow label={t('settings.spotifyClientId')}>
-              <Input
-                value={form.spotifyClientId}
-                onChange={(event) => setField('spotifyClientId', event.target.value)}
-                className="h-7 w-full max-w-[320px] border-line bg-surface-elevated font-mono text-[11px]"
-              />{' '}
-            </SettingRow>
-            {secretRows.map(({ key, label }) => (
-              <SettingRow key={key} label={label}>
-                <SecretInput
-                  value={form[key] as string}
-                  visible={visibleSecrets[key]}
-                  label={visibleSecrets[key] ? t('settings.hideSecret') : t('settings.showSecret')}
-                  onChange={(value) => setField(key, value)}
-                  onToggle={() => toggleSecret(key)}
-                />
+          <details className="rounded border border-line px-3 py-2">
+            <summary className="cursor-pointer text-xs font-medium text-zinc-300">{t('settings.advancedKeys')}</summary>
+            <div className="mt-3 space-y-3">
+              <SettingRow label={t('settings.discogsKey')}>
+                <Input value={form.discogsKey} onChange={(event) => setField('discogsKey', event.target.value)} className="h-7 w-full max-w-[320px] border-line bg-surface-elevated font-mono text-[11px]" />
               </SettingRow>
-            ))}
-          </SettingsSection>
+              {secretRows.map(({ key, label }) => (
+                <SettingRow key={key} label={label}>
+                  <SecretInput value={form[key] as string} visible={visibleSecrets[key]} label={visibleSecrets[key] ? t('settings.hideSecret') : t('settings.showSecret')} onChange={(value) => setField(key, value)} onToggle={() => toggleSecret(key)} />
+                </SettingRow>
+              ))}
+            </div>
+          </details>
           <SettingsSection title={t('settings.language')}>
             <SettingRow label={t('settings.language')}>
               <Select
@@ -374,20 +360,6 @@ export function Settings() {
                 </Tooltip>
               </div>
             </SettingRow>
-          </SettingsSection>
-          <SettingsSection title={t('settings.protectedRoots')}>
-            <div className="flex w-full flex-col gap-2">
-              <Button variant="outline" size="sm" onClick={() => void addProtectedRoot()} className="w-fit">
-                <FolderOpen className="size-3.5" /> {t('settings.addProtected')}
-              </Button>
-              {form.protectedRoots.length === 0 ? (
-                <p className="text-[11px] text-red-300">{t('settings.noProtected')}</p>
-              ) : form.protectedRoots.map((root) => (
-                <button key={root} type="button" onClick={() => setField('protectedRoots', form.protectedRoots.filter((item) => item !== root))} className="truncate text-left font-mono text-[11px] text-zinc-400 hover:text-red-300">
-                  {root} ×
-                </button>
-              ))}
-            </div>
           </SettingsSection>
           <SettingsSection
             title={t('settings.dependencies')}

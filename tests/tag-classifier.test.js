@@ -27,25 +27,19 @@ test("normaliza separadores y ampersand; detecta tags basura", () => {
   assert.equal(isJunkGenre("www.example.com"), true);
 });
 
-test("propone alias canónicos, revisión y duplicado sin cambiar input", async (t) => {
+test("propone alias canónicos y revisión sin cambiar input", async (t) => {
   const root = tempDir("mk-tags-input-");
-  const excluded = tempDir("mk-tags-examples-");
   const destination = path.join(tempDir("mk-tags-dest-parent-"), "classified");
-  t.after(() => { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(excluded, { recursive: true, force: true }); fs.rmSync(path.dirname(destination), { recursive: true, force: true }); });
+  t.after(() => { fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(path.dirname(destination), { recursive: true, force: true }); });
   addFile(root, "alias.wav");
   addFile(root, "missing.wav");
   addFile(root, "junk.wav");
   addFile(root, "unknown.wav");
-  const sameBytes = "duplicate-audio";
-  const duplicate = addFile(root, "duplicate.wav", sameBytes);
   addFile(root, "same-name-different-size.wav", "small");
-  addFile(excluded, "sample/duplicate.wav", sameBytes);
-  addFile(excluded, "same-name-different-size.wav", "larger protected version");
-  addFile(excluded, "not-in-input.wav");
   const before = snapshot(root);
   const tags = new Map([["alias.wav", " Latin Tech "], ["junk.wav", "http://genre.example.com"], ["unknown.wav", "Space Funk"]]);
   const result = await classifyByTags({
-    inputRoot: root, excludeRoots: [excluded], destRoot: destination,
+    inputRoot: root, destRoot: destination,
     parseFile: async (file, options) => {
       assert.deepEqual(options, { duration: false, skipCovers: true });
       const value = tags.get(path.basename(file));
@@ -59,14 +53,8 @@ test("propone alias canónicos, revisión y duplicado sin cambiar input", async 
   assert.deepEqual([byName["missing.wav"].status, byName["missing.wav"].reason], ["review", "missing-genre-tag"]);
   assert.deepEqual([byName["junk.wav"].status, byName["junk.wav"].reason], ["review", "junk-genre-tag"]);
   assert.deepEqual([byName["unknown.wav"].status, byName["unknown.wav"].reason], ["review", "unknown-genre-tag"]);
-  assert.deepEqual([byName["duplicate.wav"].status, byName["duplicate.wav"].reason], ["duplicate", "same-name-and-size-in-exclude-root"]);
-  assert.equal(byName["duplicate.wav"].destination, null);
-  assert.equal(byName["same-name-different-size.wav"].possibleDuplicate, true);
-  assert.equal(byName["alias.wav"].possibleDuplicate, false);
   assert.deepEqual(snapshot(root), before);
   assert.deepEqual(fs.readdirSync(path.dirname(destination)), []);
-  assert.ok(!result.some((item) => item.path.startsWith(excluded + path.sep)));
-  assert.notEqual(fs.statSync(duplicate).mtimeMs, 0);
 });
 
 test("incluye alias adicionales de Afro House y Electronica", () => {
@@ -77,20 +65,17 @@ test("incluye alias adicionales de Afro House y Electronica", () => {
   assert.equal(lookup.get(normalizeGenre("Electronica / Downtempo")), "Electronica");
 });
 
-test("excluye raíces anidadas y rechaza rutas protegidas", async (t) => {
+test("el análisis ignora carpetas normales y solo excluye el destino", async (t) => {
   const parent = tempDir("mk-tags-containment-");
   const input = path.join(parent, "input");
-  const examples = path.join(input, "examples");
+  const nested = path.join(input, "nested");
   const destination = path.join(parent, "dest");
-  fs.mkdirSync(examples, { recursive: true });
+  fs.mkdirSync(nested, { recursive: true });
   addFile(input, "one.wav");
-  addFile(examples, "sample.wav");
+  addFile(nested, "sample.wav");
   t.after(() => fs.rmSync(parent, { recursive: true, force: true }));
-  const result = await classifyByTags({ inputRoot: input, excludeRoots: [examples], destRoot: destination, parseFile: async () => ({ common: {} }) });
-  assert.deepEqual(result.map((item) => path.basename(item.path)), ["one.wav"]);
-  await assert.rejects(() => classifyByTags({ inputRoot: examples, excludeRoots: [input], destRoot: destination }), /dentro de excludeRoots/);
-  await assert.rejects(() => classifyByTags({ inputRoot: input, excludeRoots: [examples], destRoot: path.join(examples, "out") }), /dentro de excludeRoots/);
-  await assert.rejects(() => classifyByTags({ inputRoot: input, excludeRoots: [examples], destRoot: parent }), /excludeRoots no pueden estar dentro/);
+  const result = await classifyByTags({ inputRoot: input, destRoot: destination, parseFile: async () => ({ common: {} }) });
+  assert.deepEqual(result.map((item) => path.basename(item.path)).sort(), ["one.wav", "sample.wav"]);
 });
 
 test("no vuelve a proponer archivos que ya están bajo destRoot", async (t) => {
@@ -105,7 +90,7 @@ test("no vuelve a proponer archivos que ya están bajo destRoot", async (t) => {
   assert.deepEqual(result.map((item) => path.basename(item.path)), ["pending.wav"]);
 });
 
-async function onlineFixture(t, { lastfmClient = null, spotifyClient = null, online = true, timeoutMs = 20 } = {}) {
+async function onlineFixture(t, { lastfmClient = null, discogsClient = null, online = true, timeoutMs = 20, aliasTable = { House: ["deep house"] } } = {}) {
   const parent = tempDir("mk-tags-online-");
   const input = path.join(parent, "input");
   fs.mkdirSync(input);
@@ -114,10 +99,10 @@ async function onlineFixture(t, { lastfmClient = null, spotifyClient = null, onl
   return classifyByTags({
     inputRoot: input,
     destRoot: path.join(parent, "out"),
-    aliasTable: { House: ["deep house"] },
+    aliasTable,
     parseFile: async () => ({ common: { genre: ["https://junk.example.com"] } }),
     lastfmClient,
-    spotifyClient,
+    discogsClient,
     online,
     timeoutMs,
     onProgress() {},
@@ -146,22 +131,73 @@ test("respaldo online mapea tag basura de Last.fm y conserva fuente/tag de orige
   assert.equal(row.destination, path.join(path.dirname(path.dirname(file)), "out", "House", path.basename(file)));
 });
 
-test("respaldo online sin mapeo deja review y respeta orden Spotify antes de tags de artista", async (t) => {
+test("Discogs mapea el style canónico antes de consultar Last.fm", async (t) => {
+  let lastfmCalls = 0;
+  const { row } = await onlineFixture(t, {
+    discogsClient: { async getTags() { return ["Deep House"]; }, async getGenres() { throw new Error("genre lookup is after style match"); } },
+    lastfmClient: { async getTrackTags() { lastfmCalls++; return []; }, async getArtistTags() { lastfmCalls++; return []; } },
+  });
+  assert.equal(row.genre, "House");
+  assert.equal(row.genreSource, "discogs");
+  assert.equal(row.onlineTag, "Deep House");
+  assert.equal(lastfmCalls, 0);
+});
+
+test("respaldo online ignora géneros genéricos y conserva el orden de proveedores", async (t) => {
   const calls = [];
   const { row } = await onlineFixture(t, {
     lastfmClient: {
       async getTrackTags() { calls.push("track"); return ["unmapped track"]; },
       async getArtistTags() { calls.push("artist"); return ["unmapped artist"]; },
     },
-    spotifyClient: {
-      async searchTrack() { calls.push("search"); return { artists: [{ id: "artist-id" }] }; },
-      async getArtist() { calls.push("spotify"); return { genres: ["unmapped spotify"] }; },
+    discogsClient: {
+      async getTags() { calls.push("styles"); return ["Electronic", "unmapped style"]; },
+      async getGenres() { throw new Error("Discogs genre must not be queried"); },
     },
   });
-  assert.deepEqual(calls, ["track", "search", "spotify", "artist"]);
+  assert.deepEqual(calls, ["styles", "track", "artist"]);
   assert.equal(row.status, "review");
   assert.equal(row.reason, "junk-genre-tag");
   assert.equal(row.genre, null);
+});
+
+test("respaldo online ignora tags genéricos, pero el pase local por tags no cambia", async (t) => {
+  const { row } = await onlineFixture(t, {
+    lastfmClient: {
+      async getTrackTags() { return ["Electronic", "Dance", "Deep House"]; },
+      async getArtistTags() { throw new Error("artist lookup should not run after match"); },
+    },
+  });
+  assert.equal(row.genre, "House");
+  assert.equal(row.onlineTag, "Deep House");
+
+  const parent = tempDir("mk-tags-generic-local-");
+  const input = path.join(parent, "input");
+  fs.mkdirSync(input);
+  addFile(input, "tagged.wav");
+  t.after(() => fs.rmSync(parent, { recursive: true, force: true }));
+  const [local] = await classifyByTags({
+    inputRoot: input, destRoot: path.join(parent, "out"),
+    aliasTable: { Electronica: ["Electronic"] }, online: false,
+    parseFile: async () => ({ common: { genre: ["Electronic"] } }),
+  });
+  assert.equal(local.genre, "Electronica");
+  assert.equal(local.genreSource, "tag");
+});
+
+test("Discogs prefiere estilo House específico más frecuente y desempata por primer resultado", async (t) => {
+  const { row } = await onlineFixture(t, {
+    aliasTable: { House: [], "Deep House": [], "Tech House": [] },
+    discogsClient: { async getStyleResults() { return [["House", "Tech House", "Tech House"], ["Deep House", "Tech House"]]; } },
+  });
+  assert.equal(row.genre, "Tech House");
+  assert.equal(row.onlineTag, "Tech House");
+
+  const tied = await onlineFixture(t, {
+    aliasTable: { House: [], "Deep House": [], "Tech House": [] },
+    discogsClient: { async getStyleResults() { return [["House", "Deep House"], ["Tech House"]]; } },
+  });
+  assert.equal(tied.row.genre, "Deep House");
 });
 
 test("sin claves online no hace llamadas y un timeout deja la pista en review", async (t) => {

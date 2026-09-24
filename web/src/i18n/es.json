@@ -123,15 +123,9 @@
   "classifier": {
     "title": "Clasificador",
     "method": "Método",
-    "noProtected": "Sin carpetas protegidas",
-    "noProtectedWarning": "Agrega carpetas de ejemplos protegidas antes de mover propuestas.",
-    "protectedRoots": "Carpetas protegidas",
-    "none": "ninguna",
     "methodTags": "Método: etiquetas (recomendado)",
     "methodOnline": "Método: reglas online",
     "inputRoot": "Carpeta a clasificar",
-    "excludeRoots": "Ejemplos protegidos",
-    "addProtected": "Agregar carpeta protegida",
     "destRoot": "Destino",
     "originalTag": "Tag original",
     "filterStatus": "Filtrar por estado",
@@ -150,10 +144,8 @@
     "statuses": {
       "all": "Todos",
       "ok": "Propuesto",
-      "online": "Sugerido online (Last.fm/Spotify)",
-      "review": "Por revisar",
-      "duplicate": "Duplicado de ejemplos",
-      "possibleDuplicate": "Posible duplicado de ejemplos"
+      "online": "Sugerido online (Discogs/Last.fm)",
+      "review": "Por revisar"
     },
     "tracks": "pistas",
     "chooseFolder": "Soltar carpeta",
@@ -178,8 +170,8 @@
     "source": "Fuente",
     "sourceLabels": {
       "embedded": "Tag del archivo",
-      "online": "Spotify/Last.fm",
-      "spotify": "Spotify",
+      "online": "Discogs/Last.fm",
+      "discogs": "Discogs",
       "lastfm": "Last.fm",
       "bpm": "BPM",
       "override": "Regla manual",
@@ -187,7 +179,6 @@
       "unmatched": "Sin identificar"
     },
     "details": "Clasificación",
-    "noSpotify": "Faltan las claves de Spotify; el análisis continúa sin Spotify.",
     "openSettings": "Ir a Configuración",
     "settingsError": "No se pudo cargar la configuración del clasificador."
   },
@@ -277,12 +268,10 @@
   },
   "settings": {
     "title": "Configuración",
-    "protectedRoots": "Carpetas protegidas",
-    "addProtected": "Agregar carpeta protegida",
-    "noProtected": "No hay carpetas protegidas configuradas.",
     "apiKeys": "Claves de API",
-    "spotifyClientId": "ID de cliente Spotify",
-    "spotifyClientSecret": "Secreto de cliente Spotify",
+    "advancedKeys": "Avanzado · claves propias (opcional)",
+    "discogsKey": "Clave de Discogs",
+    "discogsSecret": "Secreto de Discogs",
     "lastfmApiKey": "Clave de Last.fm",
     "acoustidApiKey": "Clave de AcoustID",
     "showSecret": "Mostrar secreto",

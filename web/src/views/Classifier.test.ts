@@ -59,7 +59,7 @@ describe('classifier simulation switch', () => {
       json: async () => {
         if (path === '/api/genres') return { genres: [] }
         if (path === '/api/genre-aliases') return { canonical: ['Tech House'] }
-        return { settings: { protectedRoots: [] } }
+        return { settings: {} }
       },
       }),
     )

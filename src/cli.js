@@ -5,9 +5,10 @@ import { fileURLToPath } from "url";
 import { parseFile } from "music-metadata";
 import dotenv from "dotenv";
 import { JsonCache } from "./cache.js";
-import { SpotifyClient } from "./spotify.js";
-import { LastFmClient } from "./lastfm.js";
-import { classifyFromTags, classifyFromAudio, classifyFromBpm } from "./classify.js";
+import { DiscogsClient } from "./providers/discogs.js";
+import { loadAppKeys } from "./providers/app-keys.js";
+import { LastFmClient } from "./providers/lastfm.js";
+import { classifyFromTags, classifyFromBpm } from "./classify.js";
 import { cleanTitle, ensureDir, moveFile, writeCsv, appendLog, parseArtistTitleFromFilename } from "./utils.js";
 import { loadOverrides, classifyFromOverrides } from "./overrides.js";
 import { discoverAudioFiles } from "./services/audio-discovery.js";
@@ -31,22 +32,16 @@ const inputDir = path.resolve(args.input);
 const dryRun = Boolean(args["dry-run"]);
 const limit = args.limit ? Number(args.limit) : null;
 const debug = Boolean(args.debug);
-const skipSpotify = Boolean(args["no-spotify"]);
-const spotifyTrackTimeoutMs = Number(process.env.SPOTIFY_TRACK_TIMEOUT_MS ?? process.env.SPOTIFY_TIMEOUT_MS ?? "8000");
+const skipOnline = Boolean(args["no-online"]);
+const providerTimeoutMs = 8000;
 const reportPath = args.report ? path.resolve(args.report) : path.join(inputDir, "report.csv");
 const logPath = args.log ? path.resolve(args.log) : path.join(inputDir, "unmatched.log");
-let audioFeaturesEnabled = true;
+
 
 // Load settings from config file (fallback if env vars not set)
 const settings = loadSettings();
-const spotifyClientId = process.env.SPOTIFY_CLIENT_ID || settings.spotifyClientId;
-const spotifyClientSecret = process.env.SPOTIFY_CLIENT_SECRET || settings.spotifyClientSecret;
-const lastfmApiKey = process.env.LASTFM_API_KEY || settings.lastfmApiKey;
-
-if (!skipSpotify && (!spotifyClientId || !spotifyClientSecret)) {
-  console.error("Missing API keys. Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET or use --no-spotify.");
-  process.exit(1);
-}
+const appKeys = loadAppKeys({ settings });
+const lastfmApiKey = appKeys.lastfmApiKey;
 
 if (!fs.existsSync(inputDir)) {
   console.error(`Input folder not found: ${inputDir}`);
@@ -54,13 +49,10 @@ if (!fs.existsSync(inputDir)) {
 }
 
 const cache = new JsonCache(path.resolve(".cache/api-cache.json"));
-const spotify = skipSpotify ? null : new SpotifyClient({ clientId: spotifyClientId, clientSecret: spotifyClientSecret, cache });
-const lastfm = lastfmApiKey ? new LastFmClient({ apiKey: lastfmApiKey, cache }) : null;
+const discogs = !skipOnline && appKeys.discogsKey && appKeys.discogsSecret ? new DiscogsClient({ key: appKeys.discogsKey, secret: appKeys.discogsSecret, cache }) : null;
+const lastfm = !skipOnline && lastfmApiKey ? new LastFmClient({ apiKey: lastfmApiKey, cache }) : null;
 const overrides = loadOverrides();
-if (skipSpotify) {
-  audioFeaturesEnabled = false;
-  if (debug) console.log("DEBUG spotify: disabled via --no-spotify");
-}
+if (skipOnline && debug) console.log("DEBUG online providers disabled");
 
 const allowedGenres = loadAllowedGenres();
 const genreFolders = new Set([...allowedGenres, "Unsorted"]);
@@ -185,77 +177,18 @@ for (const filePath of files) {
 
     const trackTagsPromise = lastfm ? lastfm.getTrackTags(artist, clean).catch(() => []) : Promise.resolve([]);
     const artistTagsPromise = lastfm ? lastfm.getArtistTags(artist).catch(() => []) : Promise.resolve([]);
-
-    let track;
-    let classification;
-    let spotifyGenres = [];
-    let audioFeatures = null;
-    try {
-      if (spotify) {
-        if (debug) console.log("  spotify: searching track...");
-        track = await withTimeout(spotify.searchTrack(cleanArtist, clean), spotifyTrackTimeoutMs);
-        if (debug) console.log(`  search: artist="${cleanArtist}" title="${clean}" -> ${track ? "hit" : "miss"}`);
-        if (!track && clean !== title) {
-          track = await withTimeout(spotify.searchTrack(cleanArtist, title), spotifyTrackTimeoutMs);
-          if (debug) console.log(`  search: artist="${cleanArtist}" title="${title}" -> ${track ? "hit" : "miss"}`);
-        }
-        if (!track && cleanArtist !== artist) {
-          track = await withTimeout(spotify.searchTrack(artist, clean), spotifyTrackTimeoutMs);
-          if (debug) console.log(`  search: artist="${artist}" title="${clean}" -> ${track ? "hit" : "miss"}`);
-        }
-        if (!track) {
-          const loose = await withTimeout(spotify.searchTrack("", clean), spotifyTrackTimeoutMs);
-          track = loose;
-          if (debug) console.log(`  search: artist="" title="${clean}" -> ${track ? "hit" : "miss"}`);
-        }
-        if (!track) {
-          if (debug) console.log("  spotify: no track found");
-          track = null;
-        }
-
-        if (track && debug) {
-          const trackArtistNames = track.artists?.map((a) => a.name).join(", ");
-          console.log(`  spotify track: id=${track.id} name="${track.name}" artists="${trackArtistNames}"`);
-        }
-
-        if (track) {
-          const audioFeaturesPromise = audioFeaturesEnabled
-            ? withTimeout(spotify.getAudioFeatures(track.id), spotifyTrackTimeoutMs).catch((err) => {
-                if (debug) {
-                  console.log(`  audio error: ${err.message}`);
-                }
-                if (err.message.includes("403")) {
-                  audioFeaturesEnabled = false;
-                  if (debug) console.log("  audio features disabled due to 403");
-                }
-                return null;
-              })
-            : Promise.resolve(null);
-
-          const artistId = track.artists?.[0]?.id;
-          const spotifyArtist = await (artistId
-            ? withTimeout(spotify.getArtist(artistId), spotifyTrackTimeoutMs).catch(() => null)
-            : Promise.resolve(null));
-          spotifyGenres = spotifyArtist?.genres ?? [];
-          audioFeatures = await audioFeaturesPromise;
-        }
-      }
-    } catch (err) {
-      console.error(`Spotify error for ${relative}: ${err.message}`);
+    let discogsTags = [];
+    if (discogs) {
+      try { discogsTags = await withTimeout(discogs.getTags(cleanArtist, clean), providerTimeoutMs); }
+      catch (error) { if (debug) console.log(`  Discogs error: ${error.message}`); }
+      try { discogsTags = [...discogsTags, ...await withTimeout(discogs.getGenres(cleanArtist, clean), providerTimeoutMs)]; }
+      catch (error) { if (debug) console.log(`  Discogs error: ${error.message}`); }
     }
-
     const [trackTags, artistTags] = await Promise.all([trackTagsPromise, artistTagsPromise]);
-    const tags = [...trackTags, ...artistTags, ...spotifyGenres];
-    classification = classifyFromTags(tags);
-    if (!classification) {
-      classification = classifyFromAudio({
-        tempo: audioFeatures?.tempo,
-        energy: audioFeatures?.energy
-      });
-    }
+    classification = classifyFromTags([...discogsTags, ...trackTags, ...artistTags]);
 
     if (!classification) {
-      // Spotify audio-features deprecated — fallback to local BPM via librosa
+      // Sin coincidencia de proveedor: señal BPM local
       try {
         const resolvedPython = await resolvePython({ projectRoot: path.resolve(scriptDir, ".."), env: process.env, requireVenv: true });
       const bpmResult = await runBpmAnalyzer(resolvedPython.command, filePath);
@@ -287,13 +220,7 @@ for (const filePath of files) {
       classification = { genre: "Unsorted", reason: "filtered:disabled-genre" };
     }
 
-    if (debug) {
-      if (spotifyGenres.length) {
-        console.log(`  spotify genres: ${spotifyGenres.join(", ")}`);
-      }
-      console.log(`  audio: tempo=${audioFeatures?.tempo ?? "n/a"} energy=${audioFeatures?.energy ?? "n/a"}`);
-      console.log(`  classification: ${classification ? classification.genre : "none"}`);
-    }
+    if (debug) console.log(`  classification: ${classification ? classification.genre : "none"}`);
 
     const destDir = path.join(inputDir, classification.genre);
     ensureDir(destDir, dryRun);
@@ -368,15 +295,15 @@ function parseArgs(argv) {
       out.limit = argv[++i];
     } else if (arg === "--debug") {
       out.debug = true;
-    } else if (arg === "--no-spotify") {
-      out["no-spotify"] = true;
+    } else if (arg === "--no-online") {
+      out["no-online"] = true;
     }
   }
   return out;
 }
 
 function printHelp() {
-  console.log(`\nMusicKind CLI\n\nUsage:\n  musickind --input <folder> [--dry-run] [--limit <n>] [--report <csv>] [--log <file>] [--debug] [--no-spotify]\n\nEnv:\n  SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET\n  LASTFM_API_KEY (opcional)\n`);
+  console.log(`\nMusicKind CLI\n\nUsage:\n  musickind --input <folder> [--dry-run] [--limit <n>] [--report <csv>] [--log <file>] [--debug] [--no-online]\n\nEnv:\n  DISCOGS_KEY, DISCOGS_SECRET, LASTFM_API_KEY (opcionales)\n`);
 }
 
 function loadEnvFiles() {
@@ -465,11 +392,11 @@ function loadAllowedGenres() {
 }
 
 function loadSettings() {
-  const settingsPath = path.resolve("config/settings.json");
+  const settingsPath = process.env.MUSIC_KIND_SETTINGS_FILE || path.resolve("config/settings.json");
   const defaultSettings = {
-    spotifyClientId: "",
-    spotifyClientSecret: "",
-    lastfmApiKey: ""
+    lastfmApiKey: "",
+    discogsKey: "",
+    discogsSecret: ""
   };
   if (!fs.existsSync(settingsPath)) return defaultSettings;
   try {

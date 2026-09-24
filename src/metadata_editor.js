@@ -2,7 +2,7 @@
 /**
  * Metadata Editor Module
  * Allows reading and writing audio file metadata
- * Includes Spotify/LastFM integration for auto-identification
+ * Uses AcoustID, MusicBrainz and Deezer for auto-identification
  */
 
 import fs from "fs";
@@ -219,68 +219,73 @@ export function generateFilename(metadata, format = "{artist} - {title}") {
 
 export async function identifyAndTag(
   filePath,
-  spotifyClient,
+  deezerClient,
   identifyResult = null,
   { preview = false } = {}
 ) {
   const currentData = await readMetadata(filePath);
   const currentMeta = currentData.metadata;
 
-  let spotifyTrack = null;
+  let deezerTrack = null;
 
-  // 1. If AcoustID already identified the song, enrich it with Spotify metadata.
-  if (identifyResult && identifyResult.artist && identifyResult.title && spotifyClient) {
+  // 1. If AcoustID already identified the song, enrich it with Deezer metadata.
+  if (identifyResult && identifyResult.artist && identifyResult.title && deezerClient) {
     try {
-      spotifyTrack = await spotifyClient.searchTrack(identifyResult.artist, identifyResult.title);
+      deezerTrack = await deezerClient.search(identifyResult.artist, identifyResult.title);
     } catch (e) {
-      console.log("Spotify enrichment failed:", e.message);
+      console.log("Deezer enrichment failed:", e.message);
     }
   }
 
-  // 2. Fallback: Spotify text search using existing tags or "Artist - Title" filename pattern.
-  if (!identifyResult && !spotifyTrack && spotifyClient) {
+  // 2. Fallback: Deezer text search using existing tags or "Artist - Title" filename pattern.
+  if ((!identifyResult?.artist || !identifyResult?.title) && !deezerTrack && deezerClient) {
     if (currentMeta.title || currentMeta.artist) {
       try {
-        spotifyTrack = await spotifyClient.searchTrack(
+        deezerTrack = await deezerClient.search(
           currentMeta.artist || "",
           currentMeta.title || currentData.file.name.replace(/\.[^.]+$/, "")
         );
       } catch (e) {
-        console.log("Spotify search by tags failed:", e.message);
+        console.log("Deezer search by tags failed:", e.message);
       }
     }
 
-    if (!spotifyTrack) {
+    if (!deezerTrack) {
       const filename = currentData.file.name.replace(/\.[^.]+$/, "");
       const parts = filename.split(" - ");
       if (parts.length >= 2) {
         const artistFromFile = parts.slice(0, -1).join(" - ");
         const titleFromFile = parts[parts.length - 1];
         try {
-          spotifyTrack = await spotifyClient.searchTrack(artistFromFile, titleFromFile);
+          deezerTrack = await deezerClient.search(artistFromFile, titleFromFile);
         } catch (e) {
-          console.log("Spotify search by filename failed:", e.message);
+          console.log("Deezer search by filename failed:", e.message);
         }
       }
     }
   }
 
+  const recording = identifyResult?.musicbrainz;
+  const mbArtist = recording?.['artist-credit']?.map((item) => item.name).filter(Boolean).join('') || '';
+  const mbRelease = recording?.releases?.[0];
+  const mbYear = mbRelease?.date ? Number(String(mbRelease.date).slice(0, 4)) || null : null;
+
   // 3. Build final metadata.
   const newMetadata = {
-    title: spotifyTrack?.name || identifyResult?.title || currentMeta.title,
-    artist: spotifyTrack?.artists?.[0]?.name || identifyResult?.artist || currentMeta.artist,
-    album: spotifyTrack?.album?.name || identifyResult?.album || currentMeta.album,
-    year: spotifyTrack?.album?.release_date
-      ? new Date(spotifyTrack.album.release_date).getFullYear()
-      : (identifyResult?.year || currentMeta.year),
+    title: deezerTrack?.title || identifyResult?.title || recording?.title || currentMeta.title,
+    artist: deezerTrack?.artist || identifyResult?.artist || mbArtist || currentMeta.artist,
+    album: deezerTrack?.album || identifyResult?.album || mbRelease?.title || currentMeta.album,
+    year: deezerTrack?.releaseDate
+      ? Number(String(deezerTrack.releaseDate).slice(0, 4)) || currentMeta.year
+      : (identifyResult?.year || mbYear || currentMeta.year),
     genre: "",
-    track: spotifyTrack?.track_number || currentMeta.track
+    track: currentMeta.track
   };
 
   // 4. If nothing was identified, fail explicitly.
   if (!newMetadata.artist && !newMetadata.title) {
     throw new Error(
-      "No se pudo identificar la canción. Configura tu clave API de AcoustID en Ajustes."
+      "No se pudo identificar la canción. Revisa AcoustID o completa artista y título."
     );
   }
 

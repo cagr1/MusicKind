@@ -123,15 +123,9 @@
   "classifier": {
     "title": "Classifier",
     "method": "Method",
-    "noProtected": "No protected folders",
-    "noProtectedWarning": "Add protected example folders before moving proposals.",
-    "protectedRoots": "Protected folders",
-    "none": "none",
     "methodTags": "Method: tags (recommended)",
     "methodOnline": "Method: online rules",
     "inputRoot": "Folder to classify",
-    "excludeRoots": "Protected examples",
-    "addProtected": "Add protected folder",
     "destRoot": "Destination",
     "originalTag": "Original tag",
     "filterStatus": "Filter by status",
@@ -150,10 +144,8 @@
     "statuses": {
       "all": "All",
       "ok": "Proposed",
-      "online": "Suggested online (Last.fm/Spotify)",
-      "review": "Review",
-      "duplicate": "Example duplicate",
-      "possibleDuplicate": "Possible example duplicate"
+      "online": "Suggested online (Discogs/Last.fm)",
+      "review": "Review"
     },
     "tracks": "tracks",
     "chooseFolder": "Drop a folder",
@@ -178,8 +170,8 @@
     "source": "Source",
     "sourceLabels": {
       "embedded": "File tag",
-      "online": "Spotify/Last.fm",
-      "spotify": "Spotify",
+      "online": "Discogs/Last.fm",
+      "discogs": "Discogs",
       "lastfm": "Last.fm",
       "bpm": "BPM",
       "override": "Manual rule",
@@ -187,7 +179,6 @@
       "unmatched": "Unidentified"
     },
     "details": "Classification",
-    "noSpotify": "Spotify keys are missing; analysis continues without Spotify.",
     "openSettings": "Go to Settings",
     "settingsError": "Classifier settings could not be loaded."
   },
@@ -277,12 +268,10 @@
   },
   "settings": {
     "title": "Settings",
-    "protectedRoots": "Protected folders",
-    "addProtected": "Add protected folder",
-    "noProtected": "No protected folders configured.",
     "apiKeys": "API keys",
-    "spotifyClientId": "Spotify client ID",
-    "spotifyClientSecret": "Spotify client secret",
+    "advancedKeys": "Advanced · own keys (optional)",
+    "discogsKey": "Discogs key",
+    "discogsSecret": "Discogs secret",
     "lastfmApiKey": "Last.fm API key",
     "acoustidApiKey": "AcoustID API key",
     "showSecret": "Show secret",

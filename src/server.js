@@ -7,7 +7,11 @@ import { fileURLToPath } from "url";
 import { StringDecoder } from "string_decoder";
 import { config as loadEnv } from "dotenv";
 import { readMetadata, renameFile, writeMetadata, generateFilename, identifyAndTag } from "./metadata_editor.js";
-import { SpotifyClient } from "./spotify.js";
+import { DiscogsClient } from "./providers/discogs.js";
+import { DeezerClient } from "./providers/deezer.js";
+import { MusicBrainzClient } from "./providers/musicbrainz.js";
+import { LastFmClient } from "./providers/lastfm.js";
+import { loadAppKeys } from "./providers/app-keys.js";
 import { JsonCache } from "./cache.js";
 import { discoverAudioFiles, getAudioExtensions } from "./services/audio-discovery.js";
 import { buildMetadataListResponse } from "./services/metadata-list-api.js";
@@ -181,31 +185,19 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     const body = await readJsonBody(req);
     const inputRoot = typeof body.inputRoot === "string" ? body.inputRoot : "";
     const destRoot = typeof body.destRoot === "string" ? body.destRoot : "";
-    const settings = loadSettings(settingsFile);
-    const clientExcludes = Array.isArray(body.excludeRoots) ? body.excludeRoots : [];
-    const excludeRoots = [...new Set([...settings.protectedRoots, ...clientExcludes])];
-    const pathValues = [inputRoot, destRoot, ...excludeRoots];
-    if (!inputRoot || !destRoot || !Array.isArray(body.excludeRoots) || excludeRoots.some((root) => typeof root !== "string" || !root)) {
-      return sendJson(res, { ok: false, error: "inputRoot, excludeRoots y destRoot requeridos" }, 400);
+    const pathValues = [inputRoot, destRoot];
+    if (!inputRoot || !destRoot) {
+      return sendJson(res, { ok: false, error: "inputRoot y destRoot requeridos" }, 400);
     }
     if (pathValues.some((value) => !path.isAbsolute(value))) {
       return sendJson(res, { ok: false, error: "Todas las rutas deben ser absolutas" }, 400);
     }
     const normalized = pathValues.map((value) => path.resolve(value));
-    const [input, destination, ...excludes] = normalized;
-    const within = (candidate, root) => {
-      const relative = path.relative(root, candidate);
-      return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
-    };
-    if (excludes.some((root) => within(input, root) || within(destination, root)) || excludes.some((root) => within(root, destination))) {
-      return sendJson(res, { ok: false, error: "inputRoot o destRoot se solapan con excludeRoots" }, 400);
-    }
-    if (!fs.existsSync(input) || !fs.statSync(input).isDirectory()
-      || excludes.some((root) => !fs.existsSync(root) || !fs.statSync(root).isDirectory())) {
-      return sendJson(res, { ok: false, error: "inputRoot y excludeRoots deben ser carpetas existentes" }, 400);
+    const [input, destination] = normalized;
+    if (!fs.existsSync(input) || !fs.statSync(input).isDirectory()) {
+      return sendJson(res, { ok: false, error: "inputRoot debe ser una carpeta existente" }, 400);
     }
     const args = [path.join(projectRoot, "src", "tag-classifier-cli.js"), "--input-root", input, "--dest-root", destination];
-    for (const root of excludes) args.push("--exclude-root", root);
     if (body.online === false) args.push("--no-online");
     const processId = body.processId || `tags-${Date.now()}`;
     await runProcessWithProgress(process.execPath, args, res, processId, { parseJsonResult: true });
@@ -219,11 +211,8 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
 
   if (req.method === "POST" && ["/api/classify-apply", "/api/classify-undo"].includes(url.pathname)) {
     const body = await readJsonBody(req);
-    const settings = loadSettings(settingsFile);
-    const excludeRoots = [...new Set([...settings.protectedRoots, ...(Array.isArray(body.excludeRoots) ? body.excludeRoots : [])])];
     if (url.pathname === "/api/classify-apply") {
-      if (!Array.isArray(body.excludeRoots)) return sendJson(res, { ok: false, error: "excludeRoots debe ser una lista" }, 400);
-      try { validateMoves({ moves: body.moves, excludeRoots, destRoot: body.destRoot }); }
+      try { validateMoves({ moves: body.moves, destRoot: body.destRoot }); }
       catch (error) { return sendJson(res, { ok: false, error: error.message }, 400); }
     } else if (typeof body.manifestPath !== "string" || !path.isAbsolute(body.manifestPath)) {
       return sendJson(res, { ok: false, error: "manifestPath debe ser una ruta absoluta" }, 400);
@@ -236,8 +225,8 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     try {
       const options = url.pathname === "/api/classify-apply"
-        ? { moves: body.moves, excludeRoots, destRoot: body.destRoot }
-        : { manifestPath: body.manifestPath, excludeRoots };
+        ? { moves: body.moves, destRoot: body.destRoot }
+        : { manifestPath: body.manifestPath };
       const operationFn = url.pathname === "/api/classify-apply" ? applyClassifyMoves : undoClassifyManifest;
       const result = await operationFn({ ...options, cancelled: () => operation.cancelled, onProgress: (progress) => sendEvent({ type: "progress", ...progress }) });
       sendEvent({ type: "result", ...result });
@@ -262,17 +251,12 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     }
 
     const settings = loadSettings(settingsFile);
-    const spotifyClientId = process.env.SPOTIFY_CLIENT_ID || settings.spotifyClientId;
-    const spotifyClientSecret = process.env.SPOTIFY_CLIENT_SECRET || settings.spotifyClientSecret;
-    const hasSpotify = Boolean(spotifyClientId && spotifyClientSecret);
-
     const args = [path.join(projectRoot, "src", "cli.js"), "--input", inputPath];
     if (dryRun) args.push("--dry-run");
-    if (!hasSpotify) args.push("--no-spotify");
     
     // Note: runProcessWithProgress handles response completion (res.end())
     // so no further response should be sent after this
-    await runProcessWithProgress(process.execPath, args, res, processId, { parseJsonResult: true });
+    await runProcessWithProgress(process.execPath, args, res, processId, { parseJsonResult: true, settingsFile });
     return; // Response already sent by runProcessWithProgress
   }
 
@@ -383,10 +367,9 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     const body = await readJsonBody(req);
     const previous = loadSettings(settingsFile);
     const settings = { ...previous };
-    for (const key of ["spotifyClientId", "spotifyClientSecret", "lastfmApiKey", "acoustidApiKey", "language", "defaultOutputDir"]) {
+    for (const key of ["lastfmApiKey", "discogsKey", "discogsSecret", "acoustidApiKey", "language", "defaultOutputDir"]) {
       if (key in body) settings[key] = body[key] ? String(body[key]).trim() : (key === "defaultOutputDir" ? "output" : "");
     }
-    if ("protectedRoots" in body) settings.protectedRoots = normalizeProtectedRoots(body.protectedRoots);
     saveSettings(settings, settingsFile);
     return sendJson(res, { ok: true, message: "Configuracion guardada" });
   }
@@ -536,7 +519,7 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     return sendJson(res, { ok: true, filename });
   }
 
-  // Auto-identify and tag a file using AcoustID, optionally enriched with Spotify
+  // Auto-identify and tag a file using AcoustID, MusicBrainz and Deezer
   if (req.method === "POST" && url.pathname === "/api/metadata/identify") {
     const body = await readJsonBody(req);
     const filePath = body.filePath ? String(body.filePath) : "";
@@ -558,7 +541,7 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
       let identifyResult = null;
       let identifyError = null;
 
-      const acoustidApiKey = process.env.ACOUSTID_API_KEY || settings.acoustidApiKey || "";
+      const acoustidApiKey = loadAppKeys({ settings }).acoustidApiKey;
       if (acoustidApiKey) {
         let pyCmd;
         try {
@@ -620,23 +603,14 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
         }
       }
 
-      let spotify = null;
-      if (settings.spotifyClientId && settings.spotifyClientSecret) {
-        const cache = new JsonCache(path.join(projectRoot, ".cache/api-cache.json"));
-        spotify = new SpotifyClient({
-          clientId: settings.spotifyClientId,
-          clientSecret: settings.spotifyClientSecret,
-          cache
-        });
+      const cache = new JsonCache(path.join(projectRoot, ".cache/api-cache.json"));
+      const keys = loadAppKeys({ settings });
+      const deezer = new DeezerClient({ cache });
+      const musicbrainz = new MusicBrainzClient({ cache });
+      if (identifyResult?.recordingid) {
+        try { identifyResult.musicbrainz = await musicbrainz.recording(identifyResult.recordingid); } catch {}
       }
-
-      if (!spotify && !identifyResult) {
-        const err = identifyError
-          || (!acoustidApiKey ? "Falta la clave API de AcoustID. Configúrala en Ajustes." : "No se pudo identificar la canción");
-        return sendJson(res, { ok: false, error: err }, 400);
-      }
-
-      const result = await identifyAndTag(filePath, spotify, identifyResult, { preview });
+      const result = await identifyAndTag(filePath, deezer, identifyResult, { preview });
       return sendJson(res, result);
     } catch (error) {
       return sendJson(res, { ok: false, error: error.message }, 400);
@@ -794,26 +768,20 @@ function readGenres() {
 
 function loadSettings(settingsFile = settingsPath) {
   const defaultSettings = {
-    spotifyClientId: "",
-    spotifyClientSecret: "",
+    discogsKey: "",
+    discogsSecret: "",
     lastfmApiKey: "",
     acoustidApiKey: "",
     language: "es",
     defaultOutputDir: "output",
-    protectedRoots: []
   };
   if (!fs.existsSync(settingsFile)) return defaultSettings;
   try {
     const parsed = JSON.parse(fs.readFileSync(settingsFile, "utf-8"));
-    return { ...defaultSettings, ...parsed, protectedRoots: normalizeProtectedRoots(parsed.protectedRoots) };
+    return { ...defaultSettings, ...parsed };
   } catch {
     return defaultSettings;
   }
-}
-
-function normalizeProtectedRoots(value) {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((root) => typeof root === "string" && path.isAbsolute(root)).map((root) => path.resolve(root)))];
 }
 
 function saveSettings(settings, settingsFile = settingsPath) {
@@ -1079,10 +1047,10 @@ async function checkFFmpeg() {
 }
 
 function runProcessWithProgress(cmd, args, res, processId, options = {}) {
-  const { parseJsonResult = false } = options;
+  const { parseJsonResult = false, settingsFile: childSettingsFile } = options;
   return new Promise((resolve) => {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
-    const child = spawn(cmd, args, { cwd: projectRoot });
+    const child = spawn(cmd, args, { cwd: projectRoot, env: childSettingsFile ? { ...process.env, MUSIC_KIND_SETTINGS_FILE: childSettingsFile } : process.env });
     let output = "";
     let currentFile = "";
     let totalFiles = 0;
@@ -1234,7 +1202,7 @@ function signalProcess(processId, signal, res) {
 
 function runProcess(cmd, args) {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd: projectRoot });
+    const child = spawn(cmd, args, { cwd: projectRoot, env: process.env });
     let output = "";
     const stdoutDecoder = new StringDecoder("utf8");
     const stderrDecoder = new StringDecoder("utf8");

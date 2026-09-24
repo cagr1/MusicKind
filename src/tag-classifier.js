@@ -6,6 +6,13 @@ import { discoverAudioFiles } from "./services/audio-discovery.js";
 import { parseArtistTitleFromFilename } from "./utils.js";
 
 const aliasesPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../config/genre-aliases.json");
+const GENERIC_ONLINE_TAGS = new Set([
+  "electronic", "electronica", "dance", "pop", "electro", "edm", "club", "electronic dance music",
+].map(normalizeGenre));
+const SPECIFIC_HOUSE_GENRES = new Set([
+  "Deep House", "Tech House", "Afro House", "Progressive House", "Organic House",
+  "Melodic House & Techno", "Minimal Deep Tech",
+]);
 
 export function normalizeGenre(value) {
   return String(value ?? "")
@@ -30,33 +37,18 @@ export function isJunkGenre(value) {
   return /(?:https?:\/\/|www\.|\.com\b)/i.test(String(value ?? ""));
 }
 
-export async function classifyByTags({ inputRoot, excludeRoots = [], destRoot, parseFile = defaultParseFile, discovery = discoverAudioFiles, aliasTable, online = true, lastfmClient = null, spotifyClient = null, onProgress = (message) => console.log(message), concurrency = 4, timeoutMs = 8000 } = {}) {
+export async function classifyByTags({ inputRoot, destRoot, parseFile = defaultParseFile, discovery = discoverAudioFiles, aliasTable, online = true, lastfmClient = null, discogsClient = null, onProgress = (message) => console.log(message), concurrency = 4, timeoutMs = 8000 } = {}) {
   const input = path.resolve(inputRoot || "");
-  const excludes = excludeRoots.map((root) => path.resolve(root));
   const destinationRoot = path.resolve(destRoot || "");
-  validateClassificationRoots(input, excludes, destinationRoot);
+  validateClassificationRoots(input, destinationRoot);
   const aliases = aliasTable ?? JSON.parse(fs.readFileSync(aliasesPath, "utf8"));
   const lookup = buildGenreLookup(aliases);
-  const excludedFiles = new Map();
-  const excludedNames = new Set();
-  for (const root of excludes) {
-    const scan = await discovery({ target: root, recursive: true });
-    for (const file of scan.files) {
-      const stat = fs.statSync(file);
-      const key = `${path.basename(file).toLocaleLowerCase("en")}\0${stat.size}`;
-      if (!excludedFiles.has(key)) excludedFiles.set(key, file);
-      excludedNames.add(path.basename(file).toLocaleLowerCase("en"));
-    }
-  }
   const scan = await discovery({ target: input, recursive: true });
-  const files = scan.files.filter((file) => !isWithin(file, destinationRoot) && !excludes.some((root) => isWithin(file, root)));
+  const files = scan.files.filter((file) => !isWithin(file, destinationRoot));
   const results = [];
   for (let index = 0; index < files.length; index++) {
     const file = files[index];
     onProgress(`[PROGRESS:${index + 1}/${files.length}] Processing: ${path.basename(file)}`);
-    const stat = fs.statSync(file);
-    const duplicateKey = `${path.basename(file).toLocaleLowerCase("en")}\0${stat.size}`;
-    const duplicate = excludedFiles.has(duplicateKey);
     const metadata = await parseFile(file, { duration: false, skipCovers: true });
     const parsedName = parseArtistTitleFromFilename(path.basename(file));
     const artist = String(metadata?.common?.artist || parsedName.artist || "").trim();
@@ -66,13 +58,12 @@ export async function classifyByTags({ inputRoot, excludeRoots = [], destRoot, p
     const genre = tagGenre && !isJunkGenre(tagGenre) ? lookup.get(normalizeGenre(tagGenre)) ?? null : null;
     let status = "ok";
     let reason = null;
-    if (duplicate) { status = "duplicate"; reason = "same-name-and-size-in-exclude-root"; }
-    else if (!tagGenre) { status = "review"; reason = "missing-genre-tag"; }
+    if (!tagGenre) { status = "review"; reason = "missing-genre-tag"; }
     else if (isJunkGenre(tagGenre)) { status = "review"; reason = "junk-genre-tag"; }
     else if (!genre) { status = "review"; reason = "unknown-genre-tag"; }
-    results.push({ path: file, artist, title, tagGenre, genre, status, reason, possibleDuplicate: excludedNames.has(path.basename(file).toLocaleLowerCase("en")), genreSource: genre ? "tag" : null, onlineTag: null, destination: genre ? path.join(destinationRoot, genre, path.basename(file)) : null });
+    results.push({ path: file, artist, title, tagGenre, genre, status, reason, genreSource: genre ? "tag" : null, onlineTag: null, destination: genre ? path.join(destinationRoot, genre, path.basename(file)) : null });
   }
-  if (online && (lastfmClient || spotifyClient)) {
+  if (online && (lastfmClient || discogsClient)) {
     const pending = results.filter((row) => row.status === "review" && ["missing-genre-tag", "junk-genre-tag", "unknown-genre-tag"].includes(row.reason));
     let cursor = 0;
     const workers = Array.from({ length: Math.min(Math.max(1, concurrency), pending.length) }, async () => {
@@ -84,19 +75,19 @@ export async function classifyByTags({ inputRoot, excludeRoots = [], destRoot, p
         const title = row.title;
         if (!artist || !title) continue;
         const candidates = [];
-        if (lastfmClient) candidates.push(async () => ({ source: "lastfm", tags: await lastfmClient.getTrackTags(artist, title) }));
-        if (spotifyClient) candidates.push(async () => {
-          const track = await spotifyClient.searchTrack(artist, title);
-          const spotifyArtist = track?.artists?.[0];
-          if (!spotifyArtist?.id) return { source: "spotify", tags: [] };
-          const details = await spotifyClient.getArtist(spotifyArtist.id);
-          return { source: "spotify", tags: details?.genres ?? [] };
+        if (discogsClient) candidates.push(async () => {
+          if (typeof discogsClient.getStyleResults === "function") {
+            const groups = await discogsClient.getStyleResults(artist, title);
+            return { source: "discogs", tags: groups.flat(), groups };
+          }
+          return { source: "discogs", tags: await discogsClient.getTags(artist, title) };
         });
+        if (lastfmClient) candidates.push(async () => ({ source: "lastfm", tags: await lastfmClient.getTrackTags(artist, title) }));
         if (lastfmClient) candidates.push(async () => ({ source: "lastfm", tags: await lastfmClient.getArtistTags(artist) }));
         for (const getCandidates of candidates) {
           try {
-            const { source, tags } = await withTimeout(getCandidates(), timeoutMs);
-            const match = (Array.isArray(tags) ? tags : []).map((tag) => ({ tag, genre: lookup.get(normalizeGenre(tag)) })).find((item) => item.genre);
+            const { source, tags, groups } = await withTimeout(getCandidates(), timeoutMs);
+            const match = chooseOnlineMatch(tags, source, lookup, groups);
             if (match) {
               row.genre = match.genre;
               row.status = "ok";
@@ -115,22 +106,43 @@ export async function classifyByTags({ inputRoot, excludeRoots = [], destRoot, p
   return results;
 }
 
+function chooseOnlineMatch(tags, source, lookup, groups) {
+  const mapped = (Array.isArray(tags) ? tags : [])
+    .filter((tag) => !GENERIC_ONLINE_TAGS.has(normalizeGenre(tag)))
+    .map((tag) => ({ tag, genre: lookup.get(normalizeGenre(tag)) }))
+    .filter((item) => item.genre);
+  if (source !== "discogs" || !mapped.some((item) => item.genre === "House")) {
+    return mapped[0] ?? null;
+  }
+
+  const specific = mapped.filter((item) => SPECIFIC_HOUSE_GENRES.has(item.genre));
+  if (!specific.length) return mapped.find((item) => item.genre === "House");
+  if (!Array.isArray(groups)) {
+    const counts = new Map();
+    for (const item of specific) counts.set(item.genre, (counts.get(item.genre) ?? 0) + 1);
+    return specific.reduce((best, item) => counts.get(item.genre) > counts.get(best.genre) ? item : best);
+  }
+  const counts = new Map();
+  for (const group of groups) {
+    const present = new Set((Array.isArray(group) ? group : [])
+      .map((tag) => lookup.get(normalizeGenre(tag)))
+      .filter((genre) => SPECIFIC_HOUSE_GENRES.has(genre)));
+    for (const genre of present) counts.set(genre, (counts.get(genre) ?? 0) + 1);
+  }
+  return specific.reduce((best, item) => counts.get(item.genre) > counts.get(best.genre) ? item : best);
+}
+
 function withTimeout(promise, timeoutMs) {
   let timer;
   return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Online lookup timeout")), timeoutMs); })])
     .finally(() => clearTimeout(timer));
 }
 
-export function validateClassificationRoots(inputRoot, excludeRoots, destRoot) {
-  for (const [label, value] of [["inputRoot", inputRoot], ["destRoot", destRoot], ...excludeRoots.map((root, i) => [`excludeRoots[${i}]`, root])]) {
+export function validateClassificationRoots(inputRoot, destRoot) {
+  for (const [label, value] of [["inputRoot", inputRoot], ["destRoot", destRoot]]) {
     if (!path.isAbsolute(value)) throw new Error(`${label} debe ser una ruta absoluta`);
   }
   if (!fs.existsSync(inputRoot) || !fs.statSync(inputRoot).isDirectory()) throw new Error("inputRoot debe existir y ser una carpeta");
-  for (const root of excludeRoots) if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) throw new Error(`excludeRoot debe existir y ser una carpeta: ${root}`);
-  if (excludeRoots.some((root) => isWithin(inputRoot, root)) || excludeRoots.some((root) => isWithin(destRoot, root))) {
-    throw new Error("inputRoot o destRoot no pueden estar dentro de excludeRoots");
-  }
-  if (excludeRoots.some((root) => isWithin(root, destRoot))) throw new Error("excludeRoots no pueden estar dentro de destRoot");
 }
 
 function isWithin(candidate, root) {

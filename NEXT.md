@@ -44,7 +44,10 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
      Nota QA: `MUSIC_KIND_DATA_DIR` **no** afecta a `settings.json` (siempre `config/settings.json`); la prueba escribió ahí y se revirtió.
    - [x] **E2.2** (Luna, spec `design/SPEC.md` § E2.2) — género canónico ya no lo pisa la metadata del archivo, distribución compacta arriba, respaldo online Last.fm/Spotify para "Por revisar".
      Verificado por el cerebro 2026-09-24: node 78/78, build 0, lint 0, vitest 89/89. Corrida real solo lectura `Unsorted`→`Music` (excl. `2026`): 1331 pistas, 1197 por tag, 134 por revisar (93 sin tag, 27 desconocido, 14 basura). **Online encontró 0**: Spotify ya no devuelve `genres` de artista a esta app (probado: campo ausente) y no hay clave Last.fm. Falta QA visual de Carlos.
-   - Antes de usar E2 sobre el backup real: agregar `…/2026` en Configuración → Carpetas protegidas y hacer QA visual.
+   - [x] **Back 4 / 4.1–4.3** — Spotify eliminado (feb-2026: sin `genres` y exige Premium). Proveedores en `src/providers/`: Discogs (styles), Last.fm, Deezer, MusicBrainz; claves de la app en `config/app-keys.json` (gitignored, repo público) → el usuario no crea claves. Online ignora genéricos (Electronic/dance).
+     Verificado 2026-09-24: node 86/86, build/lint 0, vitest 89/89; en vivo `Unsorted`: 1197 tag + 37 Discogs + 5 Last.fm, 92 por revisar. **AcoustID: clave inválida** (Carlos debe poner la de aplicación). Identify vía Deezer sin probar en vivo.
+   - [x] **E2.3** — carpetas protegidas eliminadas (decisión de Carlos): solo entrada y destino; el análisis sigue excluyendo el destino.
+   - [ ] **Back 1b** medición de motores de tonalidad (Luna en curso, `scripts/eval_key.py`, sin commit).
    - Pendiente después: E4 `.m3u8` Warmup/Peak/Closing; E0b (entrenar audio con las ~2,300 etiquetadas para sugerir en las ~190 sin tag).
    - QA: servidor aparte en `PORT=3099` con `MUSIC_KIND_DATA_DIR="$HOME/Library/Application Support/MusicKind"`; copia de prueba del backup en el scratchpad de la sesión (temporal).
 

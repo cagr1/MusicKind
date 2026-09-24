@@ -87,7 +87,7 @@ tests/
 | `Runtime.isElectron` | `const Runtime = { isElectron: Boolean(window.electronAPI?.openDirectory) }` evaluated once at top of app.js. |
 | `AppState.ffmpegReady` | Single flag set at startup via `initAppState()`. All tabs subscribe via `onFfmpegStateChange()`. |
 | `defaultOutputDir` in Settings only | Stored in `config/settings.json`. No tab has its own output dir selector. |
-| Spotify keys mandatory | `/api/genre-classify` returns HTTP 400 if keys are missing. |
+| Sin Spotify (2026-09-24) | Metadatos por `src/providers/` (Discogs, Last.fm, Deezer, MusicBrainz) con claves de la app en `config/app-keys.json` (gitignored). |
 | `runProcessWithProgress()` | All SSE subprocess routes go through this one function in server.js. Pass `{ parseJsonResult: true }` to emit a `result` SSE event from the final JSON blob in stdout. |
 | Progress format | Server parses `[PROGRESS:X/Y] Processing: filename`. All Python scripts must print this exactly. |
 | audio-ingestion canonical | All file discovery goes through `services/audio-discovery.js`. `utils.listAudioFiles()` is deprecated. |

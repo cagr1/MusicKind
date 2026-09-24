@@ -663,6 +663,84 @@ Prueba del cerebro sobre una copia: rechazo total con un archivo de `2026`, movi
 2. **Deshacer confía en el manifiesto:** `undoClassifyManifest` (`src/classify-apply.js`) no valida que cada `move.to` esté dentro de
    `manifest.destRoot`. Validar por movimiento (si no, `undoStatus:'error'` sin tocar). Test con manifiesto alterado.
 
+### Back 1b · Medir motores de tonalidad (solo medición, 2026-09-24)
+Motivo: el análisis actual (`src/key_detection.py`, librosa + Krumhansl) acierta 47% exacto / 60% compatible. Carlos quiere mejorarlo
+**sin cambiar la UI** (se sigue viendo como hoy: nota musical + chip Camelot; nada de notación Open Key/Serato).
+1. `scripts/eval_key.py` (venv de la app, Python 3.9): conjunto de verdad = pistas de `MUSIC BACKUP/2026` (solo lectura, recursivo)
+   cuya tonalidad del tag se interpreta con `parse_key` (`src/key_detection.py`). Límite `--limit` (defecto todas), `--input` configurable.
+2. Motores a comparar sobre **la misma ventana** que hoy (120 s centrados) y también la pista entera:
+   - `librosa`: `detect_key_from_file` actual (línea base).
+   - `essentia`: `pip install essentia` en el venv si hay rueda para 3.9/arm64; `KeyExtractor` con perfiles `edma`, `bgate`, `temperley`.
+   - `libkeyfinder`: `brew install libkeyfinder`; compilar un CLI mínimo (C++ con `keyfinder::KeyFinder`, audio decodificado por
+     `ffmpeg -f f32le -ac 1 -ar 44100` por pipe) en `.cache/tools/keyfinder-cli`. Si instalar/compilar falla, reportar el error exacto y seguir.
+3. Métricas por motor: exacto, relativo (mismo número Camelot distinto modo), quinta (±1 Camelot mismo modo), compatible (suma de los tres),
+   error mayor/menor, tiempo medio por pista. Matriz de errores más frecuentes (verdad→predicción, top 10).
+4. Salida `.cache/eval/key-report.md` + `.json` y resumen en stdout. Caché por pista en `.cache/eval/key/` para re-correr sin recalcular.
+   No toca `src/`, `web/`, ni escribe nada en `/Volumes`.
+**Gate (cerebro):** reporte con los 3 motores (o el error de instalación), segunda corrida desde caché con los mismos números.
+Decisión posterior (fase aparte): integrar el ganador en `resolve_key` como motor de respaldo; el tag sigue mandando.
+
+### Back 4 · Quitar Spotify; Discogs + Last.fm + Deezer + MusicBrainz con claves de la app (2026-09-24)
+Motivo: desde feb-2026 Spotify no entrega `genres` a apps en modo desarrollo y exige Premium al dueño. Decisión de Carlos: quitar
+Spotify y que el usuario **no tenga que crear claves**.
+1. **Claves de la app (no del usuario):** `src/providers/app-keys.js` lee, en orden, `process.env` (`DISCOGS_KEY`, `DISCOGS_SECRET`,
+   `LASTFM_API_KEY`, `ACOUSTID_API_KEY`) → `config/app-keys.json` (nuevo, **en `.gitignore`**; el repo es público) → `settings.json`
+   (override opcional). Crear `config/app-keys.example.json` con las claves vacías. Sin clave = ese proveedor se omite sin error.
+2. **Proveedores** en `src/providers/` (fetch con timeout 8 s, reintento en 429 respetando `Retry-After`, caché `src/cache.js`,
+   `User-Agent: MusicKind/<version> (+https://github.com/cagr1/MusicKind)`):
+   - `discogs.js`: `GET /database/search?type=release&artist=&track=` con `key`/`secret` → hasta 3 resultados → `styles` + `genres`.
+     Límite 60/min: cola con ≥1.1 s entre llamadas.
+   - `lastfm.js`: mover `src/lastfm.js` aquí (mismo API).
+   - `deezer.js` (sin clave): `GET https://api.deezer.com/search?q=artist:"…" track:"…"` → `{artist,title,album,isrc,bpm,cover,releaseDate}`
+     (`bpm` y `release_date` vía `GET /track/{id}`).
+   - `musicbrainz.js` (sin clave, 1 llamada/s): `recording/{mbid}?inc=artists+releases+tags+genres` para enriquecer lo que dé AcoustID.
+3. **Clasificador por tags** (`src/tag-classifier.js` online): orden Discogs `styles` → Discogs `genres` → Last.fm pista → Last.fm artista.
+   `genreSource: 'discogs'|'lastfm'`. Quitar la rama Spotify.
+4. **Identificar** (`/api/metadata/identify`, `identifyAndTag` en `src/metadata_editor.js`): AcoustID (+MusicBrainz) si hay huella; si no,
+   Deezer por tags o por nombre `Artista - Título`. Mismo contrato de respuesta (`preview` incluido).
+5. **Clasificador legado** (`src/cli.js`, `src/classify.js`, `src/classification-source.js`): reemplazar Spotify por Discogs/Last.fm;
+   `/api/genre-classify` ya **no** devuelve 400 por falta de claves de Spotify. Fuente `spotify` → `discogs`.
+6. **Borrar** `src/spotify.js`, `spotifyClientId/Secret` de `loadSettings`, `settings.example.json`, `POST /api/settings`, i18n y `Settings.tsx`.
+   Configuración: quitar los campos de claves de la vista principal; sección plegada "Avanzado · claves propias (opcional)" con Last.fm,
+   Discogs y AcoustID. Web: `genreSource` y chips aceptan `discogs`; quitar `spotify`.
+7. **Tests** node con `fetch` simulado (sin red): Discogs mapea style→canónico; 429 con reintento; sin claves se omite; Deezer identifica
+   por nombre; `/api/genre-classify` sin claves no da 400; `app-keys` respeta el orden env → archivo → settings. Vitest de los cambios web.
+**Gate:** node + build + lint 0 errores + vitest; `grep -ri spotify src web/src tests config` sin resultados (salvo este historial);
+el cerebro prueba en vivo con claves reales: Discogs sobre las 134 "Por revisar" (solo lectura) e identify sobre una copia.
+
+### E2.3 · Eliminar carpetas protegidas (decisión de Carlos, 2026-09-24)
+Solo existen carpeta de entrada y carpeta de salida. Revierte E2.1 punto 1-2 y los `excludeRoots` de E1/E3:
+1. Back: quitar `protectedRoots` de `loadSettings`/`POST /api/settings`/`normalizeProtectedRoots`; `/api/classify-by-tags`,
+   `/api/classify-apply`, `/api/classify-undo` ya no aceptan ni exigen `excludeRoots` (ignorar si llega). Se mantiene: el análisis
+   excluye siempre `destRoot` (E3.1), `to` dentro de `destRoot`, validación de rutas del manifiesto al deshacer, colisiones con sufijo.
+   `src/tag-classifier.js`/CLI: quitar `--exclude-root`, `status:'duplicate'` y `possibleDuplicate` (dependían de las carpetas de ejemplo).
+2. Web: quitar tarjeta "Ejemplos protegidos", aviso rojo, Tooltip de Mover, la línea de protegidas del diálogo, sección de Configuración,
+   estado/filtro "Posible duplicado" e i18n asociadas. Quedan 2 tarjetas: Carpeta a clasificar · Destino.
+3. Tests: borrar `tests/server-protected-roots.test.js`; ajustar los de E1/E3 que usaban `excludeRoots`; vitest actualizados.
+**Gate:** node + build + lint 0 errores + vitest; `grep -rn "protectedRoots\|excludeRoot\|possibleDuplicate" src web/src tests` vacío.
+
+### Back 4.1 · Correcciones de la revisión del cerebro
+1. `src/providers/discogs.js:28`: la búsqueda de Discogs devuelve `style` y `genre` (singular), no `styles`. Leer `result.style` y
+   `result.genre`. Ajustar el test para que el mock use la forma real de la API.
+2. `src/providers/app-keys.js`: el archivo `config/app-keys.json` acepta **ambas** formas de nombre por clave (`discogsKey` o `DISCOGS_KEY`,
+   `discogsSecret`/`DISCOGS_SECRET`, `lastfmApiKey`/`LASTFM_API_KEY`, `acoustidApiKey`/`ACOUSTID_API_KEY`). Test de ambas.
+
+### Back 4.2 · Discogs: segunda búsqueda por texto libre
+Medido en vivo: `artist=Black Coffee&track=The Rapture` → 0 resultados (Discogs lista "&Me, Black Coffee*"); `q=Black Coffee The Rapture Pt.III`
+→ `style: House, Deep House`. En `src/providers/discogs.js` `search`: si la búsqueda por `artist`+`track` devuelve 0, repetir con
+`q="<artist> <title>"` (título sin "(Original Mix)", "(Extended Mix)" ni corchetes `[...]`). Misma caché por consulta. Test con mock.
+
+### Back 4.3 · Online: no aceptar géneros genéricos
+Medido en vivo (Unsorted, 134 por revisar): 56 resueltas online, pero 43 eran genéricas — Discogs `genre: Electronic`→Electronica (33),
+Last.fm `electronic` (6) y `dance`→Dance Pop (4). Solo 13 útiles.
+1. `src/tag-classifier.js:72`: quitar el candidato `discogsClient.getGenres` (el campo `genre` de Discogs es siempre de nivel superior).
+2. En la fase online (solo ahí; el pase por tag del archivo no cambia) ignorar tags genéricos: `electronic`, `electronica`, `dance`,
+   `pop`, `electro`, `edm`, `club`, `electronic dance music`.
+3. Especificidad: si en los resultados aparecen `House` y otro canónico más específico (`Deep House`, `Tech House`, `Afro House`,
+   `Progressive House`, `Organic House`, `Melodic House & Techno`, `Minimal Deep Tech`), gana el específico; entre varios específicos,
+   el más frecuente en los 3 resultados de Discogs (empate: el primero).
+Tests node con mocks para 1-3.
+
 ### E2 · Vista "Clasificar por etiquetas" (front)
 Modo por defecto del Clasificador (el método viejo queda en un `Select` "Método: Etiquetas (recomendado) · Reglas online").
 1. Tres carpetas: Carpeta a clasificar · Ejemplos protegidos (excluidas; se guardan en `localStorage` como conveniencia) · Destino

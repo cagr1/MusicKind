@@ -1,7 +1,8 @@
 {
-  "spotifyClientId": "",
-  "spotifyClientSecret": "",
   "lastfmApiKey": "",
+  "discogsKey": "",
+  "discogsSecret": "",
+  "acoustidApiKey": "",
   "language": "es",
   "defaultOutputDir": "output"
 }
