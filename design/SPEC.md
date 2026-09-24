@@ -554,6 +554,31 @@ Decisión (como Spotify/rekordbox): quitar de la lista **no** corta la reproducc
 4. Tests vitest: limpiar la cola con una pista sonando → deck visible y audio no pausado; cerrar → `pause()` y deck oculto;
    siguiente deshabilitado si `current` no está en la cola.
 
+## Lote 5 — Stems a elección, escucha por carril y Chromaprint (2026-09-24)
+
+### S1 · Stems: elegir qué generar y escuchar por carril (solo `web/`)
+Diagnóstico: el play de Stems (`web/src/views/Stems.tsx:272`) reproduce los 3 carriles a la vez (volúmenes 85/100/90 en `:52-54`),
+así que se oye la mezcla completa; no hay forma práctica de oír solo voces. `:261` envía siempre `stems: 'both'`.
+1. Control segmentado (i18n) "Voces · Instrumental · Ambos" junto al formato → `stems: 'vocals'|'instrumental'|'both'` (el back ya lo acepta,
+   `src/server.js` `/api/stem-separate`). Tooltip i18n: el tiempo de proceso es el mismo; cambia qué archivos se guardan. Los carriles que
+   se muestran son Original + los generados.
+2. Escucha exclusiva por defecto: solo **un** carril audible (al terminar la separación: Voces si existe, si no Instrumental). Cada carril
+   tiene un botón de auriculares (`Headphones`, Tooltip i18n "Escuchar este carril"); clic = escuchar solo ese carril al instante, sin
+   perder sincronía; Shift+clic = sumarlo/quitarlo de la mezcla. El carril audible se marca con fondo `bg-white/[0.06]` e icono `brand`.
+   Se conservan volumen por carril; M/S se reemplaza por esta lógica (menos controles).
+3. Reproducir stems pausa el deck global (`usePlayer`) y reproducir en el deck pausa los stems.
+4. Tests vitest de `createStemAudioController`: exclusivo por defecto, clic cambia de carril, Shift suma, volúmenes efectivos correctos;
+   y de que `stems` enviado coincide con la opción elegida.
+
+### C1 · Chromaprint instalable (electron + web)
+`fpcalc` (Chromaprint) solo se usa para identificar por huella con clave de AcoustID. Hoy Configuración muestra "No instalado" sin acción.
+1. `electron/main.cjs`: handler `install-chromaprint` análogo a la instalación de FFmpeg (macOS: `brew install chromaprint`; Windows: `winget
+   install -e --id AcoustID.Chromaprint` si existe, si no mensaje accionable), mismo manejo de errores y mensajes; exponer en
+   `electron/preload.cjs` y `web/src/lib/electron.ts` (no-op en navegador).
+2. Configuración: fila Chromaprint con botón "Instalar" cuando no está; tras instalar → re-verificar (`/api/check-deps`). Tooltip i18n:
+   "Opcional: identifica pistas sin tags por huella de audio (requiere clave de AcoustID)".
+3. Tests: wrapper `electron.ts` (no-op sin Electron) y la fila de Settings (Instalar llama al wrapper y luego re-verifica).
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)

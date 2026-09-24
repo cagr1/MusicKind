@@ -33,6 +33,8 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
 
 7. [x] **Lote 4** — A1 AIFF→FLAC en caché + `/api/artwork` · A2 errores visibles + carátulas · A3 onda del deck en SVG · A4 deck independiente de la lista (limpiar no corta la pista; X cierra). Verificado en vivo con AIFF reales: suenan (00:02→00:05), carátulas en filas/Inspector/deck, clic al 75% → 05:43/07:35 (0.754) con la línea a 3 px del clic.
 
+8. [ ] **Lote 5** (`design/SPEC.md` § Lote 5): S1 stems a elección + escucha por carril · C1 Chromaprint instalable.
+
 **Siguiente (propuesto):** QA manual de Carlos en Electron (audio audible, arrastrar carpetas) → Back 3 (puntajes de Sets normalizados) → P2 del clasificador (ordenar/deshacer con manifiesto) → F9 corte `ui/`→`web/dist`. Back 1b (libkeyfinder) y la pérdida de remixer en `identify` como mejoras.
 
 Sigue pendiente en paralelo: revisión Terra del back (`e0c0424`), P1/P2 del clasificador, F3 contrato de escritura de tags.
