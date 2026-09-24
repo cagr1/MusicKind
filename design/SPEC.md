@@ -691,6 +691,33 @@ y habilitó "Mover propuestas · 2443". La protección dependía de que el clien
 4. **Método:** el control de método muestra el método **actual** (Select con valor), no el otro.
 Tests vitest de 2–4.
 
+### E2.2 · QA de Carlos en Electron (2026-09-24): género pisado, layout y respaldo online
+Captura: 980 pistas de `MUSIC BACKUP/Music`; leyenda con tags crudos ("electronicfresh.com", "Minimal", "92" sin nombre), barra de
+distribución ocupando media vista abajo (solo 2 filas visibles), encabezado "Original tag" montado sobre la columna de pista.
+1. **Bug (causa verificada):** `web/src/views/Classifier.tsx:620` hace `{ ...row, ...meta }` y el `genre` crudo de `readMetadata`
+   pisa el `genre` canónico del back. Mezclar solo `title`, `artist`, `bpm`, `key` (nunca `genre`, `status`, `destination`). Test vitest.
+2. **Layout:** la distribución va **arriba** de la tabla (debajo de los filtros), en una sola línea: barra delgada + los 6 géneros
+   principales con conteo + "+N" con Tooltip del resto; "Por revisar" con su nombre traducido. Leyenda solo con canónicos + Por revisar.
+   La tabla ocupa el resto de la altura. Encabezados alineados con las celdas (mismo `flex`/anchos en `thead` que en las filas virtuales).
+3. **Respaldo online (back)** en `src/tag-classifier.js`, tras el pase por tags, solo para filas `review` con motivo
+   `missing-genre-tag` | `junk-genre-tag` | `unknown-genre-tag`:
+   - Artista/título del tag (`common.artist`/`common.title`); si faltan, del nombre `Artista - Título`. Sin ambos → queda `review`.
+   - Last.fm `getTrackTags` y luego `getArtistTags` (si hay `lastfmApiKey`); Spotify `searchTrack` → `getArtist().genres` (si hay claves).
+     Reusar `src/lastfm.js`, `src/spotify.js` y `src/cache.js`; credenciales de `config/settings.json` (misma lectura que `src/cli.js`).
+   - Cada tag/género candidato pasa por la **misma** tabla de alias (`normalizeGenre` + lookup); el primero que mapee a un canónico gana
+     (orden: tags de pista Last.fm, géneros Spotify, tags de artista Last.fm). Nada mapea → sigue `review`, `reason` igual.
+   - Si mapea: `genre`, `status:'ok'`, `genreSource:'lastfm'|'spotify'`, `onlineTag` (el valor crudo que mapeó), `destination`.
+     Filas del tag: `genreSource:'tag'`.
+   - Concurrencia 4, timeout 8 s por llamada, error/timeout = sin resultado (no aborta). Sin claves → se omite sin error.
+     Flag CLI `--no-online` y body `online:false` en `/api/classify-by-tags` para desactivarlo (tests lo usan; por defecto activo).
+   - Progreso: segunda fase `[PROGRESS:X/Y] Processing: online · nombre`.
+   - Nunca escribe tags ni mueve nada.
+4. **UI:** estado "Sugerido online (Last.fm/Spotify)" distinto de "Propuesto" (chip + filtro con conteo); se incluye en "Mover" y en el
+   conteo del diálogo por separado ("N desde tags · M online"). Inspector muestra `onlineTag` y la fuente.
+5. Tests node con clientes simulados (inyectables): junk → Last.fm mapea → ok/lastfm; sin mapeo → review; sin claves → review sin
+   llamadas; timeout → review. Vitest de 1, 2 (leyenda solo canónicos) y 4.
+**Gate:** node + build + lint 0 errores + vitest; el cerebro re-corre el análisis (solo lectura) sobre `MUSIC BACKUP/Music` y compara conteos.
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)

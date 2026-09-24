@@ -51,7 +51,7 @@ test("/api/classify-by-tags propone tags reales con FFmpeg en tmp y no altera el
   await withServer(async (base) => {
     const response = await fetch(`${base}/api/classify-by-tags`, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ inputRoot: input, excludeRoots: [], destRoot: destination })
+      body: JSON.stringify({ inputRoot: input, excludeRoots: [], destRoot: destination, online: false })
     });
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type"), /text\/event-stream/);

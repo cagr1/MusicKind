@@ -4,6 +4,8 @@ import {
   changeTagGenre,
   filterTagResults,
   tagResultCounts,
+  canonicalTagDistribution,
+  mergeTrackMetadata,
   type TagResult,
 } from './tag-classifier'
 
@@ -50,7 +52,31 @@ describe('tag classifier view logic', () => {
       review: 1,
       duplicate: 1,
       possibleDuplicate: 1,
+      online: 0,
     })
+  })
+
+  it('keeps the back canonical genre when metadata fills track fields', () => {
+    const row = { ...rows[1], genre: 'Tech House', status: 'ok' as const, destination: '/out/Tech House/b.mp3' }
+    expect(mergeTrackMetadata(row, { title: 'Title', artist: 'Artist', bpm: 124, key: 'Amin' })).toMatchObject({
+      title: 'Title', artist: 'Artist', bpm: 124, key: 'Amin', genre: 'Tech House', status: 'ok', destination: '/out/Tech House/b.mp3',
+    })
+  })
+
+  it('shows only canonical genres and the translated review bucket in the distribution', () => {
+    const distribution = canonicalTagDistribution([
+      { ...rows[0], genre: 'Tech House' },
+      { ...rows[1], genre: 'electronicfresh.com' },
+      { ...rows[2], genre: 'House' },
+    ], ['Tech House', 'House'], 'Por revisar')
+    expect(distribution.map((item) => item.genre)).toEqual(['Tech House', 'Por revisar', 'House'])
+  })
+
+  it('filters online proposals independently while still including them in moves', () => {
+    const online = { ...rows[0], genreSource: 'spotify' as const, onlineTag: 'deep house' }
+    expect(filterTagResults([online], 'online', 'all')).toEqual([online])
+    expect(buildClassifyMoves([online])).toEqual([{ from: online.path, to: online.destination }])
+    expect(tagResultCounts([online]).online).toBe(1)
   })
 
   it('changes genres in a batch and preserves duplicate protection', () => {

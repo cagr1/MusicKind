@@ -10,9 +10,11 @@ export interface TagResult {
   artist?: string
   bpm?: number | null
   key?: string | null
+  genreSource?: 'tag' | 'lastfm' | 'spotify' | null
+  onlineTag?: string | null
 }
 
-export type TagStatusFilter = 'all' | TagResult['status'] | 'possibleDuplicate'
+export type TagStatusFilter = 'all' | TagResult['status'] | 'possibleDuplicate' | 'online'
 
 export function buildClassifyMoves(results: TagResult[]) {
   return results
@@ -30,7 +32,10 @@ export function filterTagResults(results: TagResult[], status: TagStatusFilter, 
       (status === 'possibleDuplicate'
         ? result.possibleDuplicate || result.status === 'duplicate'
         : result.status === status)
-    return statusMatches && (genre === 'all' || (result.genre ?? 'review') === genre)
+    const onlineMatches = status === 'online'
+      ? result.status === 'ok' && (result.genreSource === 'lastfm' || result.genreSource === 'spotify')
+      : statusMatches
+    return onlineMatches && (genre === 'all' || (result.genre ?? 'review') === genre)
   })
 }
 
@@ -41,7 +46,28 @@ export function tagResultCounts(results: TagResult[]) {
     review: results.filter((result) => result.status === 'review').length,
     duplicate: results.filter((result) => result.status === 'duplicate').length,
     possibleDuplicate: results.filter((result) => result.possibleDuplicate).length,
+    online: results.filter((result) => result.status === 'ok' && (result.genreSource === 'lastfm' || result.genreSource === 'spotify')).length,
   }
+}
+
+export function mergeTrackMetadata<T extends TagResult>(row: T, metadata: { title?: string; artist?: string; bpm?: number | null; key?: string | null }): T {
+  return { ...row, ...metadata, genre: row.genre, status: row.status, destination: row.destination }
+}
+
+export function canonicalTagDistribution(results: TagResult[], canonical: string[], reviewLabel: string) {
+  const allowed = new Set(canonical)
+  const counts = new Map<string, number>()
+  for (const result of results) {
+    const genre = result.genre && allowed.has(result.genre) ? result.genre : reviewLabel
+    counts.set(genre, (counts.get(genre) ?? 0) + 1)
+  }
+  const total = results.length
+  return [...counts].sort((a, b) => b[1] - a[1]).map(([genre, count], index) => ({
+    genre,
+    count,
+    percentage: total ? (count / total) * 100 : 0,
+    majority: index === 0,
+  }))
 }
 
 export function changeTagGenre(

@@ -104,3 +104,78 @@ test("no vuelve a proponer archivos que ya están bajo destRoot", async (t) => {
   const result = await classifyByTags({ inputRoot: input, destRoot: destination, parseFile: async () => ({ common: { genre: ["House"] } }) });
   assert.deepEqual(result.map((item) => path.basename(item.path)), ["pending.wav"]);
 });
+
+async function onlineFixture(t, { lastfmClient = null, spotifyClient = null, online = true, timeoutMs = 20 } = {}) {
+  const parent = tempDir("mk-tags-online-");
+  const input = path.join(parent, "input");
+  fs.mkdirSync(input);
+  const file = addFile(input, "Test Artist - Test Track.mp3");
+  t.after(() => fs.rmSync(parent, { recursive: true, force: true }));
+  return classifyByTags({
+    inputRoot: input,
+    destRoot: path.join(parent, "out"),
+    aliasTable: { House: ["deep house"] },
+    parseFile: async () => ({ common: { genre: ["https://junk.example.com"] } }),
+    lastfmClient,
+    spotifyClient,
+    online,
+    timeoutMs,
+    onProgress() {},
+  }).then((rows) => rows[0]).then((row) => ({ row, file }));
+}
+
+test("respaldo online mapea tag basura de Last.fm y conserva fuente/tag de origen", async (t) => {
+  let trackCalls = 0;
+  const { row, file } = await onlineFixture(t, {
+    lastfmClient: {
+      async getTrackTags(artist, title) {
+        trackCalls++;
+        assert.equal(artist, "Test Artist");
+        assert.equal(title, "Test Track");
+        return ["Deep House"];
+      },
+      async getArtistTags() { throw new Error("artist lookup should not run after match"); },
+    },
+  });
+  assert.equal(trackCalls, 1);
+  assert.match(row.path, /Test Artist - Test Track\.mp3/);
+  assert.equal(row.genre, "House");
+  assert.equal(row.status, "ok");
+  assert.equal(row.genreSource, "lastfm");
+  assert.equal(row.onlineTag, "Deep House");
+  assert.equal(row.destination, path.join(path.dirname(path.dirname(file)), "out", "House", path.basename(file)));
+});
+
+test("respaldo online sin mapeo deja review y respeta orden Spotify antes de tags de artista", async (t) => {
+  const calls = [];
+  const { row } = await onlineFixture(t, {
+    lastfmClient: {
+      async getTrackTags() { calls.push("track"); return ["unmapped track"]; },
+      async getArtistTags() { calls.push("artist"); return ["unmapped artist"]; },
+    },
+    spotifyClient: {
+      async searchTrack() { calls.push("search"); return { artists: [{ id: "artist-id" }] }; },
+      async getArtist() { calls.push("spotify"); return { genres: ["unmapped spotify"] }; },
+    },
+  });
+  assert.deepEqual(calls, ["track", "search", "spotify", "artist"]);
+  assert.equal(row.status, "review");
+  assert.equal(row.reason, "junk-genre-tag");
+  assert.equal(row.genre, null);
+});
+
+test("sin claves online no hace llamadas y un timeout deja la pista en review", async (t) => {
+  let calls = 0;
+  const noKeys = await onlineFixture(t);
+  assert.equal(noKeys.row.status, "review");
+  const timeout = await onlineFixture(t, {
+    lastfmClient: {
+      async getTrackTags() { calls++; return new Promise(() => {}); },
+      async getArtistTags() { calls++; return []; },
+    },
+    timeoutMs: 5,
+  });
+  assert.equal(calls, 2);
+  assert.equal(timeout.row.status, "review");
+  assert.equal(timeout.row.reason, "junk-genre-tag");
+});

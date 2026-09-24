@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFile as defaultParseFile } from "music-metadata";
 import { discoverAudioFiles } from "./services/audio-discovery.js";
+import { parseArtistTitleFromFilename } from "./utils.js";
 
 const aliasesPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../config/genre-aliases.json");
 
@@ -29,7 +30,7 @@ export function isJunkGenre(value) {
   return /(?:https?:\/\/|www\.|\.com\b)/i.test(String(value ?? ""));
 }
 
-export async function classifyByTags({ inputRoot, excludeRoots = [], destRoot, parseFile = defaultParseFile, discovery = discoverAudioFiles, aliasTable } = {}) {
+export async function classifyByTags({ inputRoot, excludeRoots = [], destRoot, parseFile = defaultParseFile, discovery = discoverAudioFiles, aliasTable, online = true, lastfmClient = null, spotifyClient = null, onProgress = (message) => console.log(message), concurrency = 4, timeoutMs = 8000 } = {}) {
   const input = path.resolve(inputRoot || "");
   const excludes = excludeRoots.map((root) => path.resolve(root));
   const destinationRoot = path.resolve(destRoot || "");
@@ -52,11 +53,14 @@ export async function classifyByTags({ inputRoot, excludeRoots = [], destRoot, p
   const results = [];
   for (let index = 0; index < files.length; index++) {
     const file = files[index];
-    console.log(`[PROGRESS:${index + 1}/${files.length}] Processing: ${path.basename(file)}`);
+    onProgress(`[PROGRESS:${index + 1}/${files.length}] Processing: ${path.basename(file)}`);
     const stat = fs.statSync(file);
     const duplicateKey = `${path.basename(file).toLocaleLowerCase("en")}\0${stat.size}`;
     const duplicate = excludedFiles.has(duplicateKey);
     const metadata = await parseFile(file, { duration: false, skipCovers: true });
+    const parsedName = parseArtistTitleFromFilename(path.basename(file));
+    const artist = String(metadata?.common?.artist || parsedName.artist || "").trim();
+    const title = String(metadata?.common?.title || parsedName.title || "").trim();
     const rawGenre = metadata?.common?.genre;
     const tagGenre = Array.isArray(rawGenre) ? rawGenre[0] ?? null : (typeof rawGenre === "string" ? rawGenre : null);
     const genre = tagGenre && !isJunkGenre(tagGenre) ? lookup.get(normalizeGenre(tagGenre)) ?? null : null;
@@ -66,10 +70,55 @@ export async function classifyByTags({ inputRoot, excludeRoots = [], destRoot, p
     else if (!tagGenre) { status = "review"; reason = "missing-genre-tag"; }
     else if (isJunkGenre(tagGenre)) { status = "review"; reason = "junk-genre-tag"; }
     else if (!genre) { status = "review"; reason = "unknown-genre-tag"; }
-    results.push({ path: file, tagGenre, genre, status, reason, possibleDuplicate: excludedNames.has(path.basename(file).toLocaleLowerCase("en")), destination: genre ? path.join(destinationRoot, genre, path.basename(file)) : null });
+    results.push({ path: file, artist, title, tagGenre, genre, status, reason, possibleDuplicate: excludedNames.has(path.basename(file).toLocaleLowerCase("en")), genreSource: genre ? "tag" : null, onlineTag: null, destination: genre ? path.join(destinationRoot, genre, path.basename(file)) : null });
+  }
+  if (online && (lastfmClient || spotifyClient)) {
+    const pending = results.filter((row) => row.status === "review" && ["missing-genre-tag", "junk-genre-tag", "unknown-genre-tag"].includes(row.reason));
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(Math.max(1, concurrency), pending.length) }, async () => {
+      while (cursor < pending.length) {
+        const row = pending[cursor++];
+        const index = cursor;
+        onProgress(`[PROGRESS:${index}/${pending.length}] Processing: online · ${path.basename(row.path)}`);
+        const artist = row.artist;
+        const title = row.title;
+        if (!artist || !title) continue;
+        const candidates = [];
+        if (lastfmClient) candidates.push(async () => ({ source: "lastfm", tags: await lastfmClient.getTrackTags(artist, title) }));
+        if (spotifyClient) candidates.push(async () => {
+          const track = await spotifyClient.searchTrack(artist, title);
+          const spotifyArtist = track?.artists?.[0];
+          if (!spotifyArtist?.id) return { source: "spotify", tags: [] };
+          const details = await spotifyClient.getArtist(spotifyArtist.id);
+          return { source: "spotify", tags: details?.genres ?? [] };
+        });
+        if (lastfmClient) candidates.push(async () => ({ source: "lastfm", tags: await lastfmClient.getArtistTags(artist) }));
+        for (const getCandidates of candidates) {
+          try {
+            const { source, tags } = await withTimeout(getCandidates(), timeoutMs);
+            const match = (Array.isArray(tags) ? tags : []).map((tag) => ({ tag, genre: lookup.get(normalizeGenre(tag)) })).find((item) => item.genre);
+            if (match) {
+              row.genre = match.genre;
+              row.status = "ok";
+              row.genreSource = source;
+              row.onlineTag = match.tag;
+              row.destination = path.join(destinationRoot, match.genre, path.basename(row.path));
+              break;
+            }
+          } catch { /* Online errors and timeouts leave this candidate unresolved. */ }
+        }
+      }
+    });
+    await Promise.all(workers);
   }
   console.log(JSON.stringify(results, null, 2));
   return results;
+}
+
+function withTimeout(promise, timeoutMs) {
+  let timer;
+  return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("Online lookup timeout")), timeoutMs); })])
+    .finally(() => clearTimeout(timer));
 }
 
 export function validateClassificationRoots(inputRoot, excludeRoots, destRoot) {

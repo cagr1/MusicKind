@@ -206,6 +206,7 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     }
     const args = [path.join(projectRoot, "src", "tag-classifier-cli.js"), "--input-root", input, "--dest-root", destination];
     for (const root of excludes) args.push("--exclude-root", root);
+    if (body.online === false) args.push("--no-online");
     const processId = body.processId || `tags-${Date.now()}`;
     await runProcessWithProgress(process.execPath, args, res, processId, { parseJsonResult: true });
     return;

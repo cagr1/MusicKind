@@ -139,6 +139,8 @@
     "allGenres": "Todos los géneros",
     "changeSelected": "Cambiar seleccionadas",
     "review": "Por revisar",
+    "moveFromTags": "desde tags",
+    "moveFromOnline": "online",
     "move": "Mover propuestas",
     "confirmMove": "Confirmar movimientos",
     "moveDone": "Movimientos completados",
@@ -148,6 +150,7 @@
     "statuses": {
       "all": "Todos",
       "ok": "Propuesto",
+      "online": "Sugerido online (Last.fm/Spotify)",
       "review": "Por revisar",
       "duplicate": "Duplicado de ejemplos",
       "possibleDuplicate": "Posible duplicado de ejemplos"
