@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { deckBpmLabel, waveformPeakIndex, waveformSeekTime } from './DeckPlayer'
+import { canStep, deckBpmLabel, waveformPeakIndex, waveformSeekTime } from './DeckPlayer'
+
+describe('canStep', () => {
+  const queue = [{ path: '/a' }, { path: '/b' }]
+
+  it('disables navigation when the current track is no longer queued', () => {
+    expect(canStep(queue, '/removed', -1)).toBe(false)
+    expect(canStep(queue, '/removed', 1)).toBe(false)
+  })
+})
 
 describe('deckBpmLabel', () => {
   it('rounds BPM to an integer and shows a dash when missing', () => {

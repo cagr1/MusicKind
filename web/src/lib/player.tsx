@@ -5,6 +5,7 @@ import { useT } from '@/i18n/I18nProvider'
 interface PlayerContextValue {
   audio: HTMLAudioElement | null
   path: string | null
+  current: DeckTrack | null
   playing: boolean
   currentTime: number
   duration: number
@@ -17,6 +18,7 @@ interface PlayerContextValue {
   next: () => void
   visible: boolean
   preparing: boolean
+  close: () => void
 }
 
 export interface DeckTrack {
@@ -36,6 +38,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
   const [audio, setAudio] = React.useState<HTMLAudioElement | null>(null)
   const [path, setPath] = React.useState<string | null>(null)
+  const [current, setCurrent] = React.useState<DeckTrack | null>(null)
   const [playing, setPlaying] = React.useState(false)
   const [currentTime, setCurrentTime] = React.useState(0)
   const [duration, setDuration] = React.useState(0)
@@ -46,6 +49,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const pathRef = React.useRef(path)
   queueRef.current = queue
   pathRef.current = path
+  const updateQueue = React.useCallback((tracks: DeckTrack[]) => {
+    queueRef.current = tracks
+    setQueue(tracks)
+  }, [])
 
   React.useEffect(() => {
     const element = new Audio()
@@ -73,6 +80,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         element.src = `/api/audio?path=${encodeURIComponent(next.path)}`
         pathRef.current = next.path
         setPath(next.path)
+        setCurrent(next)
         setPreparing(true)
         void element
           .play()
@@ -112,6 +120,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         element.load()
         setPath(nextPath)
         pathRef.current = nextPath
+        const track = queueRef.current.find((item) => item.path === nextPath)
+        setCurrent(track ?? { path: nextPath, title: '—', artist: '—', bpm: null, key: null })
         setVisible(true)
         setCurrentTime(0)
         setDuration(0)
@@ -159,6 +169,23 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     if (audioRef.current) audioRef.current.currentTime = Math.max(0, time)
   }, [])
 
+  const close = React.useCallback(() => {
+    const element = audioRef.current
+    element?.pause()
+    if (element) {
+      element.src = ''
+      element.load()
+    }
+    pathRef.current = null
+    setPath(null)
+    setCurrent(null)
+    setCurrentTime(0)
+    setDuration(0)
+    setPlaying(false)
+    setPreparing(false)
+    setVisible(false)
+  }, [])
+
   const step = React.useCallback(
     (delta: number) => {
       const list = queueRef.current
@@ -172,6 +199,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       element.load()
       pathRef.current = target.path
       setPath(target.path)
+      setCurrent(target)
       setCurrentTime(0)
       setDuration(0)
       setVisible(true)
@@ -210,6 +238,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     () => ({
       audio,
       path,
+      current,
       playing,
       currentTime,
       duration,
@@ -217,15 +246,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       toggle,
       seek,
       queue,
-      setQueue,
+      setQueue: updateQueue,
       previous: () => step(-1),
       next: () => step(1),
       visible,
       preparing,
+      close,
     }),
     [
       audio,
       path,
+      current,
       playing,
       currentTime,
       duration,
@@ -233,9 +264,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       toggle,
       seek,
       queue,
+      updateQueue,
       step,
       visible,
       preparing,
+      close,
     ],
   )
 

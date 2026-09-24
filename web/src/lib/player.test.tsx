@@ -186,6 +186,50 @@ describe('PlayerProvider', () => {
     root.unmount()
   })
 
+  it('keeps the current track and playback when the queue is cleared, then closes cleanly', async () => {
+    const instance = new FakeAudio()
+    vi.stubGlobal(
+      'Audio',
+      class {
+        constructor() {
+          return instance
+        }
+      },
+    )
+    let api: ReturnType<typeof usePlayer> | undefined
+    function Harness() {
+      api = usePlayer()
+      return null
+    }
+    const root = createRoot(document.createElement('div'))
+    await act(async () => {
+      root.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(PlayerProvider, null, createElement(Harness)),
+        ),
+      )
+    })
+    await act(async () => {
+      api?.setQueue([{ path: '/a', title: 'A', artist: 'Artist', bpm: 120, key: '8A' }])
+      api?.toggle('/a')
+      await Promise.resolve()
+    })
+    await act(async () => api?.setQueue([]))
+
+    expect(api?.current).toEqual({ path: '/a', title: 'A', artist: 'Artist', bpm: 120, key: '8A' })
+    expect(api?.visible).toBe(true)
+    expect(instance.paused).toBe(false)
+
+    await act(async () => api?.close())
+    expect(instance.pause).toHaveBeenCalled()
+    expect(instance.src).toBe('')
+    expect(api?.current).toBeNull()
+    expect(api?.visible).toBe(false)
+    root.unmount()
+  })
+
   it('keeps previous and next inside the current queue bounds', async () => {
     const instances: FakeAudio[] = []
     vi.stubGlobal(

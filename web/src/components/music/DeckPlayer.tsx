@@ -1,11 +1,12 @@
 import * as React from 'react'
-import { ChevronLeft, ChevronRight, Loader2, Pause, Play, Volume2, VolumeX } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Pause, Play, Volume2, VolumeX, X } from 'lucide-react'
 import { usePlayer } from '@/lib/player'
 import { getJson } from '@/lib/api'
 import { TrackArtwork } from './TrackArtwork'
 import { CamelotBadge } from './CamelotBadge'
 import { Slider } from '@/components/ui/slider'
 import { useT } from '@/i18n/I18nProvider'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 function clock(value: number) {
   return `${String(Math.floor(value / 60)).padStart(2, '0')}:${String(Math.floor(value % 60)).padStart(2, '0')}`
@@ -24,11 +25,17 @@ export function deckBpmLabel(bpm: number | null) {
   return bpm === null ? '—' : String(Math.round(bpm))
 }
 
+export function canStep(queue: { path: string }[], path: string | null, delta: -1 | 1) {
+  const index = queue.findIndex((item) => item.path === path)
+  return index >= 0 && index + delta >= 0 && index + delta < queue.length
+}
+
 export function DeckPlayer() {
   const t = useT()
   const {
     audio,
     path,
+    current,
     queue,
     playing,
     currentTime,
@@ -39,10 +46,11 @@ export function DeckPlayer() {
     next,
     visible,
     preparing,
+    close,
   } = usePlayer()
   const [peaks, setPeaks] = React.useState<number[]>([])
   const [volume, setVolume] = React.useState(0.8)
-  const track = queue.find((item) => item.path === path)
+  const track = current
   React.useEffect(() => {
     setPeaks([])
     if (!path) return
@@ -81,8 +89,9 @@ export function DeckPlayer() {
         <button
           type="button"
           onClick={previous}
+          disabled={!canStep(queue, path, -1)}
           aria-label={t('player.previous')}
-          className="p-1.5 text-zinc-400 hover:text-white"
+          className="p-1.5 text-zinc-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
         >
           <ChevronLeft className="size-4" />
         </button>
@@ -104,8 +113,9 @@ export function DeckPlayer() {
         <button
           type="button"
           onClick={next}
+          disabled={!canStep(queue, path, 1)}
           aria-label={t('player.next')}
-          className="p-1.5 text-zinc-400 hover:text-white"
+          className="p-1.5 text-zinc-400 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
         >
           <ChevronRight className="size-4" />
         </button>
@@ -173,6 +183,21 @@ export function DeckPlayer() {
           onValueChange={([value]) => setVolume(value)}
         />
       </div>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              onClick={close}
+              aria-label={t('player.close')}
+              className="p-1.5 text-zinc-400 hover:text-white"
+            >
+              <X className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>{t('player.close')}</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </footer>
   )
 }
