@@ -24,12 +24,15 @@ afterEach(() => vi.restoreAllMocks())
 describe('PlayerProvider', () => {
   it('uses one audio element and pauses track A before playing track B', async () => {
     const instances: FakeAudio[] = []
-    vi.stubGlobal('Audio', class extends FakeAudio {
-      constructor() {
-        super()
-        instances.push(this)
-      }
-    })
+    vi.stubGlobal(
+      'Audio',
+      class extends FakeAudio {
+        constructor() {
+          super()
+          instances.push(this)
+        }
+      },
+    )
     let toggle: ((path: string) => void) | undefined
 
     function Harness() {

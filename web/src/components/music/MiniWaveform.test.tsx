@@ -14,11 +14,7 @@ describe('MiniWaveform', () => {
 
     await act(async () => {
       root.render(
-        createElement(
-          I18nProvider,
-          null,
-          createElement(MiniWaveform, { path: '/music/song.mp3' }),
-        ),
+        createElement(I18nProvider, null, createElement(MiniWaveform, { path: '/music/song.mp3' })),
       )
       await Promise.resolve()
       await Promise.resolve()
@@ -29,11 +25,7 @@ describe('MiniWaveform', () => {
 
     await act(async () => {
       root.render(
-        createElement(
-          I18nProvider,
-          null,
-          createElement(MiniWaveform, { path: '/music/song.mp3' }),
-        ),
+        createElement(I18nProvider, null, createElement(MiniWaveform, { path: '/music/song.mp3' })),
       )
     })
 

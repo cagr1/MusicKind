@@ -4,7 +4,9 @@ import { electron, getDroppedFilePath, resolveDroppedFiles } from './electron'
 describe('getDroppedFilePath', () => {
   it('uses the Electron bridge when File.path is absent', async () => {
     vi.spyOn(electron, 'getPathForFile').mockResolvedValue('/Music/song.mp3')
-    await expect(getDroppedFilePath(new File(['audio'], 'song.mp3'))).resolves.toBe('/Music/song.mp3')
+    await expect(getDroppedFilePath(new File(['audio'], 'song.mp3'))).resolves.toBe(
+      '/Music/song.mp3',
+    )
   })
 
   it('rejects a basename instead of sending it to the backend', async () => {

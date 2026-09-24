@@ -11,7 +11,14 @@ export const LANG_STORAGE_KEY = 'musickind-lang'
 type Leaves<T, Prefix extends string = ''> = T extends string
   ? Prefix
   : T extends object
-    ? { [K in keyof T & string]: Leaves<T[K], `${Prefix}${Prefix extends '' ? '' : '.'}${K}` extends string ? `${Prefix}${Prefix extends '' ? '' : '.'}${K}` : never> }[keyof T & string]
+    ? {
+        [K in keyof T & string]: Leaves<
+          T[K],
+          `${Prefix}${Prefix extends '' ? '' : '.'}${K}` extends string
+            ? `${Prefix}${Prefix extends '' ? '' : '.'}${K}`
+            : never
+        >
+      }[keyof T & string]
     : never
 
 export type TranslationKey = Leaves<typeof es>
@@ -19,7 +26,11 @@ export type TranslationKey = Leaves<typeof es>
 function getByPath(dict: unknown, path: string): string {
   const value = path
     .split('.')
-    .reduce<unknown>((acc, part) => (acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined), dict)
+    .reduce<unknown>(
+      (acc, part) =>
+        acc && typeof acc === 'object' ? (acc as Record<string, unknown>)[part] : undefined,
+      dict,
+    )
   return typeof value === 'string' ? value : path
 }
 
@@ -52,14 +63,11 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     setLang(lang === 'es' ? 'en' : 'es')
   }, [lang, setLang])
 
-  const t = React.useCallback(
-    (key: TranslationKey) => getByPath(DICTS[lang], key),
-    [lang]
-  )
+  const t = React.useCallback((key: TranslationKey) => getByPath(DICTS[lang], key), [lang])
 
   const value = React.useMemo<I18nContextValue>(
     () => ({ lang, setLang, toggleLang, t }),
-    [lang, setLang, toggleLang, t]
+    [lang, setLang, toggleLang, t],
   )
 
   React.useEffect(() => {

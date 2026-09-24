@@ -7,11 +7,7 @@ interface TrackArtworkProps {
   className?: string
 }
 
-export function TrackArtwork({
-  camelotKey = null,
-  size = 32,
-  className = '',
-}: TrackArtworkProps) {
+export function TrackArtwork({ camelotKey = null, size = 32, className = '' }: TrackArtworkProps) {
   const key = normalizeCamelot(camelotKey)
   const iconSize = size >= 90 ? 36 : size >= 48 ? 20 : 14
   const radius = size >= 90 ? 'rounded-lg' : size >= 48 ? 'rounded-md' : 'rounded'

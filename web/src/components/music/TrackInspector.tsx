@@ -52,9 +52,7 @@ export function TrackInspector({
         ? '—'
         : `${t('music.tag')} ${Math.round(track.tagBpm)}`
       : `${track.analyzedBpm.toFixed(1)}${
-          track.tagBpm !== null &&
-          track.tagBpm !== undefined &&
-          track.analyzedBpm !== track.tagBpm
+          track.tagBpm !== null && track.tagBpm !== undefined && track.analyzedBpm !== track.tagBpm
             ? ` · ${t('music.tag')} ${Math.round(track.tagBpm)}`
             : ''
         }`
@@ -66,18 +64,10 @@ export function TrackInspector({
     >
       <div key={track.id} className="flex-1 space-y-6 overflow-y-auto p-5">
         <div className="flex flex-col items-center gap-3 text-center">
-          <TrackArtwork
-            camelotKey={camelot}
-            size={96}
-            className="border border-line"
-          />
+          <TrackArtwork camelotKey={camelot} size={96} className="border border-line" />
           <div className="w-full px-2">
-            <h2 className="truncate text-[15px] font-semibold text-zinc-100">
-              {track.title}
-            </h2>
-            <p className="mt-0.5 truncate text-[13px] text-zinc-400">
-              {track.artist}
-            </p>
+            <h2 className="truncate text-[15px] font-semibold text-zinc-100">{track.title}</h2>
+            <p className="mt-0.5 truncate text-[13px] text-zinc-400">{track.artist}</p>
           </div>
         </div>
 
@@ -95,9 +85,7 @@ export function TrackInspector({
             >
               {bpm === null || bpm === undefined ? '—' : Math.round(bpm)}
             </span>
-            <span className="mt-1 block font-mono text-[10px] text-zinc-500">
-              {bpmNote}
-            </span>
+            <span className="mt-1 block font-mono text-[10px] text-zinc-500">{bpmNote}</span>
           </div>
           <div className="border-l border-line pl-3">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
@@ -110,16 +98,10 @@ export function TrackInspector({
               >
                 {camelot ?? '—'}
               </span>
-              <span className="font-mono text-[14px] text-zinc-400">
-                {musicalKey ?? '—'}
-              </span>
+              <span className="font-mono text-[14px] text-zinc-400">{musicalKey ?? '—'}</span>
             </div>
             <span className="mt-1 block font-mono text-[10px] text-zinc-500">
-              {camelot
-                ? camelot.endsWith('A')
-                  ? t('music.minor')
-                  : t('music.major')
-                : '—'}
+              {camelot ? (camelot.endsWith('A') ? t('music.minor') : t('music.major')) : '—'}
             </span>
           </div>
         </div>
@@ -132,9 +114,7 @@ export function TrackInspector({
             <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
               {t('music.harmonicWheel')}
             </span>
-            <span className="font-mono text-[10px] text-zinc-500">
-              {musicalKey ?? '—'}
-            </span>
+            <span className="font-mono text-[10px] text-zinc-500">{musicalKey ?? '—'}</span>
           </div>
           <CamelotWheel currentKey={camelot} onSelectKey={onKeyChange} />
           <div
@@ -142,27 +122,19 @@ export function TrackInspector({
               pt-2 font-mono text-[11px]"
           >
             <span className="text-zinc-300">
-              <small className="mr-1 text-[9px] text-zinc-500">
-                {t('music.down')}
-              </small>
+              <small className="mr-1 text-[9px] text-zinc-500">{t('music.down')}</small>
               {matches.minusOne ?? '—'}
             </span>
             <span className="font-bold text-brand">
-              <small className="mr-1 text-[9px] text-zinc-500">
-                {t('music.exact')}
-              </small>
+              <small className="mr-1 text-[9px] text-zinc-500">{t('music.exact')}</small>
               {matches.exact ?? '—'}
             </span>
             <span className="text-zinc-300">
-              <small className="mr-1 text-[9px] text-zinc-500">
-                {t('music.up')}
-              </small>
+              <small className="mr-1 text-[9px] text-zinc-500">{t('music.up')}</small>
               {matches.plusOne ?? '—'}
             </span>
             <span className="text-zinc-300">
-              <small className="mr-1 text-[9px] text-zinc-500">
-                {t('music.relative')}
-              </small>
+              <small className="mr-1 text-[9px] text-zinc-500">{t('music.relative')}</small>
               {matches.relative ?? '—'}
             </span>
           </div>

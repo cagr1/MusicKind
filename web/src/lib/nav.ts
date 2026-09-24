@@ -9,14 +9,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
-export type NavKey =
-  | 'classifier'
-  | 'sets'
-  | 'converter'
-  | 'metadata'
-  | 'bpm'
-  | 'stems'
-  | 'settings'
+export type NavKey = 'classifier' | 'sets' | 'converter' | 'metadata' | 'bpm' | 'stems' | 'settings'
 
 export interface NavItem {
   key: NavKey

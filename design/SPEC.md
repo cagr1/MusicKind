@@ -327,7 +327,7 @@ salida redirigida a carpeta temporal) y hace commit antes de delegar la siguient
 - Patrón: `web/src/views/Bpm.tsx` y `web/src/views/Converter.tsx` (4 estados, `ProcessProvider`, Inspector con `children`).
 - Estado vacío = icono + un verbo, zona entera clicable y que acepta soltar; sin subtítulos ni botones duplicados.
 - Estado de error dentro del layout (barra superior e Inspector visibles), solo mensaje accionable + reintentar.
-- Tokens `brand` (nunca `accent`), cero hex en `.tsx`, sin `animate-pulse`, JSX multilínea (ninguna línea >140 columnas).
+- Tokens `brand` (nunca `accent`), cero hex en `.tsx`, sin `animate-pulse`. Formato: `npm --prefix web run format:check` (desde L2.1).
 - Todo texto visible y `aria-label` por i18n `es` y `en`.
 - **Sin datos inventados**: sin dato → `—`. Título/artista/BPM/tonalidad desde `GET /api/metadata?file=` (máx. 4 simultáneas).
 - Rutas de salida = `defaultOutputDir` de `GET /api/settings`.
@@ -358,6 +358,25 @@ QA: identify con `preview` no toca el archivo (mtime y nombre iguales) y la vist
 - Dependencias como filas con estado: `GET /api/check-deps` (librosa, numpy, demucs, acoustid) y `GET /api/ffmpeg-status`; Instalar →
   `POST /api/install-dep` `{group:"audio"|"stems"}` (SSE, progreso en la fila); FFmpeg → `electron.installFFmpeg`; "Verificar todo".
 - Guardar con feedback (toast). Nunca mostrar un secreto en logs ni en toasts.
+
+### L2.1 · Corrección tras revisión (2026-09-23)
+QA: vista completa, secretos ocultos, dependencias con estado real, idioma guardado (`en`) aplicado. Falta:
+1. **Formateador como gate (reemplaza la regla ">140 columnas")**: para cumplir esa regla se partieron líneas por comas
+   (`Settings.tsx:118-140`, `api.ts:26` quedaron ilegibles). Agregar `prettier` como devDependency de `web/` con `.prettierrc`
+   `{ "semi": false, "singleQuote": true, "printWidth": 100, "trailingComma": "all" }` (estilo actual de `web/src/App.tsx`),
+   scripts `format` y `format:check` sobre `src/App.tsx src/views src/lib src/components/music src/i18n` (no `components/ui`).
+   Ejecutar `format` una vez. Gate nuevo del lote: `npm --prefix web run format:check` exit 0.
+2. Quitar textos descriptivos (regla del proyecto): subtítulo bajo el título (`settings.subtitle`) y la pista de carpeta (`settings.outputHint`).
+3. Fila FFmpeg: botón "Verificar" con texto igual a las demás filas (hoy un icono suelto que parece spinner). Fila Chromaprint:
+   sin icono de check cuando no está instalado; solo el estado.
+
+### L2.2 · Bugs de la fila de dependencias (2026-09-23)
+En `web/src/views/Settings.tsx:350-360`:
+1. `busy` usa `installing === group`; con FFmpeg `group` es `null` e `installing` arranca en `null` → siempre ocupado (spinner fijo).
+   `busy` = `checking || (installing !== null && installing === (key === 'ffmpeg' ? 'ffmpeg' : group))`.
+2. Con la dependencia instalada el botón dice "Verificar" pero ejecuta `install(group)` / `installFfmpeg()` (reinstala).
+   Instalada → la acción es `checkDependencies()`; no instalada → instalar. Chromaprint (sin grupo) no tiene acción.
+Tests vitest: FFmpeg instalado no está ocupado al montar; "Verificar" en librosa instalado llama a `/api/check-deps` y **no** a `/api/install-dep`.
 
 ### L3 · Sets
 - `design/prototype/src/views/Sets.tsx`. Cuatro carpetas (Warmup, Peak, Closing, Pack nuevo) con `electron.openDirectory`; Slider 30–120 (60).

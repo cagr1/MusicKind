@@ -63,9 +63,7 @@ export function Bpm() {
   const [tracks, setTracks] = React.useState<BpmResult[]>(
     () => (savedResults[view] as BpmResult[] | undefined) ?? [],
   )
-  const [selectedId, setSelectedId] = React.useState<string | null>(
-    tracks[0]?.id ?? null,
-  )
+  const [selectedId, setSelectedId] = React.useState<string | null>(tracks[0]?.id ?? null)
   const [folder, setFolder] = React.useState<string | null>(null)
   const [files, setFiles] = React.useState<string[]>([])
   const [seconds, setSeconds] = React.useState(60)
@@ -79,9 +77,7 @@ export function Bpm() {
     setTracks(stored)
     setSelectedId((current) => current ?? stored[0]?.id ?? null)
     setOriginal(
-      Object.fromEntries(
-        stored.map((track) => [track.id, { bpm: track.bpm, key: track.key }]),
-      ),
+      Object.fromEntries(stored.map((track) => [track.id, { bpm: track.bpm, key: track.key }])),
     )
   }, [savedResults, view])
 
@@ -96,7 +92,6 @@ export function Bpm() {
       file: process?.file ?? null,
       status: state.status,
     })
-
   }, [state.progress, state.processId, state.status, setActive, t, view])
 
   React.useEffect(() => {
@@ -117,9 +112,7 @@ export function Bpm() {
     setTracks(next)
     setResult(view, next)
     setOriginal(
-      Object.fromEntries(
-        next.map((track) => [track.id, { bpm: track.bpm, key: track.key }]),
-      ),
+      Object.fromEntries(next.map((track) => [track.id, { bpm: track.bpm, key: track.key }])),
     )
     setSelectedId((current) => current ?? next[0]?.id ?? null)
     void readTrackMetadata(next, (id, metadata) => {
@@ -191,7 +184,9 @@ export function Bpm() {
             [track.id]: { bpm: track.bpm, key: track.key },
           }))
         } catch (error) {
-          toast.error(`${fileName(track.file)}: ${error instanceof Error ? error.message : String(error)}`)
+          toast.error(
+            `${fileName(track.file)}: ${error instanceof Error ? error.message : String(error)}`,
+          )
         }
       }),
     )
@@ -252,11 +247,7 @@ export function Bpm() {
                 {t('bpm.saveChanges')} {changed.length}
               </Button>
             )}
-            <Button
-              size="sm"
-              onClick={() => void start()}
-              disabled={isBusy || !files.length}
-            >
+            <Button size="sm" onClick={() => void start()} disabled={isBusy || !files.length}>
               <Activity />
               {t('bpm.analyze')}
             </Button>
@@ -307,7 +298,11 @@ export function Bpm() {
         )}
         {!tracks.length && !isBusy ? (
           <EmptyState
-            title={state.status === 'error' ? state.error ?? t('bpm.errorTitle') : t('bpm.chooseFolder')}
+            title={
+              state.status === 'error'
+                ? (state.error ?? t('bpm.errorTitle'))
+                : t('bpm.chooseFolder')
+            }
             action={state.status === 'error' ? t('bpm.retry') : undefined}
             onAction={chooseFolder}
             onDrop={onDrop}
@@ -334,8 +329,8 @@ export function Bpm() {
                     processing={state.progress?.file === track.file && isBusy}
                     changed={Boolean(
                       original[track.id] &&
-                        (original[track.id].bpm !== track.bpm ||
-                          original[track.id].key !== track.key),
+                      (original[track.id].bpm !== track.bpm ||
+                        original[track.id].key !== track.key),
                     )}
                     onSelect={() => setSelectedId(track.id)}
                     onUpdate={update}
@@ -398,9 +393,7 @@ function BpmRow({
   onSave: () => void
   t: ReturnType<typeof useT>
 }) {
-  const [draft, setDraft] = React.useState(
-    track.bpm === null ? '' : String(Math.round(track.bpm)),
-  )
+  const [draft, setDraft] = React.useState(track.bpm === null ? '' : String(Math.round(track.bpm)))
   const valid = draft === '' || isValidBpmInput(draft)
 
   React.useEffect(() => {
@@ -420,9 +413,7 @@ function BpmRow({
     <tr
       onClick={onSelect}
       className={`h-12 cursor-pointer border-l-2 ${
-        selected
-          ? 'border-brand bg-white/[0.05]'
-          : 'border-transparent hover:bg-white/[0.03]'
+        selected ? 'border-brand bg-white/[0.05]' : 'border-transparent hover:bg-white/[0.03]'
       }`}
     >
       <td className="text-center font-mono text-[11px] text-zinc-500">
@@ -437,9 +428,7 @@ function BpmRow({
           <TrackArtwork camelotKey={track.key} size={30} />
           <div className="min-w-0">
             <p className="truncate text-[12px] text-zinc-200">{track.title}</p>
-            <p className="truncate text-[11px] text-zinc-500">
-              {track.artist || '—'}
-            </p>
+            <p className="truncate text-[11px] text-zinc-500">{track.artist || '—'}</p>
           </div>
           <MiniWaveform path={track.file} isSelected={selected} />
         </div>
@@ -448,10 +437,10 @@ function BpmRow({
         <input
           className={`w-16 rounded border bg-transparent px-1 font-mono text-[12px]
             text-zinc-100 focus:bg-surface-panel focus:outline-none ${
-            valid
-              ? 'border-transparent focus:border-brand'
-              : 'border-red-500/70 focus:border-red-500'
-          }`}
+              valid
+                ? 'border-transparent focus:border-brand'
+                : 'border-red-500/70 focus:border-red-500'
+            }`}
           type="text"
           inputMode="numeric"
           value={draft}
@@ -463,10 +452,7 @@ function BpmRow({
         <Popover.Root>
           <Popover.Trigger asChild>
             <button type="button" className="cursor-pointer">
-              <CamelotBadge
-                camelotKey={track.key}
-                keySource={track.keySource}
-              />
+              <CamelotBadge camelotKey={track.key} keySource={track.keySource} />
             </button>
           </Popover.Trigger>
           <Popover.Portal>

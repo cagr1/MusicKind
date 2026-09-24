@@ -18,9 +18,7 @@ function next() {
 function loadPeaks(path: string): Promise<number[] | null> {
   return new Promise((resolve) => {
     const run = () => {
-      getJson<{ peaks: number[] }>(
-        `/api/waveform?path=${encodeURIComponent(path)}&bins=48`,
-      )
+      getJson<{ peaks: number[] }>(`/api/waveform?path=${encodeURIComponent(path)}&bins=48`)
         .then((data) => {
           cache.set(path, data.peaks)
           resolve(data.peaks)
@@ -46,11 +44,7 @@ interface MiniWaveformProps {
   className?: string
 }
 
-export function MiniWaveform({
-  path,
-  isSelected = false,
-  className = '',
-}: MiniWaveformProps) {
+export function MiniWaveform({ path, isSelected = false, className = '' }: MiniWaveformProps) {
   const t = useT()
   const ref = useRef<HTMLDivElement>(null)
   const cached = path && cache.has(path) ? cache.get(path) : undefined
@@ -110,21 +104,8 @@ export function MiniWaveform({
   if (!peaks) {
     return (
       <div ref={ref} className={className}>
-        <svg
-          width="64"
-          height="20"
-          viewBox="0 0 64 20"
-          aria-label={t('music.waveform')}
-          role="img"
-        >
-          <line
-            x1="0"
-            y1="10"
-            x2="64"
-            y2="10"
-            stroke="rgb(82 82 91)"
-            strokeWidth="1"
-          />
+        <svg width="64" height="20" viewBox="0 0 64 20" aria-label={t('music.waveform')} role="img">
+          <line x1="0" y1="10" x2="64" y2="10" stroke="rgb(82 82 91)" strokeWidth="1" />
         </svg>
       </div>
     )
@@ -132,13 +113,7 @@ export function MiniWaveform({
 
   return (
     <div ref={ref} className={className}>
-      <svg
-        width="64"
-        height="20"
-        viewBox="0 0 64 20"
-        aria-label={t('music.waveform')}
-        role="img"
-      >
+      <svg width="64" height="20" viewBox="0 0 64 20" aria-label={t('music.waveform')} role="img">
         {peaks.map((peak, index) => {
           const height = Math.max(2, peak * 18)
 

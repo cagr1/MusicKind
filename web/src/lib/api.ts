@@ -40,6 +40,60 @@ export async function postJson<T>(path: string, body?: unknown): Promise<T> {
   return (await res.json()) as T
 }
 
+export interface DependencyInstallHandlers {
+  onStage?: (message: string) => void
+  onLog?: (message: string) => void
+  onComplete?: (result: { ok: boolean; error?: string }) => void
+}
+
+export async function installDependency(
+  group: 'audio' | 'stems',
+  handlers: DependencyInstallHandlers = {},
+): Promise<void> {
+  const response = await fetch('/api/install-dep', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ group }),
+  })
+  if (!response.ok || !response.body)
+    throw new Error(`POST /api/install-dep failed: ${response.status}`)
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let completed = false
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      const lines = (buffer + decoder.decode(value, { stream: true })).split('\n')
+      buffer = lines.pop() ?? ''
+      for (const line of lines) {
+        const data = parseSsePayload(line)
+        if (!data) continue
+        if (data.type === 'stage' && typeof data.message === 'string')
+          handlers.onStage?.(data.message)
+        if (data.type === 'log') {
+          const message = typeof data.line === 'string' ? data.line : data.message
+          if (typeof message === 'string') handlers.onLog?.(message)
+        }
+        if (data.type === 'complete') {
+          completed = true
+          const result = {
+            ok: data.ok === true || data.success === true,
+            error: typeof data.error === 'string' ? data.error : undefined,
+          }
+          handlers.onComplete?.(result)
+          if (!result.ok) throw new Error(result.error || 'Dependency installation failed')
+        }
+      }
+    }
+  } finally {
+    await reader.cancel()
+    reader.releaseLock()
+  }
+  if (!completed) throw new Error('Dependency installation ended without a result')
+}
+
 export interface ProgressPayload {
   current: number
   total: number
@@ -134,9 +188,10 @@ export async function streamProcess(
   path: string,
   body: Record<string, unknown>,
   handlers: StreamHandlers = {},
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<StreamProcessResult> {
-  const processId = typeof body.processId === 'string' && body.processId ? body.processId : makeProcessId()
+  const processId =
+    typeof body.processId === 'string' && body.processId ? body.processId : makeProcessId()
   handlers.onStart?.(processId)
   let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
   let terminal = false
@@ -244,35 +299,42 @@ export function useProcessStream() {
 
   React.useEffect(() => () => controllerRef.current?.abort(), [])
 
-  const run = React.useCallback(async (
-    path: string,
-    body: Record<string, unknown> = {},
-    onResult?: (result: unknown) => void,
-  ) => {
-    controllerRef.current?.abort()
-    const controller = new AbortController()
-    controllerRef.current = controller
-    setState({ ...INITIAL_STATE, status: 'running' })
+  const run = React.useCallback(
+    async (
+      path: string,
+      body: Record<string, unknown> = {},
+      onResult?: (result: unknown) => void,
+    ) => {
+      controllerRef.current?.abort()
+      const controller = new AbortController()
+      controllerRef.current = controller
+      setState({ ...INITIAL_STATE, status: 'running' })
 
-    const { processId } = await streamProcess(
-      path,
-      body,
-      {
-        onStart: (id) => setState((s) => ({ ...s, processId: id })),
-        onProgress: (progress) => setState((s) => ({ ...s, progress })),
-        onLog: (line) => setState((s) => ({ ...s, logs: [...s.logs, line] })),
-        onResult: (result) => {
-          setState((s) => ({ ...s, result }))
-          onResult?.(result)
+      const { processId } = await streamProcess(
+        path,
+        body,
+        {
+          onStart: (id) => setState((s) => ({ ...s, processId: id })),
+          onProgress: (progress) => setState((s) => ({ ...s, progress })),
+          onLog: (line) => setState((s) => ({ ...s, logs: [...s.logs, line] })),
+          onResult: (result) => {
+            setState((s) => ({ ...s, result }))
+            onResult?.(result)
+          },
+          onError: (error) => setState((s) => ({ ...s, status: 'error', error })),
+          onDone: ({ success, cancelled }) =>
+            setState((s) =>
+              s.status === 'error'
+                ? s
+                : { ...s, status: cancelled ? 'idle' : success ? 'done' : 'error' },
+            ),
         },
-        onError: (error) => setState((s) => ({ ...s, status: 'error', error })),
-        onDone: ({ success, cancelled }) =>
-          setState((s) => (s.status === 'error' ? s : { ...s, status: cancelled ? 'idle' : success ? 'done' : 'error' })),
-      },
-      controller.signal
-    )
-    return processId
-  }, [])
+        controller.signal,
+      )
+      return processId
+    },
+    [],
+  )
 
   const pause = React.useCallback(async () => {
     if (!state.processId) return

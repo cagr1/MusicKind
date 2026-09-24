@@ -1,7 +1,21 @@
 import * as React from 'react'
-import { ArrowRightLeft, CheckCircle2, FileAudio, FolderOpen, RefreshCw, Settings as SettingsIcon, X } from 'lucide-react'
+import {
+  ArrowRightLeft,
+  CheckCircle2,
+  FileAudio,
+  FolderOpen,
+  RefreshCw,
+  Settings as SettingsIcon,
+  X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { TrackInspector, type InspectorTrack } from '@/components/music/TrackInspector'
 import { TrackArtwork } from '@/components/music/TrackArtwork'
@@ -45,17 +59,21 @@ export function summarizeConversionResults(results: ConverterResult[]) {
 }
 
 export function shouldContinueAfterResult(value: unknown): boolean {
-  return Array.isArray(value)
-    && value.length > 0
-    && value.every((item) => (
-      typeof item === 'object'
-      && item !== null
-      && (item as { ok?: unknown }).ok === true
-    ))
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.every(
+      (item) => typeof item === 'object' && item !== null && (item as { ok?: unknown }).ok === true,
+    )
+  )
 }
 
-function fileName(path: string) { return path.split(/[\\/]/).pop() ?? path }
-function sourceFormat(path: string) { return fileName(path).split('.').pop()?.toUpperCase() || '—' }
+function fileName(path: string) {
+  return path.split(/[\\/]/).pop() ?? path
+}
+function sourceFormat(path: string) {
+  return fileName(path).split('.').pop()?.toUpperCase() || '—'
+}
 function toInspectorTrack(result: ConverterResult): InspectorTrack {
   return {
     id: result.input,
@@ -70,7 +88,10 @@ function toInspectorTrack(result: ConverterResult): InspectorTrack {
 
 async function readConversionMetadata(
   tracks: ConverterResult[],
-  onTrack: (input: string, metadata: { title?: string; artist?: string; bpm?: number | null; key?: string | null }) => void,
+  onTrack: (
+    input: string,
+    metadata: { title?: string; artist?: string; bpm?: number | null; key?: string | null },
+  ) => void,
 ) {
   for (let index = 0; index < tracks.length; index += 4) {
     await Promise.all(
@@ -98,7 +119,9 @@ export function Converter() {
   const { state, run, cancel } = useProcessStream()
   const { results: savedResults, setActive, setResult } = useProcess()
   const [files, setFiles] = React.useState<string[]>([])
-  const [results, setResults] = React.useState<ConverterResult[]>(() => (savedResults.converter as ConverterResult[] | undefined) ?? [])
+  const [results, setResults] = React.useState<ConverterResult[]>(
+    () => (savedResults.converter as ConverterResult[] | undefined) ?? [],
+  )
   const [format, setFormat] = React.useState<ConversionFormat>('wav')
   const [bitrate, setBitrate] = React.useState('320')
   const [outputDir, setOutputDir] = React.useState<string | null>(null)
@@ -113,12 +136,18 @@ export function Converter() {
     void Promise.all([
       getJson<{ settings?: { defaultOutputDir?: string } }>('/api/settings'),
       getJson<{ installed: boolean }>('/api/ffmpeg-status'),
-    ]).then(([settings, ffmpeg]) => {
-      if (cancelled) return
-      setOutputDir(settings.settings?.defaultOutputDir || 'output')
-      setFfmpegInstalled(ffmpeg.installed)
-    }).catch(() => { if (!cancelled) setFfmpegInstalled(false) })
-    return () => { cancelled = true }
+    ])
+      .then(([settings, ffmpeg]) => {
+        if (cancelled) return
+        setOutputDir(settings.settings?.defaultOutputDir || 'output')
+        setFfmpegInstalled(ffmpeg.installed)
+      })
+      .catch(() => {
+        if (!cancelled) setFfmpegInstalled(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   React.useEffect(() => {
@@ -136,7 +165,11 @@ export function Converter() {
   const chooseFiles = async () => {
     const picked = await electron.openFiles(t('converter.selectFiles'), true)
     const next = Array.isArray(picked) ? picked : picked ? [picked] : []
-    if (next.length) { setFiles(next); setResults([]); setSelectedId(null) }
+    if (next.length) {
+      setFiles(next)
+      setResults([])
+      setSelectedId(null)
+    }
   }
 
   const chooseDirectory = async () => {
@@ -152,7 +185,11 @@ export function Converter() {
     event.preventDefault()
     try {
       const next = await resolveDroppedFiles(event.dataTransfer.files)
-      if (next.length) { setFiles(next); setResults([]); setSelectedId(null) }
+      if (next.length) {
+        setFiles(next)
+        setResults([])
+        setSelectedId(null)
+      }
     } catch (error) {
       setActive({ status: 'error', name: error instanceof Error ? error.message : String(error) })
     }
@@ -174,13 +211,13 @@ export function Converter() {
           ...(format === 'mp3' ? { bitrate: Number(bitrate) } : {}),
         },
         (value) => {
-        if (Array.isArray(value)) {
-          receivedResult = true
-          runFailed = !shouldContinueAfterResult(value)
-          converted.push(...(value as ConverterResult[]))
-          setResults([...converted])
-          setSelectedId((current) => current ?? input)
-        }
+          if (Array.isArray(value)) {
+            receivedResult = true
+            runFailed = !shouldContinueAfterResult(value)
+            converted.push(...(value as ConverterResult[]))
+            setResults([...converted])
+            setSelectedId((current) => current ?? input)
+          }
         },
       )
       if (!receivedResult || runFailed) break
@@ -228,11 +265,7 @@ export function Converter() {
                 {t('converter.cancel')}
               </Button>
             )}
-            <Button
-              size="sm"
-              onClick={() => void start()}
-              disabled={isBusy || !files.length}
-            >
+            <Button size="sm" onClick={() => void start()} disabled={isBusy || !files.length}>
               <ArrowRightLeft />
               {t('converter.convert')}
             </Button>
@@ -310,7 +343,8 @@ export function Converter() {
           </div>
           {results.length > 0 && (
             <span className="font-mono tabular-nums">
-              {summary.count} {t('converter.files')} · {formatBytes(summary.sizeIn)} → {formatBytes(summary.sizeOut)}
+              {summary.count} {t('converter.files')} · {formatBytes(summary.sizeIn)} →{' '}
+              {formatBytes(summary.sizeOut)}
             </span>
           )}
         </div>
@@ -324,19 +358,16 @@ export function Converter() {
           <RunningState files={files} t={t} />
         ) : !results.length ? (
           <EmptyState
-            title={ffmpegInstalled === false ? t('converter.ffmpegMissing') : t('converter.chooseFiles')}
+            title={
+              ffmpegInstalled === false ? t('converter.ffmpegMissing') : t('converter.chooseFiles')
+            }
             disabled={ffmpegInstalled === false}
-            onAction={() => ffmpegInstalled === false ? setView('settings') : void chooseFiles()}
+            onAction={() => (ffmpegInstalled === false ? setView('settings') : void chooseFiles())}
             onDrop={onDrop}
             t={t}
           />
         ) : (
-          <ResultsTable
-            results={results}
-            selected={selected}
-            onSelect={setSelectedId}
-            t={t}
-          />
+          <ResultsTable results={results} selected={selected} onSelect={setSelectedId} t={t} />
         )}
       </section>
       <TrackInspector track={selected ? toInspectorTrack(selected) : null}>
@@ -354,9 +385,7 @@ export function Converter() {
                 <span className="text-zinc-500">{t('converter.target')}</span>
                 <span className="text-brand">
                   {selected.format.toUpperCase()}
-                  {selected.format === 'mp3'
-                    ? ` · ${selected.bitrate ?? bitrate} kbps`
-                    : ''}
+                  {selected.format === 'mp3' ? ` · ${selected.bitrate ?? bitrate} kbps` : ''}
                 </span>
               </div>
             </div>
@@ -445,9 +474,7 @@ function ResultsTable({
                   {result.ok ? (
                     <CheckCircle2 className="size-3.5 text-emerald-400/80" />
                   ) : (
-                    <span className="text-[11px] text-red-300">
-                      {t('converter.failed')}
-                    </span>
+                    <span className="text-[11px] text-red-300">{t('converter.failed')}</span>
                   )}
                   {result.ok && (
                     <TooltipProvider>
@@ -512,9 +539,7 @@ function EmptyState({
         )}
         <span className="text-[13px]">{title}</span>
         {disabled && (
-          <span className="font-mono text-[11px] text-brand">
-            {t('converter.openSettings')}
-          </span>
+          <span className="font-mono text-[11px] text-brand">{t('converter.openSettings')}</span>
         )}
       </button>
     </div>
@@ -529,13 +554,8 @@ function RunningState({ files, t }: { files: string[]; t: ReturnType<typeof useT
       </div>
       <div className="divide-y divide-line">
         {files.map((file, index) => (
-          <div
-            key={file}
-            className="flex h-12 items-center gap-3 text-[12px] text-zinc-400"
-          >
-            <span className="w-8 text-center font-mono">
-              {String(index + 1).padStart(2, '0')}
-            </span>
+          <div key={file} className="flex h-12 items-center gap-3 text-[12px] text-zinc-400">
+            <span className="w-8 text-center font-mono">{String(index + 1).padStart(2, '0')}</span>
             <FileAudio className="size-4 text-zinc-600" />
             <span className="truncate">{fileName(file)}</span>
           </div>

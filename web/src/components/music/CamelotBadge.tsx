@@ -32,7 +32,8 @@ export function CamelotBadge({
     className,
   ].join(' ')
 
-  const badge = interactive || onClick ? (
+  const badge =
+    interactive || onClick ? (
       <button
         type="button"
         onClick={onClick}
@@ -43,10 +44,10 @@ export function CamelotBadge({
         {key ?? '—'}
       </button>
     ) : (
-    <span style={style} className={classes}>
-      {key ?? '—'}
-    </span>
-  )
+      <span style={style} className={classes}>
+        {key ?? '—'}
+      </span>
+    )
 
   if (!isAnalysis) return badge
 

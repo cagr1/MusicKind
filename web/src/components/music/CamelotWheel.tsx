@@ -1,10 +1,5 @@
 import { useMemo } from 'react'
-import {
-  CAMELOT_MAP,
-  getCamelotRgba,
-  getHarmonicMatches,
-  normalizeCamelot,
-} from '@/lib/camelot'
+import { CAMELOT_MAP, getCamelotRgba, getHarmonicMatches, normalizeCamelot } from '@/lib/camelot'
 
 function point(cx: number, cy: number, radius: number, angle: number) {
   const radians = (angle * Math.PI) / 180
@@ -14,14 +9,7 @@ function point(cx: number, cy: number, radius: number, angle: number) {
   }
 }
 
-function slice(
-  cx: number,
-  cy: number,
-  inner: number,
-  outer: number,
-  start: number,
-  end: number,
-) {
+function slice(cx: number, cy: number, inner: number, outer: number, start: number, end: number) {
   const a = point(cx, cy, outer, start)
   const b = point(cx, cy, outer, end)
   const c = point(cx, cy, inner, end)
@@ -59,13 +47,7 @@ export function CamelotWheel({
       style={{ width: size, height: size }}
     >
       <svg viewBox="0 0 120 120" className="size-full overflow-visible">
-        <circle
-          cx="60"
-          cy="60"
-          r="24"
-          fill="var(--surface-panel)"
-          stroke="var(--line)"
-        />
+        <circle cx="60" cy="60" r="24" fill="var(--surface-panel)" stroke="var(--line)" />
         <text
           x="60"
           y="58"
@@ -111,9 +93,7 @@ export function CamelotWheel({
                       strokeWidth={active ? 1.5 : 0.6}
                       onClick={() => onSelectKey?.(item)}
                       className={
-                        onSelectKey
-                          ? 'cursor-pointer transition-opacity hover:opacity-80'
-                          : ''
+                        onSelectKey ? 'cursor-pointer transition-opacity hover:opacity-80' : ''
                       }
                     >
                       <title>{`${item} (${CAMELOT_MAP[item].musicalKey})`}</title>

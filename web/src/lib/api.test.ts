@@ -1,7 +1,13 @@
 import { act, createElement, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { appendChunk, dispatchSseLine, parseSsePayload, streamProcess, useProcessStream } from './api'
+import {
+  appendChunk,
+  dispatchSseLine,
+  parseSsePayload,
+  streamProcess,
+  useProcessStream,
+} from './api'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -57,9 +63,20 @@ describe('dispatchSseLine', () => {
     const onProgress = vi.fn()
     const line =
       'data: ' +
-      JSON.stringify({ type: 'progress', current: 'track.mp3', processed: 3, total: 10, percentage: 30 })
+      JSON.stringify({
+        type: 'progress',
+        current: 'track.mp3',
+        processed: 3,
+        total: 10,
+        percentage: 30,
+      })
     dispatchSseLine(line, { onProgress })
-    expect(onProgress).toHaveBeenCalledWith({ current: 3, total: 10, file: 'track.mp3', percentage: 30 })
+    expect(onProgress).toHaveBeenCalledWith({
+      current: 3,
+      total: 10,
+      file: 'track.mp3',
+      percentage: 30,
+    })
   })
 
   it('forwards log lines', () => {
@@ -77,10 +94,13 @@ describe('dispatchSseLine', () => {
   it('reports a successful complete event via onDone', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
-    dispatchSseLine('data: ' + JSON.stringify({ type: 'complete', success: true, cancelled: false }), {
-      onDone,
-      onError,
-    })
+    dispatchSseLine(
+      'data: ' + JSON.stringify({ type: 'complete', success: true, cancelled: false }),
+      {
+        onDone,
+        onError,
+      },
+    )
     expect(onDone).toHaveBeenCalledWith({ success: true, cancelled: false })
     expect(onError).not.toHaveBeenCalled()
   })
@@ -89,8 +109,9 @@ describe('dispatchSseLine', () => {
     const onDone = vi.fn()
     const onError = vi.fn()
     dispatchSseLine(
-      'data: ' + JSON.stringify({ type: 'complete', success: false, cancelled: false, error: 'boom' }),
-      { onDone, onError }
+      'data: ' +
+        JSON.stringify({ type: 'complete', success: false, cancelled: false, error: 'boom' }),
+      { onDone, onError },
     )
     expect(onDone).toHaveBeenCalledWith({ success: false, cancelled: false })
     expect(onError).toHaveBeenCalledWith('boom')
@@ -116,10 +137,17 @@ describe('streamProcess', () => {
   it('flushes a final partial line and uses a UUID process id', async () => {
     const onStart = vi.fn()
     const onDone = vi.fn()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
-      'data: {"type":"progress","processed":1,"total":1,"current":"song.mp3","message":"song"}\n',
-      'data: {"type":"complete","success":true,"cancelled":false}',
-    ])))
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          sseResponse([
+            'data: {"type":"progress","processed":1,"total":1,"current":"song.mp3","message":"song"}\n',
+            'data: {"type":"complete","success":true,"cancelled":false}',
+          ]),
+        ),
+    )
     await streamProcess('/api/test', {}, { onStart, onDone })
     expect(onStart).toHaveBeenCalledWith(expect.stringMatching(/^[0-9a-f-]{36}$/))
     expect(onDone).toHaveBeenCalledOnce()
@@ -152,17 +180,31 @@ describe('streamProcess', () => {
 
 describe('useProcessStream', () => {
   it('exposes the terminal state after a simulated stream', async () => {
-    const controls: { run?: ReturnType<typeof useProcessStream>['run']; state?: ReturnType<typeof useProcessStream>['state'] } = {}
+    const controls: {
+      run?: ReturnType<typeof useProcessStream>['run']
+      state?: ReturnType<typeof useProcessStream>['state']
+    } = {}
     function Harness() {
       const value = useProcessStream()
       controls.run = value.run
       controls.state = value.state
       return null
     }
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse(['data: {"type":"complete","success":true,"cancelled":false}\n'])))
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          sseResponse(['data: {"type":"complete","success":true,"cancelled":false}\n']),
+        ),
+    )
     const root = createRoot(document.createElement('div'))
-    await act(async () => { root.render(createElement(Harness)) })
-    await act(async () => { await controls.run?.('/api/test') })
+    await act(async () => {
+      root.render(createElement(Harness))
+    })
+    await act(async () => {
+      await controls.run?.('/api/test')
+    })
     expect(controls.state?.status).toBe('done')
     root.unmount()
   })

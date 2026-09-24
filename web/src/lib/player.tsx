@@ -47,33 +47,39 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const select = React.useCallback((nextPath: string) => {
-    const element = audioRef.current
-    if (!element) return
-    if (path !== nextPath) {
-      element.pause()
-      element.src = `/api/audio?path=${encodeURIComponent(nextPath)}`
-      element.load()
-      setPath(nextPath)
-      setCurrentTime(0)
-      setDuration(0)
-      setPlaying(false)
-    }
-  }, [path])
+  const select = React.useCallback(
+    (nextPath: string) => {
+      const element = audioRef.current
+      if (!element) return
+      if (path !== nextPath) {
+        element.pause()
+        element.src = `/api/audio?path=${encodeURIComponent(nextPath)}`
+        element.load()
+        setPath(nextPath)
+        setCurrentTime(0)
+        setDuration(0)
+        setPlaying(false)
+      }
+    },
+    [path],
+  )
 
-  const toggle = React.useCallback((nextPath?: string) => {
-    const target = nextPath ?? path
-    if (!target) return
-    if (target !== path) select(target)
-    const element = audioRef.current
-    if (!element) return
-    if (target !== path) {
-      void element.play().catch(() => setPlaying(false))
-      return
-    }
-    if (element.paused) void element.play().catch(() => setPlaying(false))
-    else element.pause()
-  }, [path, select])
+  const toggle = React.useCallback(
+    (nextPath?: string) => {
+      const target = nextPath ?? path
+      if (!target) return
+      if (target !== path) select(target)
+      const element = audioRef.current
+      if (!element) return
+      if (target !== path) {
+        void element.play().catch(() => setPlaying(false))
+        return
+      }
+      if (element.paused) void element.play().catch(() => setPlaying(false))
+      else element.pause()
+    },
+    [path, select],
+  )
 
   const seek = React.useCallback((time: number) => {
     if (audioRef.current) audioRef.current.currentTime = Math.max(0, time)

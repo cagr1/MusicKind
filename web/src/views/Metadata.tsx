@@ -117,17 +117,20 @@ export function Metadata() {
 
   React.useEffect(() => () => controllerRef.current?.abort(), [])
 
-  const updateProcess = React.useCallback((status: 'idle' | 'running' | 'done' | 'error') => {
-    setActive({
-      processId: null,
-      view: 'metadata',
-      name: t('metadata.title'),
-      current: progress.current,
-      total: progress.total,
-      file: progress.file || null,
-      status,
-    })
-  }, [progress, setActive, t])
+  const updateProcess = React.useCallback(
+    (status: 'idle' | 'running' | 'done' | 'error') => {
+      setActive({
+        processId: null,
+        view: 'metadata',
+        name: t('metadata.title'),
+        current: progress.current,
+        total: progress.total,
+        file: progress.file || null,
+        status,
+      })
+    },
+    [progress, setActive, t],
+  )
 
   const loadFolder = async (directory: string) => {
     setError(null)
@@ -139,38 +142,40 @@ export function Metadata() {
       if (!paths.length) throw new Error(t('metadata.noFiles'))
       const loaded: MetadataRow[] = []
       for (let index = 0; index < paths.length; index += 4) {
-        const batch = await Promise.all(paths.slice(index, index + 4).map(async (path) => {
-          try {
-            const response = await getJson<MetadataResponse>(
-              `/api/metadata?file=${encodeURIComponent(path)}`,
-            )
-            const metadata = fieldsFromMetadata(response.metadata)
-            return {
-              id: path,
-              path,
-              name: fileName(path),
-              metadata,
-              original: { ...metadata },
-              originalName: fileName(path),
-              newFilename: fileName(path),
-              bpm: response.metadata?.bpm ?? null,
-              key: response.metadata?.key ?? null,
+        const batch = await Promise.all(
+          paths.slice(index, index + 4).map(async (path) => {
+            try {
+              const response = await getJson<MetadataResponse>(
+                `/api/metadata?file=${encodeURIComponent(path)}`,
+              )
+              const metadata = fieldsFromMetadata(response.metadata)
+              return {
+                id: path,
+                path,
+                name: fileName(path),
+                metadata,
+                original: { ...metadata },
+                originalName: fileName(path),
+                newFilename: fileName(path),
+                bpm: response.metadata?.bpm ?? null,
+                key: response.metadata?.key ?? null,
+              }
+            } catch {
+              const metadata = fieldsFromMetadata()
+              return {
+                id: path,
+                path,
+                name: fileName(path),
+                metadata,
+                original: { ...metadata },
+                originalName: fileName(path),
+                newFilename: fileName(path),
+                bpm: null,
+                key: null,
+              }
             }
-          } catch {
-            const metadata = fieldsFromMetadata()
-            return {
-              id: path,
-              path,
-              name: fileName(path),
-              metadata,
-              original: { ...metadata },
-              originalName: fileName(path),
-              newFilename: fileName(path),
-              bpm: null,
-              key: null,
-            }
-          }
-        }))
+          }),
+        )
         loaded.push(...batch)
       }
       setFolder(directory)
@@ -220,14 +225,20 @@ export function Metadata() {
           body: JSON.stringify({ filePath: row.path, preview: true }),
           signal: controller.signal,
         })
-        const payload = await response.json() as PreviewResponse & { error?: string }
+        const payload = (await response.json()) as PreviewResponse & { error?: string }
         if (!response.ok) throw new Error(payload.error || t('metadata.identifyError'))
         const metadata = fieldsFromMetadata(payload.metadata)
-        setRows((current) => current.map((item) => item.id === row.id ? {
-          ...item,
-          metadata,
-          newFilename: payload.newFilename || item.name,
-        } : item))
+        setRows((current) =>
+          current.map((item) =>
+            item.id === row.id
+              ? {
+                  ...item,
+                  metadata,
+                  newFilename: payload.newFilename || item.name,
+                }
+              : item,
+          ),
+        )
       }
       if (!controller.signal.aborted) {
         toast.success(t('metadata.identifyDone'))
@@ -235,7 +246,8 @@ export function Metadata() {
       }
     } catch (identifyError) {
       if (!controller.signal.aborted) {
-        const message = identifyError instanceof Error ? identifyError.message : String(identifyError)
+        const message =
+          identifyError instanceof Error ? identifyError.message : String(identifyError)
         setError(message)
         updateProcess('error')
       }
@@ -288,7 +300,7 @@ export function Metadata() {
         bpm: selected.bpm,
         key: selected.key,
       }
-      setRows((current) => current.map((row) => row.id === selected.id ? saved : row))
+      setRows((current) => current.map((row) => (row.id === selected.id ? saved : row)))
       setSelectedId(saved.id)
       setForm(saved.metadata)
       toast.success(t('metadata.saved'))
@@ -309,47 +321,82 @@ export function Metadata() {
         <header className="relative flex h-12 shrink-0 items-center justify-between border-b border-line px-6">
           <div className="flex items-center gap-3">
             <h1 className="text-[15px] font-semibold">{t('metadata.title')}</h1>
-            <span className="font-mono text-[11px] text-zinc-500">{rows.length} {t('metadata.files')}</span>
+            <span className="font-mono text-[11px] text-zinc-500">
+              {rows.length} {t('metadata.files')}
+            </span>
           </div>
           <div className="flex items-center gap-2">
-            {busy && <Button variant="outline" size="sm" onClick={cancelIdentify}><X />{t('metadata.cancel')}</Button>}
+            {busy && (
+              <Button variant="outline" size="sm" onClick={cancelIdentify}>
+                <X />
+                {t('metadata.cancel')}
+              </Button>
+            )}
             <Button size="sm" onClick={() => void identify()} disabled={busy || !rows.length}>
-              <ScanSearch />{t('metadata.identify')}
+              <ScanSearch />
+              {t('metadata.identify')}
             </Button>
           </div>
-          {busy && <div className="absolute inset-x-0 bottom-0 h-0.5 bg-white/10">
-            <div
-              className="h-full bg-brand transition-all"
-              style={{ width: `${progress.total ? progress.current / progress.total * 100 : 0}%` }}
-            />
-          </div>}
+          {busy && (
+            <div className="absolute inset-x-0 bottom-0 h-0.5 bg-white/10">
+              <div
+                className="h-full bg-brand transition-all"
+                style={{
+                  width: `${progress.total ? (progress.current / progress.total) * 100 : 0}%`,
+                }}
+              />
+            </div>
+          )}
         </header>
         <div className="flex h-11 shrink-0 items-center justify-between border-b border-line px-6 text-[11px] text-zinc-500">
-          {folder ? <button type="button" onClick={chooseFolder} className="flex min-w-0 items-center gap-2 truncate hover:text-zinc-300">
-            <FolderOpen className="size-3.5" /><span className="truncate font-mono text-zinc-300">{folder}</span>
-          </button> : <span />}
-          {busy && <span className="font-mono text-zinc-300">{progress.current}/{progress.total} · {progress.file}</span>}
+          {folder ? (
+            <button
+              type="button"
+              onClick={chooseFolder}
+              className="flex min-w-0 items-center gap-2 truncate hover:text-zinc-300"
+            >
+              <FolderOpen className="size-3.5" />
+              <span className="truncate font-mono text-zinc-300">{folder}</span>
+            </button>
+          ) : (
+            <span />
+          )}
+          {busy && (
+            <span className="font-mono text-zinc-300">
+              {progress.current}/{progress.total} · {progress.file}
+            </span>
+          )}
         </div>
-        {error && <div className="flex items-center justify-between gap-3 border-b border-line px-6 py-2 text-[12px] text-red-300">
-          <span className="truncate">{error}</span>
-          {showSettings ? (
-            <Button variant="outline" size="sm" onClick={() => setView('settings')}>
-              {t('metadata.openSettings')}
-            </Button>
-          ) : null}
-          {!showSettings && folder ? (
-            <Button variant="outline" size="sm" onClick={() => void loadFolder(folder)}>
-              {t('metadata.retry')}
-            </Button>
-          ) : null}
-        </div>}
-        {!rows.length ? <EmptyState title={error ?? t('metadata.chooseFolder')} onAction={chooseFolder} onDrop={onDrop} /> : (
+        {error && (
+          <div className="flex items-center justify-between gap-3 border-b border-line px-6 py-2 text-[12px] text-red-300">
+            <span className="truncate">{error}</span>
+            {showSettings ? (
+              <Button variant="outline" size="sm" onClick={() => setView('settings')}>
+                {t('metadata.openSettings')}
+              </Button>
+            ) : null}
+            {!showSettings && folder ? (
+              <Button variant="outline" size="sm" onClick={() => void loadFolder(folder)}>
+                {t('metadata.retry')}
+              </Button>
+            ) : null}
+          </div>
+        )}
+        {!rows.length ? (
+          <EmptyState
+            title={error ?? t('metadata.chooseFolder')}
+            onAction={chooseFolder}
+            onDrop={onDrop}
+          />
+        ) : (
           <div className="min-h-0 flex-1 overflow-auto px-6 py-2">
             <table className="w-full table-fixed text-left">
               <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
                 <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
-                  <th className="w-10 text-center">#</th><th>{t('metadata.tableTrack')}</th>
-                  <th className="w-32">{t('metadata.tableAlbum')}</th><th className="w-20">{t('metadata.tableYear')}</th>
+                  <th className="w-10 text-center">#</th>
+                  <th>{t('metadata.tableTrack')}</th>
+                  <th className="w-32">{t('metadata.tableAlbum')}</th>
+                  <th className="w-20">{t('metadata.tableYear')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -369,116 +416,157 @@ export function Metadata() {
         )}
       </section>
       <TrackInspector track={selected ? asInspectorTrack(selected) : null}>
-        {selected && <form onSubmit={save} className="space-y-3 pt-2">
-          <MetadataField
-            label={t('metadata.titleField')}
-            original={selected.original.title}
-            value={form.title}
-            onChange={(value) => updateForm('title', value)}
-          />
-          <MetadataField
-            label={t('metadata.artistField')}
-            original={selected.original.artist}
-            value={form.artist}
-            onChange={(value) => updateForm('artist', value)}
-          />
-          <MetadataField
-            label={t('metadata.albumField')}
-            original={selected.original.album}
-            value={form.album}
-            onChange={(value) => updateForm('album', value)}
-          />
-          <div className="grid grid-cols-2 gap-2">
+        {selected && (
+          <form onSubmit={save} className="space-y-3 pt-2">
             <MetadataField
-              label={t('metadata.yearField')}
-              original={selected.original.year}
-              value={form.year}
-              onChange={(value) => updateForm('year', value)}
+              label={t('metadata.titleField')}
+              original={selected.original.title}
+              value={form.title}
+              onChange={(value) => updateForm('title', value)}
             />
             <MetadataField
-              label={t('metadata.genreField')}
-              original={selected.original.genre}
-              value={form.genre}
-              onChange={(value) => updateForm('genre', value)}
+              label={t('metadata.artistField')}
+              original={selected.original.artist}
+              value={form.artist}
+              onChange={(value) => updateForm('artist', value)}
             />
-          </div>
-          <MetadataField
-            label={t('metadata.trackField')}
-            original={selected.original.track}
-            value={form.track}
-            onChange={(value) => updateForm('track', value)}
-          />
-          <MetadataField
-            label={t('metadata.filenameField')}
-            original={selected.originalName}
-            value={form.newFilename ?? selected.newFilename}
-            onChange={(value) => setForm((current) => ({ ...current, newFilename: value }))}
-          />
-          <div className="flex gap-2 pt-2">
-            <Button type="submit" size="sm" className="flex-1" disabled={saving}><Save />{t('metadata.save')}</Button>
-            <Button type="button" variant="outline" size="sm" onClick={cancelForm}>{t('metadata.cancelEdit')}</Button>
-          </div>
-        </form>}
+            <MetadataField
+              label={t('metadata.albumField')}
+              original={selected.original.album}
+              value={form.album}
+              onChange={(value) => updateForm('album', value)}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <MetadataField
+                label={t('metadata.yearField')}
+                original={selected.original.year}
+                value={form.year}
+                onChange={(value) => updateForm('year', value)}
+              />
+              <MetadataField
+                label={t('metadata.genreField')}
+                original={selected.original.genre}
+                value={form.genre}
+                onChange={(value) => updateForm('genre', value)}
+              />
+            </div>
+            <MetadataField
+              label={t('metadata.trackField')}
+              original={selected.original.track}
+              value={form.track}
+              onChange={(value) => updateForm('track', value)}
+            />
+            <MetadataField
+              label={t('metadata.filenameField')}
+              original={selected.originalName}
+              value={form.newFilename ?? selected.newFilename}
+              onChange={(value) => setForm((current) => ({ ...current, newFilename: value }))}
+            />
+            <div className="flex gap-2 pt-2">
+              <Button type="submit" size="sm" className="flex-1" disabled={saving}>
+                <Save />
+                {t('metadata.save')}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={cancelForm}>
+                {t('metadata.cancelEdit')}
+              </Button>
+            </div>
+          </form>
+        )}
       </TrackInspector>
     </div>
   )
 }
 
-function MetadataField({ label, original, value, onChange }: {
+function MetadataField({
+  label,
+  original,
+  value,
+  onChange,
+}: {
   label: string
   original: string
   value: string
   onChange: (value: string) => void
 }) {
-  return <label className="block space-y-1 text-[11px]">
-    <span className="flex items-center justify-between text-zinc-500">
-      <span>{label}</span>
-      <span className="max-w-[150px] truncate font-mono text-[10px] text-zinc-600 line-through">
-        {display(original)}
+  return (
+    <label className="block space-y-1 text-[11px]">
+      <span className="flex items-center justify-between text-zinc-500">
+        <span>{label}</span>
+        <span className="max-w-[150px] truncate font-mono text-[10px] text-zinc-600 line-through">
+          {display(original)}
+        </span>
       </span>
-    </span>
-    <Input value={value} onChange={(event) => onChange(event.target.value)} className="h-7 text-[12px] text-zinc-100" />
-  </label>
+      <Input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-7 text-[12px] text-zinc-100"
+      />
+    </label>
+  )
 }
 
-function MetadataRowView({ row, index, selected, processing, onSelect }: {
+function MetadataRowView({
+  row,
+  index,
+  selected,
+  processing,
+  onSelect,
+}: {
   row: MetadataRow
   index: number
   selected: boolean
   processing: boolean
   onSelect: () => void
 }) {
-  return <tr
-    onClick={onSelect}
-    className={`h-12 cursor-pointer border-l-2 ${selected ? 'border-brand bg-white/[0.05]' : 'border-transparent hover:bg-white/[0.03]'}`}
-  >
-    <td className="text-center font-mono text-[11px] text-zinc-500">
-      {processing ? <span className="mx-auto block size-2 rounded-full bg-brand" /> : String(index + 1).padStart(2, '0')}
-    </td>
-    <td>
-      <div className="flex items-center gap-3">
-        <TrackArtwork camelotKey={row.key} size={30} />
-        <div className="min-w-0">
-          <p className="truncate text-[12px] text-zinc-200">
-            {display(row.metadata.title) === '—' ? row.name : display(row.metadata.title)}
-          </p>
-          <p className="truncate text-[11px] text-zinc-500">{display(row.metadata.artist)}</p>
+  return (
+    <tr
+      onClick={onSelect}
+      className={`h-12 cursor-pointer border-l-2 ${selected ? 'border-brand bg-white/[0.05]' : 'border-transparent hover:bg-white/[0.03]'}`}
+    >
+      <td className="text-center font-mono text-[11px] text-zinc-500">
+        {processing ? (
+          <span className="mx-auto block size-2 rounded-full bg-brand" />
+        ) : (
+          String(index + 1).padStart(2, '0')
+        )}
+      </td>
+      <td>
+        <div className="flex items-center gap-3">
+          <TrackArtwork camelotKey={row.key} size={30} />
+          <div className="min-w-0">
+            <p className="truncate text-[12px] text-zinc-200">
+              {display(row.metadata.title) === '—' ? row.name : display(row.metadata.title)}
+            </p>
+            <p className="truncate text-[11px] text-zinc-500">{display(row.metadata.artist)}</p>
+          </div>
         </div>
-      </div>
-    </td>
-    <td className="truncate text-[12px] text-zinc-300">{display(row.metadata.album)}</td>
-    <td className="font-mono text-[12px] text-zinc-400">{display(row.metadata.year)}</td>
-  </tr>
+      </td>
+      <td className="truncate text-[12px] text-zinc-300">{display(row.metadata.album)}</td>
+      <td className="font-mono text-[12px] text-zinc-400">{display(row.metadata.year)}</td>
+    </tr>
+  )
 }
 
-function EmptyState({ title, onAction, onDrop }: { title: string; onAction: () => void; onDrop: (event: React.DragEvent) => void }) {
-  return <button
-    type="button"
-    onClick={onAction}
-    onDragOver={(event) => event.preventDefault()}
-    onDrop={onDrop}
-    className="flex min-h-0 flex-1 cursor-pointer flex-col items-center justify-center gap-3 text-zinc-500 hover:text-zinc-300"
-  >
-    <FileAudio className="size-8" /><span className="text-[13px]">{title}</span>
-  </button>
+function EmptyState({
+  title,
+  onAction,
+  onDrop,
+}: {
+  title: string
+  onAction: () => void
+  onDrop: (event: React.DragEvent) => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onAction}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={onDrop}
+      className="flex min-h-0 flex-1 cursor-pointer flex-col items-center justify-center gap-3 text-zinc-500 hover:text-zinc-300"
+    >
+      <FileAudio className="size-8" />
+      <span className="text-[13px]">{title}</span>
+    </button>
+  )
 }

@@ -81,9 +81,7 @@ export function LargeWaveform({ path, className = '' }: LargeWaveformProps) {
     ).padStart(2, '0')}`
 
   return (
-    <div
-      className={`flex w-full min-w-0 select-none flex-col gap-1.5 ${className}`}
-    >
+    <div className={`flex w-full min-w-0 select-none flex-col gap-1.5 ${className}`}>
       <div
         className="relative h-14 w-full min-w-0 overflow-hidden rounded-md border
           border-line bg-surface-panel"
@@ -99,11 +97,7 @@ export function LargeWaveform({ path, className = '' }: LargeWaveformProps) {
           className="absolute bottom-2 left-2 flex size-6 items-center justify-center
             rounded-full border border-line bg-black/70 text-white hover:bg-brand"
         >
-          {playing ? (
-            <Pause className="size-3" />
-          ) : (
-            <Play className="ml-0.5 size-3 fill-current" />
-          )}
+          {playing ? <Pause className="size-3" /> : <Play className="ml-0.5 size-3 fill-current" />}
         </button>
       </div>
       <div className="flex justify-between px-0.5 font-mono text-[11px] tabular-nums text-zinc-400">

@@ -5,11 +5,7 @@ import { ProcessProvider, useProcess } from './process'
 
 function View() {
   const { results } = useProcess()
-  return createElement(
-    'div',
-    { 'data-result': JSON.stringify(results.bpm ?? null) },
-    'view',
-  )
+  return createElement('div', { 'data-result': JSON.stringify(results.bpm ?? null) }, 'view')
 }
 
 function Harness() {

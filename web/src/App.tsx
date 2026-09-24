@@ -10,22 +10,13 @@ import {
   Tags,
   Terminal,
 } from 'lucide-react'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Toaster } from '@/components/ui/sonner'
 import { CommandMenu } from '@/components/command-menu'
 import { NAV_ITEMS } from '@/lib/nav'
 import { useView } from '@/hooks/useView'
 import { useI18n, useT } from '@/i18n/I18nProvider'
-import {
-  SystemStatusProvider,
-  useSystemStatus,
-  type StatusState,
-} from '@/lib/system-status'
+import { SystemStatusProvider, useSystemStatus, type StatusState } from '@/lib/system-status'
 import { VIEW_COMPONENTS } from '@/views'
 import logo from '@/assets/musickind-logo.svg'
 import { Popover } from 'radix-ui'
@@ -52,9 +43,7 @@ function StatusIndicator({
       <TooltipTrigger asChild>
         <span className="relative flex size-8 items-center justify-center text-sidebar-foreground/80">
           <Icon className="size-4" />
-          <span
-            className={`absolute right-1 bottom-1 size-1.5 rounded-full ${DOT_CLASS[state]}`}
-          />
+          <span className={`absolute right-1 bottom-1 size-1.5 rounded-full ${DOT_CLASS[state]}`} />
         </span>
       </TooltipTrigger>
       <TooltipContent side="right">{label}</TooltipContent>
@@ -96,9 +85,7 @@ function Shell() {
             <button
               type="button"
               onClick={() =>
-                document.dispatchEvent(
-                  new KeyboardEvent('keydown', { key: 'k', metaKey: true }),
-                )
+                document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))
               }
               className="mx-3 mt-3 flex h-8 w-[calc(100%-24px)] items-center justify-between
                 rounded border border-line bg-surface-panel px-2.5 text-[11px] text-zinc-500
@@ -111,10 +98,7 @@ function Shell() {
               </span>
               <kbd className="font-mono text-[10px]">⌘K</kbd>
             </button>
-            <nav
-              className="space-y-0.5 p-2"
-              aria-label={t('common.navigation')}
-            >
+            <nav className="space-y-0.5 p-2" aria-label={t('common.navigation')}>
               {NAV_ITEMS.map((item) => {
                 const Icon = navIcons[item.key]
                 const isActive = view === item.key
@@ -130,9 +114,7 @@ function Shell() {
                         : 'border-transparent text-zinc-500 hover:bg-white/[0.03] hover:text-zinc-300'
                     }`}
                   >
-                    <Icon
-                      className={`size-4 ${isActive ? 'text-brand' : ''}`}
-                    />
+                    <Icon className={`size-4 ${isActive ? 'text-brand' : ''}`} />
                     <span>{t(`nav.${item.key}`)}</span>
                   </button>
                 )
@@ -144,7 +126,7 @@ function Shell() {
               <div className="space-y-1.5 bg-surface-panel p-3">
                 <div className="flex justify-between font-mono text-[11px]">
                   <span className="truncate text-zinc-300">{active.name}</span>
-                    <span className="text-brand">
+                  <span className="text-brand">
                     {active.current}/{active.total}
                   </span>
                 </div>
@@ -152,9 +134,7 @@ function Shell() {
                   <div
                     className="h-full bg-brand transition-all"
                     style={{
-                      width: `${
-                        (active.current / Math.max(1, active.total)) * 100
-                      }%`,
+                      width: `${(active.current / Math.max(1, active.total)) * 100}%`,
                     }}
                   />
                 </div>
