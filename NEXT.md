@@ -22,7 +22,9 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
    - [ ] L2 Configuración ·
    - [x] L3 Sets — 4 carpetas, agrupado por sección con rango BPM, medidor 3 segmentos, curva de energía, puntajes en Inspector (verificado en vivo con copias).
      **Mejora de back pendiente (Back 3):** `style_analyzer.py` da 93–100% a casi todo (cosine sobre features sin normalizar; tempo domina) → estandarizar features (z-score por feature sobre las referencias) antes del coseno y medir separación.
-   - [ ] L4 Clasificador · [ ] L5 Stems (demucs no instalado en QA)
+   -
+   - [x] L4 Clasificador — solo análisis (dryRun fijo), verificado en vivo sobre copias: nada se mueve, `config/` intacto; fuente i18n, chip Camelot, Select/Switch de radix, sin destino falso.
+   - [ ] L5 Stems (demucs no instalado en QA)
 
 Sigue pendiente en paralelo: revisión Terra del back (`e0c0424`), P1/P2 del clasificador, F3 contrato de escritura de tags.
 

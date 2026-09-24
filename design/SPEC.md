@@ -392,6 +392,17 @@ Tests vitest: FFmpeg instalado no está ocupado al montar; "Verificar" en libros
 - Barra de distribución: `brand` para el mayoritario, escala zinc para el resto. **Ordenar/Deshacer no se muestran** (P2 de `plan.md`).
 - Sin claves de Spotify: aviso accionable (el análisis sigue con `--no-spotify`).
 
+### L4.1 · Corrección tras QA en vivo (2026-09-23)
+QA: dry-run real sobre copias, nada se movió, `config/` intacto; tabla, géneros, distribución e Inspector OK. Corregir en `web/src/views/Classifier.tsx`:
+1. **Dato engañoso**: el pie "Destino: <defaultOutputDir>" es falso — el clasificador mueve a `<carpeta de entrada>/<género>` (`src/cli.js:297`).
+   Quitar ese pie; el destino por pista ya se ve en el Inspector (`destination`).
+2. `source` crudo ("embedded") → etiqueta i18n: embedded="Tag del archivo", online="Spotify/Last.fm", spotify="Spotify", lastfm="Last.fm",
+   bpm="BPM", override="Regla manual", filtered="Género desactivado", unmatched="Sin identificar" (y `en`).
+3. En la fila, la tonalidad cruda (`Amin`) → `CamelotBadge` normalizado (como BPM/Metadatos); sin tonalidad → `—`.
+4. Selector de género por fila: `Select` de shadcn/radix (como el Select de formato del Convertidor), no `<select>` nativo.
+5. "Simulación": `Switch` (radix) en on y deshabilitado con `Tooltip` i18n ("Por ahora solo se analiza; ordenar llegará con el flujo seguro"),
+   no un checkbox nativo.
+
 ### L5 · Stems
 - `design/prototype/src/views/Stems.tsx` (vista DAW). Un archivo (`electron.openFiles` sin multiselección), Select WAV/MP3.
 - `POST /api/stem-separate` `{files:[path], outputDir, stems:"both", format}` → `[{ok, files, vocals, instrumental}]`.
