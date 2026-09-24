@@ -453,6 +453,26 @@ Mismo "Checklist común" del Lote Front 2. Un ítem por corrida; el cerebro veri
 - Generar `build/icon.icns` con `iconutil` (iconset 16…1024) y apuntar `package.json` `build.mac.icon` a él.
 - `electron/main.cjs:17` ya usa `assets/icon.png` para ventana y Dock: no cambiar código salvo que falte algo.
 
+### M3.1 · Corrección del icono (2026-09-24)
+1. Plantilla macOS: lienzo 1024 transparente con el cuadrado redondeado de **824×824 centrado** (margen 100px), radio ~185px; logo al ~68% del
+   cuadrado. Hoy el fondo ocupa los 1024 y en el Dock se verá más grande que el resto.
+2. `build/` está en `.gitignore:27` → el `.icns` no se versiona. Mover a `electron/assets/icon.icns`, apuntar `build.mac.icon` ahí, borrar
+   `build/icon.icns` y `build/icon.iconset`.
+3. `iconutil` falló por "Invalid Iconset": nombres exactos `icon_16x16.png`, `icon_16x16@2x.png` … `icon_512x512@2x.png` (10 archivos);
+   usar `iconutil` (sin Pillow). Verificar con `iconutil -c iconset electron/assets/icon.icns -o /tmp/check.iconset` (ida y vuelta).
+
+### M5 · Selección de filas y limpiar tabla (datatable) — antes de M4
+Aplica a **BPM, Convertidor, Metadatos, Sets y Clasificador** (toda vista donde se acumulan filas).
+- Columna inicial con `Checkbox` (radix, añadir componente shadcn `checkbox` a `web/src/components/ui`): por fila y en el encabezado
+  (seleccionar todo; estado `indeterminate` con selección parcial). Shift+clic selecciona rango. Clic en la casilla no cambia la fila del Inspector.
+- Con selección: la barra muestra `N seleccionadas` + botón "Quitar" (icono `Trash2`, Tooltip). Tecla Supr/Backspace (sin foco en input) = Quitar.
+- Botón de icono "Limpiar tabla" (`ListX`, Tooltip) siempre visible con filas: vacía la tabla y los pendientes.
+- Quitar y Limpiar muestran un toast con acción "Deshacer" (5 s) que restaura filas, orden, resultados y selección.
+- **Solo quitan de la lista; nunca borran archivos del disco** (ningún endpoint nuevo). Filas en proceso no se pueden quitar (casilla deshabilitada).
+- Si se quita la pista seleccionada en el Inspector, se selecciona la siguiente (o ninguna).
+- Lógica en `web/src/lib/list.ts` (extender el módulo de M2) + hook compartido de selección; tests vitest: seleccionar todo/indeterminado,
+  rango con Shift, quitar, limpiar, deshacer, filas en proceso protegidas.
+
 ### M4 · Reproductor tipo deck (barra de transporte)
 Objetivo: combinar la herramienta con la experiencia de Serato/rekordbox sin salir de la app.
 - Barra fija inferior (64px) en todas las vistas, sobre el `PlayerProvider` existente (`web/src/lib/player.tsx`, un solo elemento de audio).

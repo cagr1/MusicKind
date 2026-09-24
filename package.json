@@ -45,6 +45,7 @@
     ],
     "mac": {
       "category": "public.app-category.music",
+      "icon": "electron/assets/icon.icns",
       "target": [
         "dmg",
         "zip"
