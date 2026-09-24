@@ -71,9 +71,9 @@ export async function checkPythonImport(packageName, { getPythonCommand = getPyt
   });
 }
 
-function checkFpcalc() {
+export function checkFpcalc({ spawnImpl = spawn } = {}) {
   return new Promise((resolve) => {
-    const child = spawn("fpcalc", ["--version"], { stdio: "ignore" });
+    const child = spawnImpl("fpcalc", ["-version"], { stdio: "ignore" });
     child.on("error", () => resolve(false));
     child.on("close", (code) => resolve(code === 0));
   });

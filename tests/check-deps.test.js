@@ -1,7 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EventEmitter } from "node:events";
-import { checkPythonImport } from "../src/server.js";
+import { checkFpcalc, checkPythonImport } from "../src/server.js";
+
+test("checkFpcalc usa la opción -version", async () => {
+  const child = new EventEmitter();
+  const calls = [];
+  const result = await checkFpcalc({
+    spawnImpl: (command, args, options) => {
+      calls.push({ command, args, options });
+      queueMicrotask(() => child.emit("close", 0));
+      return child;
+    }
+  });
+
+  assert.equal(result, true);
+  assert.equal(calls[0].command, "fpcalc");
+  assert.deepEqual(calls[0].args, ["-version"]);
+});
 
 test("check-deps exige el venv y no hace fallback al Python del sistema", async () => {
   let options;
