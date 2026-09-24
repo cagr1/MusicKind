@@ -506,6 +506,33 @@ Corrección:
 2. Test vitest con un `HTMLAudioElement` simulado que registra `pause()`: reproducir la pista A y cambiar el `path` del Inspector a B
    **no** llama `pause()` sobre el audio compartido.
 
+## Lote 4 — reproducción real y carátulas (2026-09-24)
+
+Diagnóstico del cerebro: en Electron el reproductor no suena porque **Chromium no decodifica AIFF** (`NotSupportedError`, código 4, medido
+contra el servidor real); MP3 suena. La biblioteca de Carlos es 109 AIFF / 14 MP3 / 5 FLAC / 1 WAV. El error se tragaba en
+`web/src/lib/player.tsx:60,105` (`catch(() => setPlaying(false))`).
+
+### A1 · Back: audio reproducible y carátulas (`src/server.js`)
+1. `/api/audio`: si la extensión es `.aif`/`.aiff` (lista `NEEDS_TRANSCODE`), transcodificar **una vez** con ffmpeg a FLAC
+   (`-v error -i <path> -map 0:a:0 -c:a flac -compression_level 5 <tmp>`; escribir a `.tmp` y renombrar al terminar) en
+   `.cache/audio/<sha1(path|size|mtimeMs)>.flac` y servir ese archivo con el mismo soporte de Range y `Content-Type: audio/flac`.
+   Peticiones concurrentes al mismo archivo esperan la misma transcodificación (mapa de promesas en curso). Sin ffmpeg → 503 con mensaje.
+   El archivo original nunca se modifica.
+2. `GET /api/artwork?path=<abs>`: mismas validaciones que `/api/audio`; con `music-metadata` (`parseFile`, opción `skipPostHeaders`),
+   devolver `common.picture[0]` (Content-Type de su `format`) cacheado en `.cache/artwork/<sha1(path|size|mtimeMs)>.<ext>`;
+   sin imagen → 404 `{ok:false}` y guardar un marcador de "sin carátula" para no reparsear.
+3. Tests node: AIFF generado en el test (ffmpeg, skip explícito si no hay) → `/api/audio` responde `audio/flac` con 200 y 206;
+   dos peticiones simultáneas producen una sola transcodificación; `/api/artwork` con un MP3 generado con carátula (ffmpeg `-map 1 -disposition:v attached_pic`)
+   → 200 `image/jpeg` o `image/png`; sin carátula → 404; validaciones 400/415/404.
+
+### A2 · Front: errores visibles y carátulas
+1. `web/src/lib/player.tsx`: los `catch` de `play()` y el evento `error` del audio muestran toast i18n "No se pudo reproducir <archivo>"
+   con el motivo (`MediaError.code`) — nunca silencioso. Mientras se prepara (AIFF convirtiéndose) el botón play muestra estado de carga
+   (icono `Loader2` sin `animate-spin`… usar `animate-spin` solo en ese icono está permitido) y el deck el texto i18n "Preparando…".
+2. `TrackArtwork`: nueva prop `path`; si hay ruta, `<img src="/api/artwork?path=…" loading="lazy">` recortada (`object-cover`) con el mismo
+   tamaño/radio; en error o 404 → el placeholder actual con color Camelot. Usar `path` en filas (todas las vistas), Inspector y deck.
+3. Tests vitest: toast en fallo de `play()`; `TrackArtwork` cae al placeholder en error de imagen.
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)

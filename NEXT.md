@@ -31,6 +31,8 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
 
 6. [x] **Lote 3** (`design/SPEC.md` § Lote 3): M1 selección sin barra + lazy [x] · M2 agregar archivos siempre [x] · M3 icono nuevo [x] · M5 selección y limpiar tabla [x] · M4 reproductor tipo deck [x]. Verificado en vivo (3030): doble clic reproduce, ↓ continúa sonando, espacio pausa, Inspector y deck sincronizados; causa raíz de la regresión: `WaveSurfer.destroy()` pausa el audio compartido → ondas en SVG, `wavesurfer.js` retirado.
 
+7. [ ] **Lote 4** (`design/SPEC.md` § Lote 4): A1 back AIFF→FLAC en caché + `/api/artwork` · A2 front errores visibles + carátulas.
+
 **Siguiente (propuesto):** QA manual de Carlos en Electron (audio audible, arrastrar carpetas) → Back 3 (puntajes de Sets normalizados) → P2 del clasificador (ordenar/deshacer con manifiesto) → F9 corte `ui/`→`web/dist`. Back 1b (libkeyfinder) y la pérdida de remixer en `identify` como mejoras.
 
 Sigue pendiente en paralelo: revisión Terra del back (`e0c0424`), P1/P2 del clasificador, F3 contrato de escritura de tags.
