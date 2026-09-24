@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { classifyByTags, isJunkGenre, normalizeGenre } from "../src/tag-classifier.js";
+import { buildGenreLookup, classifyByTags, isJunkGenre, normalizeGenre } from "../src/tag-classifier.js";
 
 function tempDir(prefix) { return fs.mkdtempSync(path.join(os.tmpdir(), prefix)); }
 function addFile(root, relative, bytes = "fake-audio") {
@@ -38,7 +38,9 @@ test("propone alias canónicos, revisión y duplicado sin cambiar input", async 
   addFile(root, "unknown.wav");
   const sameBytes = "duplicate-audio";
   const duplicate = addFile(root, "duplicate.wav", sameBytes);
+  addFile(root, "same-name-different-size.wav", "small");
   addFile(excluded, "sample/duplicate.wav", sameBytes);
+  addFile(excluded, "same-name-different-size.wav", "larger protected version");
   addFile(excluded, "not-in-input.wav");
   const before = snapshot(root);
   const tags = new Map([["alias.wav", " Latin Tech "], ["junk.wav", "http://genre.example.com"], ["unknown.wav", "Space Funk"]]);
@@ -59,10 +61,20 @@ test("propone alias canónicos, revisión y duplicado sin cambiar input", async 
   assert.deepEqual([byName["unknown.wav"].status, byName["unknown.wav"].reason], ["review", "unknown-genre-tag"]);
   assert.deepEqual([byName["duplicate.wav"].status, byName["duplicate.wav"].reason], ["duplicate", "same-name-and-size-in-exclude-root"]);
   assert.equal(byName["duplicate.wav"].destination, null);
+  assert.equal(byName["same-name-different-size.wav"].possibleDuplicate, true);
+  assert.equal(byName["alias.wav"].possibleDuplicate, false);
   assert.deepEqual(snapshot(root), before);
   assert.deepEqual(fs.readdirSync(path.dirname(destination)), []);
   assert.ok(!result.some((item) => item.path.startsWith(excluded + path.sep)));
   assert.notEqual(fs.statSync(duplicate).mtimeMs, 0);
+});
+
+test("incluye alias adicionales de Afro House y Electronica", () => {
+  const aliases = JSON.parse(fs.readFileSync(new URL("../config/genre-aliases.json", import.meta.url), "utf8"));
+  const lookup = buildGenreLookup(aliases);
+  assert.equal(lookup.get(normalizeGenre("Afro / Latin / Brazilian")), "Afro House");
+  assert.equal(lookup.get(normalizeGenre("Afro Melodic")), "Afro House");
+  assert.equal(lookup.get(normalizeGenre("Electronica / Downtempo")), "Electronica");
 });
 
 test("excluye raíces anidadas y rechaza rutas protegidas", async (t) => {

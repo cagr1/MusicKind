@@ -17,6 +17,7 @@ import {
 import { createPythonInstallHandler } from "./python-install.js";
 import { LineBuffer } from "./line-buffer.js";
 import { parseFile } from "music-metadata";
+import { applyClassifyMoves, listClassifyManifests, undoClassifyManifest, validateMoves } from "./classify-apply.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -88,6 +89,7 @@ const installPythonDependencies = createPythonInstallHandler({ projectRoot, depe
 
 // Registry for running processes (for cancellation)
 const runningProcesses = new Map();
+const runningClassifyOperations = new Map();
 
 function getUiRoot() {
   if (process.env.MUSIC_KIND_UI !== "legacy"
@@ -195,6 +197,42 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     for (const root of excludes) args.push("--exclude-root", root);
     const processId = body.processId || `tags-${Date.now()}`;
     await runProcessWithProgress(process.execPath, args, res, processId, { parseJsonResult: true });
+    return;
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/classify-manifests") {
+    try { return sendJson(res, { ok: true, manifests: listClassifyManifests(url.searchParams.get("destRoot") || "") }); }
+    catch (error) { return sendJson(res, { ok: false, error: error.message }, 400); }
+  }
+
+  if (req.method === "POST" && ["/api/classify-apply", "/api/classify-undo"].includes(url.pathname)) {
+    const body = await readJsonBody(req);
+    if (url.pathname === "/api/classify-apply") {
+      try { validateMoves({ moves: body.moves, excludeRoots: body.excludeRoots, destRoot: body.destRoot }); }
+      catch (error) { return sendJson(res, { ok: false, error: error.message }, 400); }
+    } else if (typeof body.manifestPath !== "string" || !path.isAbsolute(body.manifestPath)) {
+      return sendJson(res, { ok: false, error: "manifestPath debe ser una ruta absoluta" }, 400);
+    }
+    const processId = String(body.processId || `classify-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+    if (runningClassifyOperations.has(processId)) return sendJson(res, { ok: false, error: "processId ya está en uso" }, 409);
+    const operation = { cancelled: false };
+    runningClassifyOperations.set(processId, operation);
+    const sendEvent = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    try {
+      const options = url.pathname === "/api/classify-apply"
+        ? { moves: body.moves, excludeRoots: body.excludeRoots, destRoot: body.destRoot }
+        : { manifestPath: body.manifestPath };
+      const operationFn = url.pathname === "/api/classify-apply" ? applyClassifyMoves : undoClassifyManifest;
+      const result = await operationFn({ ...options, cancelled: () => operation.cancelled, onProgress: (progress) => sendEvent({ type: "progress", ...progress }) });
+      sendEvent({ type: "result", ...result });
+      sendEvent({ type: "complete", success: true, cancelled: result.cancelled });
+    } catch (error) {
+      sendEvent({ type: "complete", success: false, error: error.message });
+    } finally {
+      runningClassifyOperations.delete(processId);
+      res.end();
+    }
     return;
   }
 
@@ -371,7 +409,9 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
       return sendJson(res, { ok: false, error: "processId requerido" }, 400);
     }
     const cancelled = cancelProcess(processId);
-    return sendJson(res, { ok: true, cancelled });
+    const operation = runningClassifyOperations.get(processId);
+    if (operation) operation.cancelled = true;
+    return sendJson(res, { ok: true, cancelled: cancelled || Boolean(operation) });
   }
 
   // Pause / Resume a running process (macOS/Linux — SIGSTOP / SIGCONT)

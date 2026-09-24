@@ -37,12 +37,14 @@ export async function classifyByTags({ inputRoot, excludeRoots = [], destRoot, p
   const aliases = aliasTable ?? JSON.parse(fs.readFileSync(aliasesPath, "utf8"));
   const lookup = buildGenreLookup(aliases);
   const excludedFiles = new Map();
+  const excludedNames = new Set();
   for (const root of excludes) {
     const scan = await discovery({ target: root, recursive: true });
     for (const file of scan.files) {
       const stat = fs.statSync(file);
       const key = `${path.basename(file).toLocaleLowerCase("en")}\0${stat.size}`;
       if (!excludedFiles.has(key)) excludedFiles.set(key, file);
+      excludedNames.add(path.basename(file).toLocaleLowerCase("en"));
     }
   }
   const scan = await discovery({ target: input, recursive: true });
@@ -64,7 +66,7 @@ export async function classifyByTags({ inputRoot, excludeRoots = [], destRoot, p
     else if (!tagGenre) { status = "review"; reason = "missing-genre-tag"; }
     else if (isJunkGenre(tagGenre)) { status = "review"; reason = "junk-genre-tag"; }
     else if (!genre) { status = "review"; reason = "unknown-genre-tag"; }
-    results.push({ path: file, tagGenre, genre, status, reason, destination: genre ? path.join(destinationRoot, genre, path.basename(file)) : null });
+    results.push({ path: file, tagGenre, genre, status, reason, possibleDuplicate: excludedNames.has(path.basename(file).toLocaleLowerCase("en")), destination: genre ? path.join(destinationRoot, genre, path.basename(file)) : null });
   }
   console.log(JSON.stringify(results, null, 2));
   return results;
