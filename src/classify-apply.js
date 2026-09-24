@@ -134,6 +134,7 @@ export async function undoClassifyManifest({ manifestPath, cancelled = () => fal
     const move = completed[index];
     if (cancelled()) break;
     try {
+      if (!within(move.to, manifest.destRoot)) throw new Error("Destino del movimiento fuera de destRoot del manifiesto");
       if (!fs.existsSync(move.to) || fs.existsSync(move.from) || isProtected(move.from, manifest.excludeRoots || [])) throw new Error("Destino ausente, origen ocupado o ruta protegida");
       await moveFile(move.to, move.from, renameSync);
       move.status = "undone";

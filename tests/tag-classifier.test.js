@@ -92,3 +92,15 @@ test("excluye raíces anidadas y rechaza rutas protegidas", async (t) => {
   await assert.rejects(() => classifyByTags({ inputRoot: input, excludeRoots: [examples], destRoot: path.join(examples, "out") }), /dentro de excludeRoots/);
   await assert.rejects(() => classifyByTags({ inputRoot: input, excludeRoots: [examples], destRoot: parent }), /excludeRoots no pueden estar dentro/);
 });
+
+test("no vuelve a proponer archivos que ya están bajo destRoot", async (t) => {
+  const parent = tempDir("mk-tags-rescan-");
+  const input = path.join(parent, "input");
+  const destination = path.join(input, "Clasificado");
+  fs.mkdirSync(destination, { recursive: true });
+  addFile(input, "pending.wav");
+  addFile(destination, "House", "classified.wav");
+  t.after(() => fs.rmSync(parent, { recursive: true, force: true }));
+  const result = await classifyByTags({ inputRoot: input, destRoot: destination, parseFile: async () => ({ common: { genre: ["House"] } }) });
+  assert.deepEqual(result.map((item) => path.basename(item.path)), ["pending.wav"]);
+});

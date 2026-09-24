@@ -48,7 +48,7 @@ export async function classifyByTags({ inputRoot, excludeRoots = [], destRoot, p
     }
   }
   const scan = await discovery({ target: input, recursive: true });
-  const files = scan.files.filter((file) => !excludes.some((root) => isWithin(file, root)));
+  const files = scan.files.filter((file) => !isWithin(file, destinationRoot) && !excludes.some((root) => isWithin(file, root)));
   const results = [];
   for (let index = 0; index < files.length; index++) {
     const file = files[index];

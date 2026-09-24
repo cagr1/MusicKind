@@ -59,6 +59,23 @@ test("deshacer ocupado no sobrescribe origen y EXDEV copia/verifica/borra", asyn
   assert.equal(fs.readFileSync(from, "utf8"), "keep me"); assert.equal(fs.existsSync(actual), true);
 });
 
+test("deshacer rechaza un destino alterado fuera de destRoot sin tocarlo", async (t) => {
+  const env = setup(); t.after(() => fs.rmSync(env.root, { recursive: true, force: true }));
+  const from = env.add(env.input, "track.wav");
+  const applied = await applyClassifyMoves({ destRoot: env.dest, moves: [{ from, to: path.join(env.dest, "track.wav") }] });
+  const outside = env.add(env.root, "outside.wav", "must stay");
+  const manifest = JSON.parse(fs.readFileSync(applied.manifestPath, "utf8"));
+  manifest.moves[0].to = outside;
+  fs.writeFileSync(applied.manifestPath, JSON.stringify(manifest));
+
+  const undone = await undoClassifyManifest({ manifestPath: applied.manifestPath });
+  assert.equal(undone.manifest.moves[0].undoStatus, "error");
+  assert.match(undone.manifest.moves[0].undoReason, /fuera de destRoot/);
+  assert.equal(undone.manifest.moves[0].status, "done");
+  assert.equal(fs.readFileSync(outside, "utf8"), "must stay");
+  assert.equal(fs.existsSync(from), false);
+});
+
 test("API valida antes de mover y aplica/deshace por SSE", async (t) => {
   const env = setup(); t.after(() => fs.rmSync(env.root, { recursive: true, force: true }));
   const from = env.add(env.input, "track.mp3"); const server = createServer();
