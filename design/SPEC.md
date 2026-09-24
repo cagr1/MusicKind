@@ -533,6 +533,16 @@ contra el servidor real); MP3 suena. La biblioteca de Carlos es 109 AIFF / 14 MP
    tamaño/radio; en error o 404 → el placeholder actual con color Camelot. Usar `path` en filas (todas las vistas), Inspector y deck.
 3. Tests vitest: toast en fallo de `play()`; `TrackArtwork` cae al placeholder en error de imagen.
 
+### A3 · Deck: la onda no corresponde a la posición (2026-09-24, diagnóstico del cerebro)
+Carlos: "una cosa es donde está la barra naranja y otra donde se desplaza; queda muy adelante". Medido: la duración de Chromium y la real
+coinciden (0.0 s en 7 MP3), el seek va al tiempo correcto. Causa: `web/src/components/music/DeckPlayer.tsx:106-118` pinta 400 `<span>` con
+`min-w-px flex-1` + `gap-px` (≥ ~800 px) dentro de un botón con `overflow-hidden` de ~665 px → las barras sobrantes se recortan: la onda
+visible es solo el ~80% inicial estirado y el tramo "reproducido" (por índice) no coincide con la línea naranja (por % del ancho).
+Corrección: la onda del deck en **SVG** con `viewBox="0 0 400 32"` y `preserveAspectRatio="none"` (una `rect` por pico, ancho 0.7 de unidad),
+coloreado por `index/peaks.length <= progress`; línea naranja en la misma escala del SVG. Revisar que `LargeWaveform` y `MiniWaveform` no
+tengan el mismo patrón. Test vitest: con 400 picos y contenedor de 300 px, la barra en la posición x=150 corresponde al pico 200 y un clic ahí
+hace `seek(duration/2)`.
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)
