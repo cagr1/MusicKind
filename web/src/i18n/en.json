@@ -297,6 +297,14 @@
     "cancel": "Cancel",
     "retry": "Try again",
     "error": "The track could not be separated",
-    "playbackError": "The track could not be played"
+    "playbackError": "The track could not be played",
+    "chooseStems": "Generate",
+    "processTime": "Processing time is the same; this changes which files are saved.",
+    "listenLane": "Listen to this lane",
+    "choice": {
+      "vocals": "Vocals",
+      "instrumental": "Instrumental",
+      "both": "Both"
+    }
   }
 }

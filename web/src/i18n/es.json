@@ -297,6 +297,14 @@
     "cancel": "Cancelar",
     "retry": "Intentar de nuevo",
     "error": "No se pudo separar la pista",
-    "playbackError": "No se pudo reproducir la pista"
+    "playbackError": "No se pudo reproducir la pista",
+    "chooseStems": "Generar",
+    "processTime": "El tiempo de proceso es el mismo; cambia qué archivos se guardan.",
+    "listenLane": "Escuchar este carril",
+    "choice": {
+      "vocals": "Voces",
+      "instrumental": "Instrumental",
+      "both": "Ambos"
+    }
   }
 }

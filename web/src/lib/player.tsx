@@ -96,6 +96,8 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     element.addEventListener('ended', sync)
     element.addEventListener('ended', advance)
     element.addEventListener('error', failed)
+    const pauseDeck = () => element.pause()
+    window.addEventListener('musickind:stems-play', pauseDeck)
     return () => {
       element.pause()
       element.removeEventListener('timeupdate', sync)
@@ -105,6 +107,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       element.removeEventListener('ended', sync)
       element.removeEventListener('ended', advance)
       element.removeEventListener('error', failed)
+      window.removeEventListener('musickind:stems-play', pauseDeck)
       element.src = ''
       audioRef.current = null
     }
@@ -134,6 +137,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const play = React.useCallback(
     (element: HTMLAudioElement) => {
+      window.dispatchEvent(new Event('musickind:deck-play'))
       setPreparing(true)
       void element
         .play()

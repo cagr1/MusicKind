@@ -3,6 +3,7 @@ import {
   AudioLines,
   Disc3,
   FolderOpen,
+  Headphones,
   Mic2,
   Music2,
   Pause,
@@ -26,11 +27,12 @@ import { electron, resolveDroppedFiles } from '@/lib/electron'
 import { useProcess } from '@/lib/process'
 import { useT } from '@/i18n/I18nProvider'
 import { useView } from '@/hooks/useView'
+import { usePlayer } from '@/lib/player'
 
 export type StemLaneKey = 'original' | 'vocals' | 'instrumental'
 export interface StemLaneState {
   muted: boolean
-  solo: boolean
+  audible: boolean
   volume: number
 }
 export interface StemResult {
@@ -49,28 +51,31 @@ export const STEM_LANES: StemLaneKey[] = ['original', 'vocals', 'instrumental']
 
 export function defaultLaneState(): Record<StemLaneKey, StemLaneState> {
   return {
-    original: { muted: false, solo: false, volume: 85 },
-    vocals: { muted: false, solo: false, volume: 100 },
-    instrumental: { muted: false, solo: false, volume: 90 },
+    original: { muted: false, audible: false, volume: 85 },
+    vocals: { muted: false, audible: true, volume: 100 },
+    instrumental: { muted: false, audible: false, volume: 90 },
   }
 }
 
 export function createStemAudioController(audio: HTMLAudioElement[], initial = defaultLaneState()) {
   const state = { ...initial }
   const applyVolumes = () => {
-    const hasSolo = STEM_LANES.some((lane) => state[lane].solo)
     STEM_LANES.forEach((lane, index) => {
       const laneState = state[lane]
-      audio[index].volume =
-        !laneState.muted && (!hasSolo || laneState.solo) ? laneState.volume / 100 : 0
+      audio[index].volume = !laneState.muted && laneState.audible ? laneState.volume / 100 : 0
     })
   }
   const setMute = (lane: StemLaneKey, muted: boolean) => {
     state[lane] = { ...state[lane], muted }
     applyVolumes()
   }
-  const setSolo = (lane: StemLaneKey, solo: boolean) => {
-    state[lane] = { ...state[lane], solo }
+  const setAudible = (lane: StemLaneKey, audible: boolean, additive = false) => {
+    STEM_LANES.forEach((key) => {
+      state[key] = {
+        ...state[key],
+        audible: key === lane ? audible : additive ? state[key].audible : false,
+      }
+    })
     applyVolumes()
   }
   const setVolume = (lane: StemLaneKey, volume: number) => {
@@ -91,7 +96,16 @@ export function createStemAudioController(audio: HTMLAudioElement[], initial = d
     })
   }
   applyVolumes()
-  return { state, setMute, setSolo, setVolume, seek, play, pause, destroy }
+  return { state, setMute, setAudible, setVolume, seek, play, pause, destroy }
+}
+
+export function createStemSeparationRequest(
+  input: string,
+  outputDir: string,
+  stems: 'vocals' | 'instrumental' | 'both',
+  format: 'wav' | 'mp3',
+) {
+  return { files: [input], outputDir, stems, format }
 }
 
 function fileName(path: string) {
@@ -110,10 +124,12 @@ export function Stems() {
   const { setView } = useView()
   const { state, run, pause, resume, cancel } = useProcessStream()
   const { setActive } = useProcess()
+  const { audio: deckAudio } = usePlayer()
   const [input, setInput] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<StemResult | null>(null)
   const [outputDir, setOutputDir] = React.useState<string | null>(null)
   const [format, setFormat] = React.useState<'wav' | 'mp3'>('wav')
+  const [stemChoice, setStemChoice] = React.useState<'vocals' | 'instrumental' | 'both'>('both')
   const [demucsInstalled, setDemucsInstalled] = React.useState<boolean | null>(null)
   const [metadata, setMetadata] = React.useState<InspectorTrack | null>(null)
   const [laneState, setLaneState] = React.useState(defaultLaneState)
@@ -191,23 +207,29 @@ export function Stems() {
   }, [input])
 
   const lanePaths = React.useMemo(
-    () => [input, result?.vocals ?? null, result?.instrumental ?? null].filter(Boolean) as string[],
+    () => [input, result?.vocals ?? null, result?.instrumental ?? null],
     [input, result],
   )
   React.useEffect(() => {
     controllerRef.current?.destroy()
     setAudioReady(false)
-    if (lanePaths.length !== 3) {
+    if (!lanePaths[0]) {
       controllerRef.current = null
       return
     }
     const audio = lanePaths.map((path) => {
       const element = new Audio()
-      element.src = `/api/audio?path=${encodeURIComponent(path)}`
+      if (path) element.src = `/api/audio?path=${encodeURIComponent(path)}`
       element.load()
       return element
     })
-    const controller = createStemAudioController(audio, defaultLaneState())
+    const initialLaneState = defaultLaneState()
+    if (!lanePaths[1] && lanePaths[2]) {
+      initialLaneState.vocals.audible = false
+      initialLaneState.instrumental.audible = true
+    }
+    setLaneState(initialLaneState)
+    const controller = createStemAudioController(audio, initialLaneState)
     const sync = () => {
       setCurrentTime(audio[0].currentTime)
       setDuration(Number.isFinite(audio[0].duration) ? audio[0].duration : 0)
@@ -230,6 +252,12 @@ export function Stems() {
       setAudioReady(false)
     }
   }, [lanePaths])
+
+  React.useEffect(() => {
+    const pauseStems = () => controllerRef.current?.pause()
+    window.addEventListener('musickind:deck-play', pauseStems)
+    return () => window.removeEventListener('musickind:deck-play', pauseStems)
+  }, [])
 
   const chooseFile = async () => {
     const picked = await electron.openFiles(t('stems.selectFile'), false)
@@ -258,7 +286,7 @@ export function Stems() {
     setError(null)
     await run(
       '/api/stem-separate',
-      { files: [input], outputDir, stems: 'both', format },
+      createStemSeparationRequest(input, outputDir, stemChoice, format),
       (value) => {
         const next = resultFrom(value)
         if (!next?.ok) {
@@ -277,6 +305,8 @@ export function Stems() {
       setPlaying(false)
     } else {
       try {
+        deckAudio?.pause()
+        window.dispatchEvent(new Event('musickind:stems-play'))
         await controller.play()
         setPlaying(true)
       } catch {
@@ -293,7 +323,7 @@ export function Stems() {
     setLaneState((current) => {
       const next = { ...current, [lane]: { ...current[lane], ...patch } }
       if (patch.muted !== undefined) controllerRef.current?.setMute(lane, patch.muted)
-      if (patch.solo !== undefined) controllerRef.current?.setSolo(lane, patch.solo)
+      if (patch.audible !== undefined) controllerRef.current?.setAudible(lane, patch.audible)
       if (patch.volume !== undefined) controllerRef.current?.setVolume(lane, patch.volume)
       return next
     })
@@ -410,6 +440,24 @@ export function Stems() {
                     <SelectItem value="mp3">MP3</SelectItem>
                   </SelectContent>
                 </Select>
+                <div
+                  className="flex rounded border border-line p-0.5"
+                  role="group"
+                  aria-label={t('stems.chooseStems')}
+                  title={t('stems.processTime')}
+                >
+                  {(['vocals', 'instrumental', 'both'] as const).map((choice) => (
+                    <button
+                      key={choice}
+                      type="button"
+                      onClick={() => setStemChoice(choice)}
+                      aria-pressed={stemChoice === choice}
+                      className={`rounded px-2 py-1 ${stemChoice === choice ? 'bg-white/[0.07] text-brand' : 'text-zinc-400'}`}
+                    >
+                      {t(`stems.choice.${choice}`)}
+                    </button>
+                  ))}
+                </div>
                 <button
                   type="button"
                   onClick={() => void togglePlay()}
@@ -460,6 +508,8 @@ export function Stems() {
                     path={lane.path}
                     color={lane.color}
                     state={laneState[lane.key]}
+                    active={laneState[lane.key].audible}
+                    disabled={!lane.path}
                     currentTime={currentTime}
                     duration={duration}
                     onSeek={seek}
@@ -504,6 +554,8 @@ function StemLane({
   path,
   color,
   state,
+  active,
+  disabled,
   currentTime,
   duration,
   onSeek,
@@ -517,6 +569,8 @@ function StemLane({
   path: string | null
   color: string
   state: StemLaneState
+  active: boolean
+  disabled: boolean
   currentTime: number
   duration: number
   onSeek: (event: React.MouseEvent<HTMLDivElement>) => void
@@ -525,7 +579,9 @@ function StemLane({
   t: ReturnType<typeof useT>
 }) {
   return (
-    <div className="flex h-[86px] overflow-hidden rounded border border-line bg-surface-panel">
+    <div
+      className={`flex h-[86px] overflow-hidden rounded border border-line ${active ? 'bg-white/[0.06]' : 'bg-surface-panel'}`}
+    >
       <div className="flex w-44 shrink-0 flex-col justify-between border-r border-line px-3 py-2">
         <div className="flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5 truncate text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
@@ -545,19 +601,15 @@ function StemLane({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => onUpdate(lane, { muted: !state.muted })}
-            className={`flex size-5 items-center justify-center rounded text-[10px] font-mono font-bold ${state.muted ? 'bg-red-500 text-white' : 'bg-surface-elevated text-zinc-400 hover:text-zinc-100'}`}
-            aria-label={t('stems.mute')}
+            onClick={(event) =>
+              onUpdate(lane, { audible: event.shiftKey ? !state.audible : !active })
+            }
+            disabled={disabled}
+            className={`flex size-5 items-center justify-center rounded ${active ? 'text-brand' : 'text-zinc-400'} disabled:opacity-30`}
+            aria-label={t('stems.listenLane')}
+            title={t('stems.listenLane')}
           >
-            M
-          </button>
-          <button
-            type="button"
-            onClick={() => onUpdate(lane, { solo: !state.solo })}
-            className={`flex size-5 items-center justify-center rounded text-[10px] font-mono font-bold ${state.solo ? 'bg-brand text-white' : 'bg-surface-elevated text-zinc-400 hover:text-zinc-100'}`}
-            aria-label={t('stems.solo')}
-          >
-            S
+            <Headphones className="size-3.5" />
           </button>
           <Slider
             min={0}
