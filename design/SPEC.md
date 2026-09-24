@@ -318,6 +318,61 @@ QA en vivo OK: MP3→WAV, tabla, resumen `2 archivos · 68.3 MB → 121.5 MB`, I
    tonalidad del tag en fila e Inspector; sin tags → nombre de archivo y `—`.
 3. JSX multilínea en `views/Converter.tsx` (quedan 9 líneas >140 columnas).
 
+## Lote Front 2 (resto) — 2026-09-23
+
+Una vista por corrida, en este orden. El cerebro verifica cada una en vivo (Chrome headless + backend real + `electronAPI` simulado,
+salida redirigida a carpeta temporal) y hace commit antes de delegar la siguiente.
+
+**Checklist común (aprendido en Front 1 y Convertidor; aplica a todas):**
+- Patrón: `web/src/views/Bpm.tsx` y `web/src/views/Converter.tsx` (4 estados, `ProcessProvider`, Inspector con `children`).
+- Estado vacío = icono + un verbo, zona entera clicable y que acepta soltar; sin subtítulos ni botones duplicados.
+- Estado de error dentro del layout (barra superior e Inspector visibles), solo mensaje accionable + reintentar.
+- Tokens `brand` (nunca `accent`), cero hex en `.tsx`, sin `animate-pulse`, JSX multilínea (ninguna línea >140 columnas).
+- Todo texto visible y `aria-label` por i18n `es` y `en`.
+- **Sin datos inventados**: sin dato → `—`. Título/artista/BPM/tonalidad desde `GET /api/metadata?file=` (máx. 4 simultáneas).
+- Rutas de salida = `defaultOutputDir` de `GET /api/settings`.
+- Tests vitest de la lógica propia de la vista. Gates: `npm --prefix web run build`, `lint`, `test` exit 0 (+ `node --test tests/*.test.js` si toca `src/`).
+- No commitear, no tocar `ui/`, `design/`, `NEXT.md`, `plan.md`, `CLAUDE.md`; no agregar supresiones de linters.
+
+### L1 · Metadatos
+- **Back:** `POST /api/metadata/identify` acepta `preview: true` → devuelve `{ ok, original, metadata, newFilename }` **sin** `writeMetadata`
+  ni `renameFile` (`src/metadata_editor.js:283-285`). Sin `preview` el comportamiento actual no cambia (lo usa `ui/`). Test node con
+  `identifyAndTag` en modo preview sobre una copia: el archivo no cambia (mismo mtime y nombre).
+- **Vista** (`design/prototype/src/views/Metadata.tsx`): carpeta → `/api/metadata/list` → filas con tags actuales. "Identificar" recorre las
+  filas en secuencia con `preview: true` (cancelable) y guarda la propuesta por fila. **Sin columna Confianza.** Al seleccionar, el slot del
+  Inspector es el formulario del prototipo (Título, Artista, Álbum, Año, Género, N.º de pista, Nombre de archivo nuevo) con original tachado
+  zinc-600 / nuevo zinc-100; Guardar → `POST /api/metadata/write` y, si cambió el nombre, `POST /api/metadata/rename`; Cancelar descarta.
+  Sin claves (identify responde 400 "Falta la clave API…"): mensaje accionable con botón a Configuración.
+
+### L2 · Configuración
+- `design/prototype/src/views/Settings.tsx`, una columna. `GET/POST /api/settings` (spotifyClientId, spotifyClientSecret, lastfmApiKey,
+  acoustidApiKey, language, defaultOutputDir). Secretos con botón de icono mostrar/ocultar. Carpeta de salida con `electron.openDirectory`.
+- Idioma: cambia la UI en vivo (i18n existente) y se guarda.
+- Dependencias como filas con estado: `GET /api/check-deps` (librosa, numpy, demucs, acoustid) y `GET /api/ffmpeg-status`; Instalar →
+  `POST /api/install-dep` `{group:"audio"|"stems"}` (SSE, progreso en la fila); FFmpeg → `electron.installFFmpeg`; "Verificar todo".
+- Guardar con feedback (toast). Nunca mostrar un secreto en logs ni en toasts.
+
+### L3 · Sets
+- `design/prototype/src/views/Sets.tsx`. Cuatro carpetas (Warmup, Peak, Closing, Pack nuevo) con `electron.openDirectory`; Slider 30–120 (60).
+- `POST /api/set-analyze` `{warmup, peak, closing, input, analysisSeconds}` → `[{file, warmup, peak, closing, best, bpm, camelot, keySource, error?}]`;
+  los puntajes ya vienen 0–100 (`src/style_analyzer.py:117`); `null` = sección sin referencia → `—`.
+- Agrupado por `best` con encabezado sticky (`WARMUP 5 · 121–124 BPM`), medidor de 3 segmentos (ganador en `brand`), curva de energía (SVG 1px).
+
+### L4 · Clasificador (solo análisis)
+- `design/prototype/src/views/Classifier.tsx`. `POST /api/genre-classify` `{inputPath, dryRun: true}` **siempre** (switch Simulación visible,
+  fijo en on y deshabilitado con Tooltip). Resultado `[{path, artist, title, genre, source, destination, bpm, key, reason}]`.
+- Sin columna de iconos de fuente. Género editable por fila (solo en memoria). Inspector: carpeta destino y fuente (texto i18n).
+- Géneros: botón "Géneros · N" → Popover con chips (agregar/quitar) y Guardar → `GET/POST /api/genres`.
+- Barra de distribución: `brand` para el mayoritario, escala zinc para el resto. **Ordenar/Deshacer no se muestran** (P2 de `plan.md`).
+- Sin claves de Spotify: aviso accionable (el análisis sigue con `--no-spotify`).
+
+### L5 · Stems
+- `design/prototype/src/views/Stems.tsx` (vista DAW). Un archivo (`electron.openFiles` sin multiselección), Select WAV/MP3.
+- `POST /api/stem-separate` `{files:[path], outputDir, stems:"both", format}` → `[{ok, files, vocals, instrumental}]`.
+- Carriles Original / Voces / Instrumental con onda real (`/api/waveform`), regla de tiempo, playhead común, M/S y volumen por carril con
+  3 `HTMLAudioElement` sincronizados (re-sincronizar `currentTime` al buscar). Abrir / mostrar en carpeta por carril.
+- Sin demucs (`/api/check-deps` demucs=false): estado vacío con botón a Configuración. (En la máquina de QA demucs no está instalado.)
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)
