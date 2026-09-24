@@ -64,6 +64,9 @@
   "bpm": {
     "title": "BPM analyzer",
     "tracks": "tracks",
+    "pending": "pending",
+    "addFiles": "Add files",
+    "dropToAdd": "Drop to add",
     "analyze": "Analyze folder",
     "chooseFolder": "Drop a folder",
     "chooseFolderHint": "or click to choose a folder",
@@ -159,6 +162,9 @@
   "converter": {
     "title": "Converter",
     "files": "files",
+    "pending": "pending",
+    "addFiles": "Add files",
+    "dropToAdd": "Drop to add",
     "selected": "selected",
     "selectFiles": "Choose audio files",
     "chooseFiles": "Drop files",
@@ -185,6 +191,9 @@
   "metadata": {
     "title": "Metadata",
     "files": "files",
+    "pending": "pending",
+    "addFiles": "Add files",
+    "dropToAdd": "Drop to add",
     "chooseFolder": "Choose a folder",
     "selectFolder": "Choose music folder",
     "noFiles": "No audio files were found in this folder.",

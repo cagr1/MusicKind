@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   FileAudio,
   FolderOpen,
+  Plus,
   RefreshCw,
   Settings as SettingsIcon,
   X,
@@ -25,6 +26,7 @@ import { electron, resolveDroppedFiles } from '@/lib/electron'
 import { useProcess } from '@/lib/process'
 import { useView } from '@/hooks/useView'
 import { normalizeCamelot } from '@/lib/camelot'
+import { appendResults, mergeUnique, pendingItems } from '@/lib/list'
 
 export type ConversionFormat = 'mp3' | 'wav' | 'aiff' | 'flac'
 
@@ -127,6 +129,7 @@ export function Converter() {
   const [outputDir, setOutputDir] = React.useState<string | null>(null)
   const [ffmpegInstalled, setFfmpegInstalled] = React.useState<boolean | null>(null)
   const [selectedId, setSelectedId] = React.useState<string | null>(results[0]?.input ?? null)
+  const [dragging, setDragging] = React.useState(false)
   const isBusy = state.status === 'running' || state.status === 'paused'
   const selected = results.find((result) => result.input === selectedId) ?? results[0] ?? null
   const summary = summarizeConversionResults(results)
@@ -166,18 +169,17 @@ export function Converter() {
     const picked = await electron.openFiles(t('converter.selectFiles'), true)
     const next = Array.isArray(picked) ? picked : picked ? [picked] : []
     if (next.length) {
-      setFiles(next)
-      setResults([])
-      setSelectedId(null)
+      setFiles((current) => mergeUnique(current, next, (file) => file))
+      setSelectedId((current) => current ?? next[0])
     }
   }
 
   const chooseDirectory = async () => {
     const directory = await electron.openDirectory(t('converter.selectFiles'))
     if (directory) {
-      setFiles([directory])
-      setResults([])
-      setSelectedId(null)
+      const expanded = await expandPaths([directory])
+      setFiles((current) => mergeUnique(current, expanded, (file) => file))
+      setSelectedId((current) => current ?? directory)
     }
   }
 
@@ -186,9 +188,9 @@ export function Converter() {
     try {
       const next = await resolveDroppedFiles(event.dataTransfer.files)
       if (next.length) {
-        setFiles(next)
-        setResults([])
-        setSelectedId(null)
+        const expanded = await expandPaths(next)
+        setFiles((current) => mergeUnique(current, expanded, (file) => file))
+        setSelectedId((current) => current ?? next[0])
       }
     } catch (error) {
       setActive({ status: 'error', name: error instanceof Error ? error.message : String(error) })
@@ -196,9 +198,15 @@ export function Converter() {
   }
 
   const start = async () => {
-    if (!files.length || !outputDir || isBusy) return
-    const converted: ConverterResult[] = []
-    for (const input of files) {
+    const pending = pendingItems(
+      files,
+      results,
+      (file) => file,
+      (result) => result.input,
+    )
+    if (!pending.length || !outputDir || isBusy) return
+    let converted = [...results]
+    for (const input of pending) {
       const resultStart = converted.length
       let receivedResult = false
       let runFailed = false
@@ -214,8 +222,12 @@ export function Converter() {
           if (Array.isArray(value)) {
             receivedResult = true
             runFailed = !shouldContinueAfterResult(value)
-            converted.push(...(value as ConverterResult[]))
-            setResults([...converted])
+            converted = appendResults(
+              converted,
+              value as ConverterResult[],
+              (result) => result.input,
+            )
+            setResults(converted)
             setSelectedId((current) => current ?? input)
           }
         },
@@ -238,17 +250,37 @@ export function Converter() {
 
   if (ffmpegInstalled === null) return <div className="h-full" aria-label={t('converter.title')} />
 
+  const pending = pendingItems(
+    files,
+    results,
+    (file) => file,
+    (result) => result.input,
+  )
+
   return (
-    <div className="flex h-full min-w-0 overflow-hidden">
+    <div
+      className="relative flex h-full min-w-0 overflow-hidden"
+      onDragEnter={(event) => {
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragLeave={(event) => {
+        if (event.currentTarget === event.target) setDragging(false)
+      }}
+      onDrop={(event) => {
+        setDragging(false)
+        void onDrop(event)
+      }}
+    >
+      {dragging && <DropOverlay label={t('converter.dropToAdd')} />}
       <section className="flex min-w-0 flex-1 flex-col">
         <header className="relative flex h-12 shrink-0 items-center justify-between border-b border-line px-6">
           <div className="flex items-center gap-3">
             <h1 className="text-[15px] font-semibold">{t('converter.title')}</h1>
-            {results.length > 0 && (
-              <span className="font-mono text-[11px] text-zinc-500">
-                {summary.count} {t('converter.files')}
-              </span>
-            )}
+            <span className="font-mono text-[11px] text-zinc-500">
+              {files.length} {t('converter.files')} · {pending.length} {t('converter.pending')}
+            </span>
           </div>
           {isBusy && (
             <div className="flex items-center gap-2 font-mono text-[11px] text-zinc-400">
@@ -259,13 +291,28 @@ export function Converter() {
             </div>
           )}
           <div className="flex items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={t('converter.addFiles')}
+                    onClick={() => void chooseFiles()}
+                  >
+                    <Plus />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('converter.addFiles')}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {isBusy && (
               <Button variant="outline" size="sm" onClick={() => void cancel()}>
                 <X />
                 {t('converter.cancel')}
               </Button>
             )}
-            <Button size="sm" onClick={() => void start()} disabled={isBusy || !files.length}>
+            <Button size="sm" onClick={() => void start()} disabled={isBusy || !pending.length}>
               <ArrowRightLeft />
               {t('converter.convert')}
             </Button>
@@ -559,6 +606,30 @@ function RunningState({ files, t }: { files: string[]; t: ReturnType<typeof useT
           </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+async function expandPaths(paths: string[]): Promise<string[]> {
+  const expanded = await Promise.all(
+    paths.map(async (path) => {
+      try {
+        const response = await getJson<{ files?: string[] }>(
+          `/api/metadata/list?dir=${encodeURIComponent(path)}&recursive=false`,
+        )
+        return response.files?.length ? response.files : [path]
+      } catch {
+        return [path]
+      }
+    }),
+  )
+  return expanded.flat()
+}
+
+function DropOverlay({ label }: { label: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded border-2 border-dashed border-brand bg-surface-app/90 text-sm font-semibold text-brand">
+      {label}
     </div>
   )
 }

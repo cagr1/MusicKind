@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { FileAudio, FolderOpen, Save, ScanSearch, X } from 'lucide-react'
+import { FileAudio, FolderOpen, Plus, Save, ScanSearch, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,8 @@ import { getJson, postJson } from '@/lib/api'
 import { electron, resolveDroppedFiles } from '@/lib/electron'
 import { useProcess } from '@/lib/process'
 import { useView } from '@/hooks/useView'
+import { appendResults, mergeUnique, pendingItems } from '@/lib/list'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface MetadataFields {
   title: string
@@ -99,15 +101,20 @@ export function metadataNeedsRename(row: MetadataRow): boolean {
 export function Metadata() {
   const t = useT()
   const { setView } = useView()
-  const { setActive, setResult } = useProcess()
+  const { results: savedResults, setActive, setResult } = useProcess()
+  const savedRows = savedResults.metadata as MetadataRow[] | undefined
   const [folder, setFolder] = React.useState<string | null>(null)
-  const [rows, setRows] = React.useState<MetadataRow[]>([])
+  const [rows, setRows] = React.useState<MetadataRow[]>(() => savedRows ?? [])
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [form, setForm] = React.useState<MetadataFields>(metadataFormValues(null))
   const [error, setError] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [progress, setProgress] = React.useState({ current: 0, total: 0, file: '' })
+  const [identified, setIdentified] = React.useState<string[]>(() =>
+    (savedRows ?? []).map((row) => row.path),
+  )
+  const [dragging, setDragging] = React.useState(false)
   const controllerRef = React.useRef<AbortController | null>(null)
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0] ?? null
 
@@ -132,13 +139,9 @@ export function Metadata() {
     [progress, setActive, t],
   )
 
-  const loadFolder = async (directory: string) => {
+  const loadFiles = async (paths: string[], source?: string) => {
     setError(null)
     try {
-      const listed = await getJson<{ files?: string[] }>(
-        `/api/metadata/list?dir=${encodeURIComponent(directory)}&recursive=false`,
-      )
-      const paths = listed.files ?? []
       if (!paths.length) throw new Error(t('metadata.noFiles'))
       const loaded: MetadataRow[] = []
       for (let index = 0; index < paths.length; index += 4) {
@@ -178,10 +181,26 @@ export function Metadata() {
         )
         loaded.push(...batch)
       }
-      setFolder(directory)
-      setRows(loaded)
-      setSelectedId(loaded[0]?.id ?? null)
-      setResult('metadata', loaded)
+      setFolder(source ?? folder)
+      setRows((current) => {
+        const merged = appendResults(current, loaded, (row) => row.path)
+        setResult('metadata', merged)
+        return merged
+      })
+      setSelectedId((current) => current ?? loaded[0]?.id ?? null)
+    } catch (loadError) {
+      const message = loadError instanceof Error ? loadError.message : String(loadError)
+      setError(message)
+      updateProcess('error')
+    }
+  }
+
+  const loadFolder = async (directory: string) => {
+    try {
+      const listed = await getJson<{ files?: string[] }>(
+        `/api/metadata/list?dir=${encodeURIComponent(directory)}&recursive=false`,
+      )
+      await loadFiles(listed.files ?? [], directory)
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : String(loadError)
       setError(message)
@@ -194,11 +213,26 @@ export function Metadata() {
     if (directory) await loadFolder(directory)
   }
 
+  const addFiles = async () => {
+    const picked = await electron.openFiles(t('metadata.selectFolder'), true)
+    const paths = Array.isArray(picked) ? picked : picked ? [picked] : []
+    if (paths.length) await loadFiles(mergeUnique([], paths, (path) => path))
+  }
+
   const onDrop = async (event: React.DragEvent) => {
     event.preventDefault()
     try {
       const paths = await resolveDroppedFiles(event.dataTransfer.files)
-      if (paths[0]) await loadFolder(paths[0])
+      if (paths[0]) {
+        try {
+          const listed = await getJson<{ files?: string[] }>(
+            `/api/metadata/list?dir=${encodeURIComponent(paths[0])}&recursive=false`,
+          )
+          await loadFiles(listed.files ?? [], paths[0])
+        } catch {
+          await loadFiles(paths)
+        }
+      }
     } catch (dropError) {
       const message = dropError instanceof Error ? dropError.message : String(dropError)
       setError(message)
@@ -207,18 +241,24 @@ export function Metadata() {
   }
 
   const identify = async () => {
-    if (!rows.length || busy) return
+    const pending = pendingItems(
+      rows,
+      identified,
+      (row) => row.path,
+      (path) => path,
+    )
+    if (!pending.length || busy) return
     const controller = new AbortController()
     controllerRef.current = controller
     setBusy(true)
     setError(null)
-    setProgress({ current: 0, total: rows.length, file: '' })
+    setProgress({ current: 0, total: pending.length, file: '' })
     updateProcess('running')
     try {
-      for (let index = 0; index < rows.length; index += 1) {
+      for (let index = 0; index < pending.length; index += 1) {
         if (controller.signal.aborted) break
-        const row = rows[index]
-        setProgress({ current: index + 1, total: rows.length, file: row.name })
+        const row = pending[index]
+        setProgress({ current: index + 1, total: pending.length, file: row.name })
         const response = await fetch('/api/metadata/identify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -228,8 +268,8 @@ export function Metadata() {
         const payload = (await response.json()) as PreviewResponse & { error?: string }
         if (!response.ok) throw new Error(payload.error || t('metadata.identifyError'))
         const metadata = fieldsFromMetadata(payload.metadata)
-        setRows((current) =>
-          current.map((item) =>
+        setRows((current) => {
+          const updated = current.map((item) =>
             item.id === row.id
               ? {
                   ...item,
@@ -237,8 +277,11 @@ export function Metadata() {
                   newFilename: payload.newFilename || item.name,
                 }
               : item,
-          ),
-        )
+          )
+          setResult('metadata', updated)
+          return updated
+        })
+        setIdentified((current) => mergeUnique(current, [row.path], (path) => path))
       }
       if (!controller.signal.aborted) {
         toast.success(t('metadata.identifyDone'))
@@ -300,7 +343,11 @@ export function Metadata() {
         bpm: selected.bpm,
         key: selected.key,
       }
-      setRows((current) => current.map((row) => (row.id === selected.id ? saved : row)))
+      setRows((current) => {
+        const updated = current.map((row) => (row.id === selected.id ? saved : row))
+        setResult('metadata', updated)
+        return updated
+      })
       setSelectedId(saved.id)
       setForm(saved.metadata)
       toast.success(t('metadata.saved'))
@@ -315,24 +362,61 @@ export function Metadata() {
   const cancelForm = () => setForm(metadataFormValues(selected))
   const showSettings = error ? isApiKeyError(error) : false
 
+  const pending = pendingItems(
+    rows,
+    identified,
+    (row) => row.path,
+    (path) => path,
+  )
+
   return (
-    <div className="flex h-full min-w-0 overflow-hidden">
+    <div
+      className="relative flex h-full min-w-0 overflow-hidden"
+      onDragEnter={(event) => {
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragLeave={(event) => {
+        if (event.currentTarget === event.target) setDragging(false)
+      }}
+      onDrop={(event) => {
+        setDragging(false)
+        void onDrop(event)
+      }}
+    >
+      {dragging && <DropOverlay label={t('metadata.dropToAdd')} />}
       <section className="flex min-w-0 flex-1 flex-col">
         <header className="relative flex h-12 shrink-0 items-center justify-between border-b border-line px-6">
           <div className="flex items-center gap-3">
             <h1 className="text-[15px] font-semibold">{t('metadata.title')}</h1>
             <span className="font-mono text-[11px] text-zinc-500">
-              {rows.length} {t('metadata.files')}
+              {rows.length} {t('metadata.files')} · {pending.length} {t('metadata.pending')}
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={t('metadata.addFiles')}
+                    onClick={() => void addFiles()}
+                  >
+                    <Plus />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('metadata.addFiles')}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {busy && (
               <Button variant="outline" size="sm" onClick={cancelIdentify}>
                 <X />
                 {t('metadata.cancel')}
               </Button>
             )}
-            <Button size="sm" onClick={() => void identify()} disabled={busy || !rows.length}>
+            <Button size="sm" onClick={() => void identify()} disabled={busy || !pending.length}>
               <ScanSearch />
               {t('metadata.identify')}
             </Button>
@@ -568,5 +652,13 @@ function EmptyState({
       <FileAudio className="size-8" />
       <span className="text-[13px]">{title}</span>
     </button>
+  )
+}
+
+function DropOverlay({ label }: { label: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded border-2 border-dashed border-brand bg-surface-app/90 text-sm font-semibold text-brand">
+      {label}
+    </div>
   )
 }

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Activity, Check, FolderOpen, Pause, Play, Save, X } from 'lucide-react'
+import { Activity, Check, FolderOpen, Pause, Play, Plus, Save, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
@@ -15,6 +15,8 @@ import { useProcess } from '@/lib/process'
 import { useView } from '@/hooks/useView'
 import { Popover } from 'radix-ui'
 import { CAMELOT_MAP } from '@/lib/camelot'
+import { appendResults, mergeUnique, pendingItems } from '@/lib/list'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface BpmResult extends InspectorTrack {
   file: string
@@ -70,11 +72,19 @@ export function Bpm() {
   const [original, setOriginal] = React.useState<
     Record<string, { bpm: number | null; key: string | null }>
   >({})
+  const [dragging, setDragging] = React.useState(false)
 
   React.useEffect(() => {
     const stored = savedResults[view] as BpmResult[] | undefined
     if (!stored) return
     setTracks(stored)
+    setFiles((current) =>
+      mergeUnique(
+        current,
+        stored.map((track) => track.file),
+        (file) => file,
+      ),
+    )
     setSelectedId((current) => current ?? stored[0]?.id ?? null)
     setOriginal(
       Object.fromEntries(stored.map((track) => [track.id, { bpm: track.bpm, key: track.key }])),
@@ -109,16 +119,20 @@ export function Bpm() {
       index: item.index ?? index + 1,
     }))
     let cancelled = false
-    setTracks(next)
-    setResult(view, next)
-    setOriginal(
-      Object.fromEntries(next.map((track) => [track.id, { bpm: track.bpm, key: track.key }])),
-    )
+    setTracks((current) => {
+      const merged = appendResults(current, next, (track) => track.file)
+      setResult(view, merged)
+      return merged
+    })
+    setOriginal((current) => ({
+      ...current,
+      ...Object.fromEntries(next.map((track) => [track.id, { bpm: track.bpm, key: track.key }])),
+    }))
     setSelectedId((current) => current ?? next[0]?.id ?? null)
     void readTrackMetadata(next, (id, metadata) => {
       if (cancelled) return
-      setTracks((current) =>
-        current.map((track) =>
+      setTracks((current) => {
+        const updated = current.map((track) =>
           track.id === id
             ? {
                 ...track,
@@ -127,8 +141,10 @@ export function Bpm() {
                 tagBpm: metadata.bpm ?? null,
               }
             : track,
-        ),
-      )
+        )
+        setResult(view, updated)
+        return updated
+      })
     })
     return () => {
       cancelled = true
@@ -152,10 +168,8 @@ export function Bpm() {
       )
       if (!response.files?.length) throw new Error(t('bpm.noFiles'))
       setFolder(directory)
-      setFiles(response.files)
+      setFiles((current) => mergeUnique(current, response.files, (file) => file))
     } catch (error) {
-      setFolder(null)
-      setFiles([])
       setActive({
         status: 'error',
         name: error instanceof Error ? error.message : String(error),
@@ -163,9 +177,24 @@ export function Bpm() {
     }
   }
 
+  const addFiles = async () => {
+    const picked = await electron.openFiles(t('bpm.selectFolder'), true)
+    const next = Array.isArray(picked) ? picked : picked ? [picked] : []
+    if (next.length) {
+      setFiles((current) => mergeUnique(current, next, (file) => file))
+      setFolder(fileName(next[0]))
+    }
+  }
+
   const start = async () => {
-    if (!files.length) return
-    await run('/api/bpm/analyze', { files, analysisSeconds: seconds })
+    const pending = pendingItems(
+      files,
+      tracks,
+      (file) => file,
+      (track) => track.file,
+    )
+    if (!pending.length) return
+    await run('/api/bpm/analyze', { files: pending, analysisSeconds: seconds })
   }
 
   const save = async (selection: BpmResult[]) => {
@@ -202,9 +231,10 @@ export function Bpm() {
     event.preventDefault()
     try {
       const dropped = await resolveDroppedFiles(event.dataTransfer.files)
-      if (dropped.length) {
-        setFiles(dropped)
-        setFolder(fileName(dropped[0]))
+      const expanded = await expandPaths(dropped)
+      if (expanded.length) {
+        setFiles((current) => mergeUnique(current, expanded, (file) => file))
+        setFolder(fileName(expanded[0]))
       }
     } catch (error) {
       setActive({
@@ -214,17 +244,54 @@ export function Bpm() {
     }
   }
 
+  const pending = pendingItems(
+    files,
+    tracks,
+    (file) => file,
+    (track) => track.file,
+  )
+
   return (
-    <div className="flex h-full min-w-0 overflow-hidden">
+    <div
+      className="relative flex h-full min-w-0 overflow-hidden"
+      onDragEnter={(event) => {
+        event.preventDefault()
+        setDragging(true)
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragLeave={(event) => {
+        if (event.currentTarget === event.target) setDragging(false)
+      }}
+      onDrop={(event) => {
+        setDragging(false)
+        void onDrop(event)
+      }}
+    >
+      {dragging && <DropOverlay label={t('bpm.dropToAdd')} />}
       <section className="flex min-w-0 flex-1 flex-col">
         <header className="relative flex h-12 shrink-0 items-center justify-between border-b border-line px-6">
           <div className="flex items-center gap-3">
             <h1 className="text-[15px] font-semibold">{t('bpm.title')}</h1>
             <span className="font-mono text-[11px] text-zinc-500">
-              {tracks.length} {t('bpm.tracks')}
+              {files.length} {t('bpm.tracks')} · {pending.length} {t('bpm.pending')}
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={t('bpm.addFiles')}
+                    onClick={() => void addFiles()}
+                  >
+                    <Plus />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('bpm.addFiles')}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {isBusy && (
               <>
                 <Button
@@ -247,7 +314,7 @@ export function Bpm() {
                 {t('bpm.saveChanges')} {changed.length}
               </Button>
             )}
-            <Button size="sm" onClick={() => void start()} disabled={isBusy || !files.length}>
+            <Button size="sm" onClick={() => void start()} disabled={isBusy || !pending.length}>
               <Activity />
               {t('bpm.analyze')}
             </Button>
@@ -368,6 +435,30 @@ export function Bpm() {
           </div>
         )}
       </TrackInspector>
+    </div>
+  )
+}
+
+async function expandPaths(paths: string[]): Promise<string[]> {
+  const expanded = await Promise.all(
+    paths.map(async (path) => {
+      try {
+        const response = await getJson<{ files?: string[] }>(
+          `/api/metadata/list?dir=${encodeURIComponent(path)}&recursive=false`,
+        )
+        return response.files?.length ? response.files : [path]
+      } catch {
+        return [path]
+      }
+    }),
+  )
+  return expanded.flat()
+}
+
+function DropOverlay({ label }: { label: string }) {
+  return (
+    <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded border-2 border-dashed border-brand bg-surface-app/90 text-sm font-semibold text-brand">
+      {label}
     </div>
   )
 }

@@ -64,6 +64,9 @@
   "bpm": {
     "title": "Analizador BPM",
     "tracks": "pistas",
+    "pending": "pendientes",
+    "addFiles": "Agregar archivos",
+    "dropToAdd": "Soltar para agregar",
     "analyze": "Analizar carpeta",
     "chooseFolder": "Soltar carpeta",
     "chooseFolderHint": "o hacer clic para elegir una carpeta",
@@ -159,6 +162,9 @@
   "converter": {
     "title": "Convertidor",
     "files": "archivos",
+    "pending": "pendientes",
+    "addFiles": "Agregar archivos",
+    "dropToAdd": "Soltar para agregar",
     "selected": "seleccionados",
     "selectFiles": "Elegir archivos de audio",
     "chooseFiles": "Soltar archivos",
@@ -185,6 +191,9 @@
   "metadata": {
     "title": "Metadatos",
     "files": "archivos",
+    "pending": "pendientes",
+    "addFiles": "Agregar archivos",
+    "dropToAdd": "Soltar para agregar",
     "chooseFolder": "Elegir carpeta",
     "selectFolder": "Elegir carpeta de música",
     "noFiles": "No se encontraron archivos de audio en esta carpeta.",
