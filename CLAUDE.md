@@ -8,6 +8,16 @@ Read `NEXT.md` before doing anything. It is the source of truth: what's done, wh
 
 ---
 
+## Delegación (2026-09-23, regla de Carlos — mismo protocolo que OrchestOS `AGENTS.md`)
+
+El cerebro (Opus/Fable) planifica, escribe la spec y **verifica**; no le devuelve el trabajo a Carlos.
+1. Spec con `archivo:línea`, qué no tocar y gate (hoy: `design/SPEC.md`).
+2. Delegar: `codex exec -m gpt-5.6-luna --approve-for-me "<fase de la spec>" < /dev/null`. Luna no commitea ni toca `NEXT.md`/`plan.md`/specs.
+3. El cerebro lee el diff y corre los gates con sus propios comandos; el reporte y el `exit 0` de Luna no son evidencia. Si falla: corregir spec y re-delegar (o subir a Terra), nunca teclear el arreglo.
+4. Cierre: marcar en `NEXT.md` y commit cuando Carlos lo pida.
+
+---
+
 ## What is this project
 
 MusicKind is a desktop-first DJ tool (Electron 28 + Node.js):

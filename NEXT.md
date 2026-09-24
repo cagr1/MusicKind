@@ -3,6 +3,23 @@
 > Última actualización: 2026-05-03 (rev 21)
 > Este archivo es la fuente de verdad del avance. PROJECT_STATE.md tiene el contexto de arquitectura.
 
+## Estado 2026-09-23 — UI "instrumento" (manda sobre todo lo de abajo)
+
+Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`design/SPEC.md`**. Una fase por sesión, en orden:
+
+1. [x] **Back 1** — tonalidad con modo + Camelot. Ejecutado por: Luna (3 corridas) · Spec: `design/SPEC.md` § Back 1 / 1.1.
+   Verificado por el cerebro 2026-09-23: venv 6/6, node 47/47; tag primero (124/124 leídos bien), análisis de respaldo 47% exacto / 60% compatible sobre 124 pistas reales, marcado `keySource: "analysis"`. Sin commit.
+   Mejora futura (Back 1b): medir `libkeyfinder` (Mixxx, GPL-3, Homebrew 2.2.8) contra esas 124 pistas.
+2. [x] **Back 2** — `/api/waveform` (RMS normalizado, caché v2), `/api/audio` (Range), bpm/key en `readMetadata`, JSON final en clasificador/convertidor, `vocals`/`instrumental` en stems. Ejecutado por: Luna (2 corridas) · Spec: `design/SPEC.md` § Back 2 / 2.1.
+   Verificado por el cerebro 2026-09-23: node 53/53, `test_basic` 4/4 (venv); en vivo 206/400, waveform con relieve real, servidor sigue vivo si el archivo desaparece durante el stream. Sin commit.
+   **Defecto hallado en QA de Front 2:** `parseJsonResult` quedó en `/api/set-create` en vez de `/api/convert`; la revisión del cerebro no lo detectó (no comprobó a qué ruta pertenecía el hunk). En corrección.
+3. [x] **Front 1** — tokens (`brand`), Inspector completo, reproductor, shell, `ProcessProvider`, vista BPM. Ejecutado por: Luna (6 corridas: 1a, 1a.1, 1b, 1b.1, 1b.2, chip) · Spec: `design/SPEC.md` § Front 1.
+   Verificado por el cerebro 2026-09-23: build 0, lint 0 errores, vitest 35/35, sin hex en tsx. QA en vivo (Chrome headless + backend real + `electronAPI` simulado, copias): flujo vacío→analizar→resultados, títulos/artistas del tag, tonalidad tag vs estimada (borde punteado), ondas reales, Inspector completo; guardar escribe TBPM/TKEY y conserva título y carátula. Falta QA manual de Carlos en Electron (audio audible, arrastrar carpeta). Sin commit.
+   Nota: el plugin `impeccable` del entorno Codex crea `.impeccable/` en la raíz y empuja a Luna a añadir supresiones; se borró. Decidir si ignorarlo en `.gitignore`.
+4. [ ] **Front 2** — Convertidor, Metadatos, Stems, Sets, Configuración, Clasificador (solo análisis hasta P2).
+
+Sigue pendiente en paralelo: revisión Terra del back (`e0c0424`), P1/P2 del clasificador, F3 contrato de escritura de tags.
+
 ## Estado 2026-09-13 — orden de trabajo (manda sobre lo de abajo; detalle en `plan.md`)
 
 Hecho (back, commit `e0c0424`, tests 9/9 exit 0):

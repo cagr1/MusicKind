@@ -233,6 +233,8 @@ Revisión cruda: `/private/tmp/claude-501/-Users-carlosgallardo-Documents-projec
 - [ ] `useView.ts:11` canonicalizar hash inválido. ⌘K: sin encabezados de grupo.
 - Formato de reporte del ejecutor: ≤200 palabras, gates solo con código de salida, detalle en archivo.
 
+> **2026-09-23:** F1–F8 se ejecutan según `design/SPEC.md` (Back 1 · Back 2 · Front 1 · Front 2), con `design/prototype/` como referencia visual.
+
 ### F2..F7 — Vistas (orden por estabilidad del back)
 - [ ] F2 Converter
 

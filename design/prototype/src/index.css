@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@layer base {
+  :root,
+  .dark {
+    /* Superficies de 3 niveles con oklch */
+    --surface-app: oklch(0.145 0 0);          /* #09090b */
+    --surface-panel: oklch(0.17 0.003 260);    /* #111113 */
+    --surface-elevated: oklch(0.21 0.006 285); /* #18181b */
+
+    --border-subtle: rgba(255, 255, 255, 0.06);
+
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 6% 7%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 6% 8%;
+    --popover-foreground: 0 0% 98%;
+
+    /* Acento naranja único #F97316 */
+    --primary: 24 95% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 4% 11%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 4% 11%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 240 4% 11%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 40%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: rgba(255, 255, 255, 0.06);
+    --input: rgba(255, 255, 255, 0.08);
+    --ring: 24 95% 53%;
+    --radius: 6px;
+  }
+}
+
+body {
+  font-family: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #f4f4f5;
+  background-color: #09090b;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-mono {
+  font-family: 'Geist Mono Variable', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbar sutil estilo utilidades de audio de macOS */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}

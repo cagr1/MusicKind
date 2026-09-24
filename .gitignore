@@ -49,3 +49,6 @@ config/settings.json
 *.m3u
 guide.txt
 .memories/
+
+# Artefacto del plugin impeccable del entorno Codex
+.impeccable/
