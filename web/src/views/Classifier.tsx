@@ -20,6 +20,9 @@ import { electron, resolveDroppedFiles } from '@/lib/electron'
 import { useProcess } from '@/lib/process'
 import { useView } from '@/hooks/useView'
 import { Popover } from 'radix-ui'
+import { Checkbox } from '@/components/ui/checkbox'
+import { useRowSelection } from '@/lib/selection'
+import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
 
 const SOURCE_LABEL_KEYS: Record<string, TranslationKey> = {
   embedded: 'classifier.sourceLabels.embedded',
@@ -125,6 +128,36 @@ export function Classifier() {
   const isBusy = state.status === 'running' || state.status === 'paused'
   const selected = results.find((result) => result.id === selectedId) ?? results[0] ?? null
   const distribution = React.useMemo(() => genreDistribution(results), [results])
+  const undoSnapshot = React.useRef<ClassifierResult[] | null>(null)
+  const selection = useRowSelection({
+    items: results,
+    getKey: (result) => result.id,
+    isProtected: () => isBusy,
+    onRemove: (keys) => {
+      undoSnapshot.current = results
+      const removed = new Set(keys)
+      const next = results.filter((result) => !removed.has(result.id))
+      setResults(next)
+      setResult(view, next)
+      setSelectedId((current) => (removed.has(current ?? '') ? (next[0]?.id ?? null) : current))
+    },
+    onClear: () => {
+      undoSnapshot.current = results
+      setResults([])
+      setResult(view, [])
+      setSelectedId(null)
+    },
+    onRestore: () => {
+      if (undoSnapshot.current) {
+        setResults(undoSnapshot.current)
+        setResult(view, undoSnapshot.current)
+        setSelectedId(undoSnapshot.current[0]?.id ?? null)
+      }
+    },
+    removeLabel: t('common.removed'),
+    clearLabel: t('common.cleared'),
+    undoLabel: t('common.undo'),
+  })
 
   React.useEffect(() => {
     const stored = savedResults[view] as ClassifierResult[] | undefined
@@ -265,6 +298,7 @@ export function Classifier() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <SelectionControls selection={selection} t={t} hasRows={results.length > 0} />
             {isBusy && (
               <>
                 <Button
@@ -394,6 +428,8 @@ export function Classifier() {
             onGenreChange={updateGenre}
             genres={genres}
             t={t}
+            selection={selection}
+            busy={isBusy}
           />
         ) : (
           <RunningState t={t} />
@@ -445,6 +481,8 @@ function ResultsTable({
   onGenreChange,
   genres,
   t,
+  selection,
+  busy,
 }: {
   results: ClassifierResult[]
   selectedId: string | null
@@ -452,12 +490,23 @@ function ResultsTable({
   onGenreChange: (id: string, genre: string) => void
   genres: string[]
   t: ReturnType<typeof useT>
+  selection: ReturnType<typeof useRowSelection<ClassifierResult>>
+  busy: boolean
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-auto px-6 py-2">
       <table className="w-full table-fixed text-left">
         <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
           <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
+            <th className="w-10 text-center">
+              <Checkbox
+                checked={
+                  selection.checked ? true : selection.indeterminate ? 'indeterminate' : false
+                }
+                onCheckedChange={selection.toggleAll}
+                aria-label={t('common.selectAll')}
+              />
+            </th>
             <th className="w-10 text-center">#</th>
             <th>{t('classifier.track')}</th>
             <th className="w-40">{t('classifier.genre')}</th>
@@ -472,6 +521,14 @@ function ResultsTable({
               onClick={() => onSelect(result.id)}
               className={`group h-12 cursor-pointer ${selectedId === result.id ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}
             >
+              <td className="text-center font-mono text-[11px] text-zinc-500">
+                <RowCheckbox
+                  checked={selection.selected.includes(result.id)}
+                  disabled={busy}
+                  label={result.title}
+                  onClick={(shiftKey) => selection.toggle(result.id, shiftKey)}
+                />
+              </td>
               <td className="text-center font-mono text-[11px] text-zinc-500">
                 {String(index + 1).padStart(2, '0')}
               </td>

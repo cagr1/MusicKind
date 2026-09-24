@@ -12,6 +12,9 @@ import { useProcess } from '@/lib/process'
 import { useView } from '@/hooks/useView'
 import { appendResults, mergeUnique, pendingItems } from '@/lib/list'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { useRowSelection } from '@/lib/selection'
+import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface MetadataFields {
   title: string
@@ -117,6 +120,39 @@ export function Metadata() {
   const [dragging, setDragging] = React.useState(false)
   const controllerRef = React.useRef<AbortController | null>(null)
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0] ?? null
+  const undoSnapshot = React.useRef<{ rows: MetadataRow[]; identified: string[] } | null>(null)
+  const selection = useRowSelection({
+    items: rows,
+    getKey: (row) => row.id,
+    isProtected: (row) => busy && progress.file === row.name,
+    onRemove: (keys) => {
+      undoSnapshot.current = { rows, identified }
+      const removed = new Set(keys)
+      const next = rows.filter((row) => !removed.has(row.id))
+      setRows(next)
+      setIdentified((current) => current.filter((path) => !removed.has(path)))
+      setResult('metadata', next)
+      setSelectedId((current) => (removed.has(current ?? '') ? (next[0]?.id ?? null) : current))
+    },
+    onClear: () => {
+      undoSnapshot.current = { rows, identified }
+      setRows([])
+      setIdentified([])
+      setResult('metadata', [])
+      setSelectedId(null)
+    },
+    onRestore: () => {
+      if (undoSnapshot.current) {
+        setRows(undoSnapshot.current.rows)
+        setIdentified(undoSnapshot.current.identified)
+        setResult('metadata', undoSnapshot.current.rows)
+        setSelectedId(undoSnapshot.current.rows[0]?.id ?? null)
+      }
+    },
+    removeLabel: t('common.removed'),
+    clearLabel: t('common.cleared'),
+    undoLabel: t('common.undo'),
+  })
 
   React.useEffect(() => {
     setForm(metadataFormValues(selected))
@@ -395,6 +431,7 @@ export function Metadata() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <SelectionControls selection={selection} t={t} hasRows={rows.length > 0} />
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -477,6 +514,15 @@ export function Metadata() {
             <table className="w-full table-fixed text-left">
               <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
                 <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
+                  <th className="w-10 text-center">
+                    <Checkbox
+                      checked={
+                        selection.checked ? true : selection.indeterminate ? 'indeterminate' : false
+                      }
+                      onCheckedChange={selection.toggleAll}
+                      aria-label={t('common.selectAll')}
+                    />
+                  </th>
                   <th className="w-10 text-center">#</th>
                   <th>{t('metadata.tableTrack')}</th>
                   <th className="w-32">{t('metadata.tableAlbum')}</th>
@@ -492,6 +538,9 @@ export function Metadata() {
                     selected={row.id === selected?.id}
                     processing={busy && progress.file === row.name}
                     onSelect={() => setSelectedId(row.id)}
+                    checked={selection.selected.includes(row.id)}
+                    disabled={busy && progress.file === row.name}
+                    onCheck={(shiftKey) => selection.toggle(row.id, shiftKey)}
                   />
                 ))}
               </tbody>
@@ -596,18 +645,27 @@ function MetadataRowView({
   selected,
   processing,
   onSelect,
+  checked,
+  disabled,
+  onCheck,
 }: {
   row: MetadataRow
   index: number
   selected: boolean
   processing: boolean
   onSelect: () => void
+  checked: boolean
+  disabled: boolean
+  onCheck: (shiftKey: boolean) => void
 }) {
   return (
     <tr
       onClick={onSelect}
       className={`h-12 cursor-pointer ${selected ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}
     >
+      <td className="text-center font-mono text-[11px] text-zinc-500">
+        <RowCheckbox checked={checked} disabled={disabled} label={row.name} onClick={onCheck} />
+      </td>
       <td className="text-center font-mono text-[11px] text-zinc-500">
         {processing ? (
           <span className="mx-auto block size-2 rounded-full bg-brand" />

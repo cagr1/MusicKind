@@ -39,3 +39,25 @@ export function appendResults<T>(current: T[], results: T[], getKey: ListKey<T>)
   }
   return next
 }
+
+export function rangeKeys<T>(
+  items: T[],
+  anchor: string,
+  target: string,
+  getKey: (item: T) => string,
+) {
+  const start = items.findIndex((item) => getKey(item) === anchor)
+  const end = items.findIndex((item) => getKey(item) === target)
+  if (start < 0 || end < 0) return [target]
+  const [from, to] = start < end ? [start, end] : [end, start]
+  return items.slice(from, to + 1).map(getKey)
+}
+
+export function selectionState(selected: string[], available: string[]) {
+  const count = available.filter((key) => selected.includes(key)).length
+  return {
+    count,
+    checked: available.length > 0 && count === available.length,
+    indeterminate: count > 0 && count < available.length,
+  }
+}

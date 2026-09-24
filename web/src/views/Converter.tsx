@@ -10,6 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -27,6 +28,8 @@ import { useProcess } from '@/lib/process'
 import { useView } from '@/hooks/useView'
 import { normalizeCamelot } from '@/lib/camelot'
 import { appendResults, mergeUnique, pendingItems } from '@/lib/list'
+import { useRowSelection } from '@/lib/selection'
+import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
 
 export type ConversionFormat = 'mp3' | 'wav' | 'aiff' | 'flac'
 
@@ -130,9 +133,42 @@ export function Converter() {
   const [ffmpegInstalled, setFfmpegInstalled] = React.useState<boolean | null>(null)
   const [selectedId, setSelectedId] = React.useState<string | null>(results[0]?.input ?? null)
   const [dragging, setDragging] = React.useState(false)
+  const undoSnapshot = React.useRef<{ files: string[]; results: ConverterResult[] } | null>(null)
   const isBusy = state.status === 'running' || state.status === 'paused'
   const selected = results.find((result) => result.input === selectedId) ?? results[0] ?? null
   const summary = summarizeConversionResults(results)
+  const selection = useRowSelection({
+    items: results,
+    getKey: (result) => result.input,
+    isProtected: (result) => isBusy && state.progress?.file === result.input,
+    onRemove: (keys) => {
+      undoSnapshot.current = { files, results }
+      const removed = new Set(keys)
+      const next = results.filter((result) => !removed.has(result.input))
+      setResults(next)
+      setFiles((current) => current.filter((file) => !removed.has(file)))
+      setResult('converter', next)
+      setSelectedId((current) => (removed.has(current ?? '') ? (next[0]?.input ?? null) : current))
+    },
+    onClear: () => {
+      undoSnapshot.current = { files, results }
+      setFiles([])
+      setResults([])
+      setResult('converter', [])
+      setSelectedId(null)
+    },
+    onRestore: () => {
+      if (undoSnapshot.current) {
+        setFiles(undoSnapshot.current.files)
+        setResults(undoSnapshot.current.results)
+        setResult('converter', undoSnapshot.current.results)
+        setSelectedId(undoSnapshot.current.results[0]?.input ?? null)
+      }
+    },
+    removeLabel: t('common.removed'),
+    clearLabel: t('common.cleared'),
+    undoLabel: t('common.undo'),
+  })
 
   React.useEffect(() => {
     let cancelled = false
@@ -291,6 +327,7 @@ export function Converter() {
             </div>
           )}
           <div className="flex items-center gap-2">
+            <SelectionControls selection={selection} t={t} hasRows={results.length > 0} />
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -414,7 +451,13 @@ export function Converter() {
             t={t}
           />
         ) : (
-          <ResultsTable results={results} selected={selected} onSelect={setSelectedId} t={t} />
+          <ResultsTable
+            results={results}
+            selected={selected}
+            onSelect={setSelectedId}
+            t={t}
+            selection={selection}
+          />
         )}
       </section>
       <TrackInspector track={selected ? toInspectorTrack(selected) : null}>
@@ -463,17 +506,22 @@ function ResultsTable({
   selected,
   onSelect,
   t,
+  selection,
 }: {
   results: ConverterResult[]
   selected: ConverterResult | null
   onSelect: (id: string) => void
   t: ReturnType<typeof useT>
+  selection: ReturnType<typeof useRowSelection<ConverterResult>>
 }) {
   return (
     <div className="min-h-0 flex-1 overflow-auto px-6 py-2">
       <table className="w-full table-fixed text-left">
         <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
           <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
+            <th className="w-10 text-center">
+              <CheckboxHeader selection={selection} t={t} />
+            </th>
             <th className="w-10 text-center">#</th>
             <th>{t('converter.file')}</th>
             <th className="w-28">{t('converter.conversion')}</th>
@@ -490,6 +538,14 @@ function ResultsTable({
                 selected?.input === result.input ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'
               }`}
             >
+              <td className="text-center font-mono text-[11px] text-zinc-500">
+                <RowCheckbox
+                  checked={selection.selected.includes(result.input)}
+                  disabled={selection.available.includes(result.input) === false}
+                  label={result.title || fileName(result.input)}
+                  onClick={(shiftKey) => selection.toggle(result.input, shiftKey)}
+                />
+              </td>
               <td className="text-center font-mono text-[11px] text-zinc-500">
                 {String(index + 1).padStart(2, '0')}
               </td>
@@ -549,6 +605,22 @@ function ResultsTable({
         </tbody>
       </table>
     </div>
+  )
+}
+
+function CheckboxHeader({
+  selection,
+  t,
+}: {
+  selection: ReturnType<typeof useRowSelection<ConverterResult>>
+  t: ReturnType<typeof useT>
+}) {
+  return (
+    <Checkbox
+      checked={selection.checked ? true : selection.indeterminate ? 'indeterminate' : false}
+      onCheckedChange={selection.toggleAll}
+      aria-label={t('common.selectAll')}
+    />
   )
 }
 

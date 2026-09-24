@@ -10,6 +10,9 @@ import { getJson, useProcessStream } from '@/lib/api'
 import { electron, resolveDroppedFiles } from '@/lib/electron'
 import { useProcess } from '@/lib/process'
 import { useView } from '@/hooks/useView'
+import { Checkbox } from '@/components/ui/checkbox'
+import { useRowSelection } from '@/lib/selection'
+import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
 
 export interface SetResult {
   file: string
@@ -107,6 +110,36 @@ export function Sets() {
   const selected = results.find((track) => track.file === selectedId) ?? results[0] ?? null
   const groups = React.useMemo(() => groupSetResults(results), [results])
   const ordered = React.useMemo(() => groups.flatMap((group) => group.tracks), [groups])
+  const undoSnapshot = React.useRef<SetResult[] | null>(null)
+  const selection = useRowSelection({
+    items: results,
+    getKey: (track) => track.file,
+    isProtected: () => isBusy,
+    onRemove: (keys) => {
+      undoSnapshot.current = results
+      const removed = new Set(keys)
+      const next = results.filter((track) => !removed.has(track.file))
+      setResults(next)
+      setResult(view, next)
+      setSelectedId((current) => (removed.has(current ?? '') ? (next[0]?.file ?? null) : current))
+    },
+    onClear: () => {
+      undoSnapshot.current = results
+      setResults([])
+      setResult(view, [])
+      setSelectedId(null)
+    },
+    onRestore: () => {
+      if (undoSnapshot.current) {
+        setResults(undoSnapshot.current)
+        setResult(view, undoSnapshot.current)
+        setSelectedId(undoSnapshot.current[0]?.file ?? null)
+      }
+    },
+    removeLabel: t('common.removed'),
+    clearLabel: t('common.cleared'),
+    undoLabel: t('common.undo'),
+  })
 
   React.useEffect(() => {
     const stored = savedResults[view] as SetResult[] | undefined
@@ -178,6 +211,7 @@ export function Sets() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <SelectionControls selection={selection} t={t} hasRows={results.length > 0} />
             {isBusy && (
               <>
                 <Button
@@ -273,6 +307,15 @@ export function Sets() {
             <table className="w-full table-fixed text-left">
               <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
                 <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
+                  <th className="w-10 text-center">
+                    <Checkbox
+                      checked={
+                        selection.checked ? true : selection.indeterminate ? 'indeterminate' : false
+                      }
+                      onCheckedChange={selection.toggleAll}
+                      aria-label={t('common.selectAll')}
+                    />
+                  </th>
                   <th className="w-10 text-center">#</th>
                   <th>{t('sets.track')}</th>
                   <th className="w-20">{t('sets.bpm')}</th>
@@ -284,7 +327,7 @@ export function Sets() {
                 {groups.map((group) => (
                   <React.Fragment key={group.key}>
                     <tr className="sticky top-8 z-[1] h-7 border-y border-line bg-surface-panel text-[10px] font-mono uppercase text-zinc-300">
-                      <td colSpan={5} className="px-3">
+                      <td colSpan={6} className="px-3">
                         {t(`sets.${group.key}`)} {group.tracks.length} · {group.minBpm ?? '—'}–
                         {group.maxBpm ?? '—'} BPM
                       </td>
@@ -296,6 +339,9 @@ export function Sets() {
                         index={index}
                         selected={track.file === selectedId}
                         onSelect={() => setSelectedId(track.file)}
+                        checked={selection.selected.includes(track.file)}
+                        disabled={isBusy}
+                        onCheck={(shiftKey) => selection.toggle(track.file, shiftKey)}
                         t={t}
                       />
                     ))}
@@ -348,12 +394,18 @@ function SetRow({
   selected,
   onSelect,
   t,
+  checked,
+  disabled,
+  onCheck,
 }: {
   track: SetResult
   index: number
   selected: boolean
   onSelect: () => void
   t: ReturnType<typeof useT>
+  checked: boolean
+  disabled: boolean
+  onCheck: (shiftKey: boolean) => void
 }) {
   const score = bestScore(track)
   return (
@@ -361,6 +413,14 @@ function SetRow({
       onClick={onSelect}
       className={`h-12 cursor-pointer ${selected ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}
     >
+      <td className="text-center font-mono text-[11px] text-zinc-500">
+        <RowCheckbox
+          checked={checked}
+          disabled={disabled}
+          label={fileName(track.file)}
+          onClick={onCheck}
+        />
+      </td>
       <td className="text-center font-mono text-[11px] text-zinc-500">
         {String(index + 1).padStart(2, '0')}
       </td>

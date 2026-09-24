@@ -9,6 +9,13 @@
     "settings": "Configuración"
   },
   "common": {
+    "selected": "seleccionadas",
+    "selectAll": "Seleccionar todo",
+    "remove": "Quitar",
+    "clearTable": "Limpiar tabla",
+    "removed": "Filas quitadas",
+    "cleared": "Tabla limpiada",
+    "undo": "Deshacer",
     "close": "Cerrar",
     "toggleSidebar": "Alternar barra lateral",
     "sidebar": "Barra lateral",
@@ -64,6 +71,7 @@
   "bpm": {
     "title": "Analizador BPM",
     "tracks": "pistas",
+    "files": "archivos",
     "pending": "pendientes",
     "addFiles": "Agregar archivos",
     "dropToAdd": "Soltar para agregar",

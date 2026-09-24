@@ -1,6 +1,6 @@
 # SPEC — UI "instrumento" (4 fases: Back 1 · Back 2 · Front 1 · Front 2)
 
-> Escrito 2026-09-23 (Opus, cerebro). Ejecutor: Luna (`gpt-5.6-luna`). Una fase por corrida, en orden.
+> Escrito 2026-09-23 (Opus, cerebro). Ejecutor: Luna (`gpt-6-luna` desde 2026-09-24; antes `gpt-5.6-luna`). Una fase por corrida, en orden.
 > Protocolo: el cerebro delega, lee el diff, corre los gates él mismo y re-delega si falla. Luna **no commitea
 > ni toca `NEXT.md`, `plan.md` ni esta spec**.
 > Cada fase cierra con su gate y un reporte ≤200 palabras (gates con código de salida; detalle en archivo).

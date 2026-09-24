@@ -17,6 +17,9 @@ import { Popover } from 'radix-ui'
 import { CAMELOT_MAP } from '@/lib/camelot'
 import { appendResults, mergeUnique, pendingItems } from '@/lib/list'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Checkbox } from '@/components/ui/checkbox'
+import { useRowSelection } from '@/lib/selection'
+import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
 
 interface BpmResult extends InspectorTrack {
   file: string
@@ -34,6 +37,10 @@ export function isValidBpmInput(value: string): boolean {
 
 function fileName(path: string) {
   return path.split(/[\\/]/).pop() ?? path
+}
+
+export function getBpmInputLabel(folder: string | null, fileCount: number, filesLabel: string) {
+  return folder ? fileName(folder) : `${fileCount} ${filesLabel}`
 }
 
 async function readTrackMetadata(
@@ -73,6 +80,11 @@ export function Bpm() {
     Record<string, { bpm: number | null; key: string | null }>
   >({})
   const [dragging, setDragging] = React.useState(false)
+  const undoSnapshot = React.useRef<{
+    tracks: BpmResult[]
+    files: string[]
+    original: Record<string, { bpm: number | null; key: string | null }>
+  } | null>(null)
 
   React.useEffect(() => {
     const stored = savedResults[view] as BpmResult[] | undefined
@@ -158,6 +170,43 @@ export function Bpm() {
       (original[track.id].bpm !== track.bpm || original[track.id].key !== track.key),
   )
   const isBusy = state.status === 'running' || state.status === 'paused'
+  const processingKey = state.progress?.file
+  const selection = useRowSelection({
+    items: tracks,
+    getKey: (track) => track.id,
+    isProtected: (track) => isBusy && track.file === processingKey,
+    onRemove: (keys) => {
+      undoSnapshot.current = { tracks, files, original }
+      const removed = new Set(keys)
+      const next = tracks.filter((track) => !removed.has(track.id))
+      setTracks(next)
+      setFiles((current) => current.filter((file) => !removed.has(file)))
+      setOriginal((current) =>
+        Object.fromEntries(Object.entries(current).filter(([key]) => !removed.has(key))),
+      )
+      setResult(view, next)
+      setSelectedId((current) => (removed.has(current ?? '') ? (next[0]?.id ?? null) : current))
+    },
+    onClear: () => {
+      undoSnapshot.current = { tracks, files, original }
+      setTracks([])
+      setFiles([])
+      setOriginal({})
+      setResult(view, [])
+      setSelectedId(null)
+    },
+    onRestore: () => {
+      if (!undoSnapshot.current) return
+      setTracks(undoSnapshot.current.tracks)
+      setFiles(undoSnapshot.current.files)
+      setOriginal(undoSnapshot.current.original)
+      setResult(view, undoSnapshot.current.tracks)
+      setSelectedId(undoSnapshot.current.tracks[0]?.id ?? null)
+    },
+    removeLabel: t('common.removed'),
+    clearLabel: t('common.cleared'),
+    undoLabel: t('common.undo'),
+  })
 
   const chooseFolder = async () => {
     const directory = await electron.openDirectory(t('bpm.selectFolder'))
@@ -182,7 +231,7 @@ export function Bpm() {
     const next = Array.isArray(picked) ? picked : picked ? [picked] : []
     if (next.length) {
       setFiles((current) => mergeUnique(current, next, (file) => file))
-      setFolder(fileName(next[0]))
+      setFolder(null)
     }
   }
 
@@ -232,9 +281,9 @@ export function Bpm() {
     try {
       const dropped = await resolveDroppedFiles(event.dataTransfer.files)
       const expanded = await expandPaths(dropped)
-      if (expanded.length) {
-        setFiles((current) => mergeUnique(current, expanded, (file) => file))
-        setFolder(fileName(expanded[0]))
+      if (expanded.files.length) {
+        setFiles((current) => mergeUnique(current, expanded.files, (file) => file))
+        setFolder(expanded.folder)
       }
     } catch (error) {
       setActive({
@@ -277,6 +326,7 @@ export function Bpm() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <SelectionControls selection={selection} t={t} hasRows={tracks.length > 0} />
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -336,8 +386,17 @@ export function Bpm() {
               className="flex min-w-0 items-center gap-2 truncate hover:text-zinc-300"
             >
               <FolderOpen className="size-3.5" />
-              <span className="truncate font-mono text-zinc-300">{folder}</span>
+              <span className="truncate font-mono text-zinc-300">
+                {getBpmInputLabel(folder, files.length, t('bpm.files'))}
+              </span>
             </button>
+          ) : files.length > 0 ? (
+            <span className="flex min-w-0 items-center gap-2 truncate">
+              <FolderOpen className="size-3.5" />
+              <span className="truncate font-mono text-zinc-300">
+                {getBpmInputLabel(null, files.length, t('bpm.files'))}
+              </span>
+            </span>
           ) : (
             <span />
           )}
@@ -379,6 +438,15 @@ export function Bpm() {
             <table className="w-full table-fixed text-left">
               <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
                 <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
+                  <th className="w-10 text-center">
+                    <Checkbox
+                      checked={
+                        selection.checked ? true : selection.indeterminate ? 'indeterminate' : false
+                      }
+                      onCheckedChange={selection.toggleAll}
+                      aria-label={t('common.selectAll')}
+                    />
+                  </th>
                   <th className="w-10 text-center">#</th>
                   <th>{t('bpm.tableTrack')}</th>
                   <th className="w-24">{t('bpm.tableBpm')}</th>
@@ -402,6 +470,9 @@ export function Bpm() {
                     onSelect={() => setSelectedId(track.id)}
                     onUpdate={update}
                     onSave={() => void save([track])}
+                    checked={selection.selected.includes(track.id)}
+                    disabled={isBusy && track.file === processingKey}
+                    onCheck={(shiftKey) => selection.toggle(track.id, shiftKey)}
                     t={t}
                   />
                 ))}
@@ -439,20 +510,25 @@ export function Bpm() {
   )
 }
 
-async function expandPaths(paths: string[]): Promise<string[]> {
+async function expandPaths(paths: string[]): Promise<{ files: string[]; folder: string | null }> {
   const expanded = await Promise.all(
     paths.map(async (path) => {
       try {
         const response = await getJson<{ files?: string[] }>(
           `/api/metadata/list?dir=${encodeURIComponent(path)}&recursive=false`,
         )
-        return response.files?.length ? response.files : [path]
+        return response.files?.length
+          ? { files: response.files, folder: path }
+          : { files: [path], folder: null }
       } catch {
-        return [path]
+        return { files: [path], folder: null }
       }
     }),
   )
-  return expanded.flat()
+  return {
+    files: expanded.flatMap((item) => item.files),
+    folder: expanded.find((item) => item.folder)?.folder ?? null,
+  }
 }
 
 function DropOverlay({ label }: { label: string }) {
@@ -473,6 +549,9 @@ function BpmRow({
   onUpdate,
   onSave,
   t,
+  checked,
+  disabled,
+  onCheck,
 }: {
   track: BpmResult
   index: number
@@ -483,6 +562,9 @@ function BpmRow({
   onUpdate: (id: string, patch: Partial<BpmResult>) => void
   onSave: () => void
   t: ReturnType<typeof useT>
+  checked: boolean
+  disabled: boolean
+  onCheck: (shiftKey: boolean) => void
 }) {
   const [draft, setDraft] = React.useState(track.bpm === null ? '' : String(Math.round(track.bpm)))
   const valid = draft === '' || isValidBpmInput(draft)
@@ -505,6 +587,12 @@ function BpmRow({
       onClick={onSelect}
       className={`h-12 cursor-pointer ${selected ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}
     >
+      <td
+        className="text-center font-mono text-[11px] text-zinc-500"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <RowCheckbox checked={checked} disabled={disabled} label={track.title} onClick={onCheck} />
+      </td>
       <td className="text-center font-mono text-[11px] text-zinc-500">
         {processing ? (
           <span className="mx-auto block size-2 rounded-full bg-brand" />

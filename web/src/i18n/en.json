@@ -9,6 +9,13 @@
     "settings": "Settings"
   },
   "common": {
+    "selected": "selected",
+    "selectAll": "Select all",
+    "remove": "Remove",
+    "clearTable": "Clear table",
+    "removed": "Rows removed",
+    "cleared": "Table cleared",
+    "undo": "Undo",
     "close": "Close",
     "toggleSidebar": "Toggle sidebar",
     "sidebar": "Sidebar",
@@ -64,6 +71,7 @@
   "bpm": {
     "title": "BPM analyzer",
     "tracks": "tracks",
+    "files": "files",
     "pending": "pending",
     "addFiles": "Add files",
     "dropToAdd": "Drop to add",
