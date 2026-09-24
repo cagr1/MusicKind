@@ -633,7 +633,7 @@ function BpmRow({
       </td>
       <td>
         <div className="flex items-center gap-3">
-          <TrackArtwork camelotKey={track.key} size={30} />
+          <TrackArtwork camelotKey={track.key} path={track.file} size={30} />
           <div className="min-w-0">
             <p className="truncate text-[12px] text-zinc-200">{track.title}</p>
             <p className="truncate text-[11px] text-zinc-500">{track.artist || '—'}</p>

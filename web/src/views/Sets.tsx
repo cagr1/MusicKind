@@ -459,7 +459,7 @@ function SetRow({
       </td>
       <td>
         <div className="flex items-center gap-3">
-          <TrackArtwork camelotKey={track.camelot} size={30} />
+          <TrackArtwork camelotKey={track.camelot} path={track.file} size={30} />
           <div className="min-w-0">
             <p className="truncate text-[12px] text-zinc-200">
               {track.title?.trim() || fileName(track.file)}

@@ -75,7 +75,14 @@
     "seek": "Seek in track",
     "volume": "Volume",
     "mute": "Mute",
-    "unmute": "Unmute"
+    "unmute": "Unmute",
+    "playbackError": "Could not play",
+    "preparing": "Preparing…",
+    "mediaError0": "Unknown error (code 0)",
+    "mediaError1": "Playback interrupted (code 1)",
+    "mediaError2": "Network error (code 2)",
+    "mediaError3": "Invalid audio format (code 3)",
+    "mediaError4": "Unsupported audio format (code 4)"
   },
   "bpm": {
     "title": "BPM analyzer",

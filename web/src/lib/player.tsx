@@ -1,4 +1,6 @@
 import * as React from 'react'
+import { toast } from 'sonner'
+import { useT } from '@/i18n/I18nProvider'
 
 interface PlayerContextValue {
   audio: HTMLAudioElement | null
@@ -14,6 +16,7 @@ interface PlayerContextValue {
   previous: () => void
   next: () => void
   visible: boolean
+  preparing: boolean
 }
 
 export interface DeckTrack {
@@ -27,6 +30,9 @@ export interface DeckTrack {
 const PlayerContext = React.createContext<PlayerContextValue | null>(null)
 
 export function PlayerProvider({ children }: { children: React.ReactNode }) {
+  const t = useT()
+  const tRef = React.useRef(t)
+  tRef.current = t
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
   const [audio, setAudio] = React.useState<HTMLAudioElement | null>(null)
   const [path, setPath] = React.useState<string | null>(null)
@@ -35,6 +41,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
   const [duration, setDuration] = React.useState(0)
   const [queue, setQueue] = React.useState<DeckTrack[]>([])
   const [visible, setVisible] = React.useState(false)
+  const [preparing, setPreparing] = React.useState(false)
   const queueRef = React.useRef(queue)
   const pathRef = React.useRef(path)
   queueRef.current = queue
@@ -48,6 +55,15 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       setCurrentTime(element.currentTime)
       setDuration(Number.isFinite(element.duration) ? element.duration : 0)
       setPlaying(!element.paused)
+      if (!element.paused) setPreparing(false)
+    }
+    const failed = () => {
+      setPreparing(false)
+      setPlaying(false)
+      const reason = mediaErrorReason(element.error?.code ?? 0, tRef.current)
+      toast.error(
+        `${tRef.current('player.playbackError')} ${fileName(pathRef.current)} · ${reason}`,
+      )
     }
     const advance = () => {
       const list = queueRef.current
@@ -57,7 +73,12 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         element.src = `/api/audio?path=${encodeURIComponent(next.path)}`
         pathRef.current = next.path
         setPath(next.path)
-        void element.play().catch(() => setPlaying(false))
+        setPreparing(true)
+        void element
+          .play()
+          .catch((error: unknown) =>
+            reportFailure(error, element, pathRef.current, tRef.current, setPreparing, setPlaying),
+          )
       }
     }
     element.addEventListener('timeupdate', sync)
@@ -66,6 +87,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     element.addEventListener('pause', sync)
     element.addEventListener('ended', sync)
     element.addEventListener('ended', advance)
+    element.addEventListener('error', failed)
     return () => {
       element.pause()
       element.removeEventListener('timeupdate', sync)
@@ -74,6 +96,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       element.removeEventListener('pause', sync)
       element.removeEventListener('ended', sync)
       element.removeEventListener('ended', advance)
+      element.removeEventListener('error', failed)
       element.src = ''
       audioRef.current = null
     }
@@ -93,17 +116,27 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         setCurrentTime(0)
         setDuration(0)
         setPlaying(false)
+        setPreparing(false)
       }
     },
     [path],
   )
 
-  const play = React.useCallback((element: HTMLAudioElement) => {
-    void element
-      .play()
-      .then(() => setPlaying(true))
-      .catch(() => setPlaying(false))
-  }, [])
+  const play = React.useCallback(
+    (element: HTMLAudioElement) => {
+      setPreparing(true)
+      void element
+        .play()
+        .then(() => {
+          setPlaying(true)
+          setPreparing(false)
+        })
+        .catch((error: unknown) =>
+          reportFailure(error, element, pathRef.current, t, setPreparing, setPlaying),
+        )
+    },
+    [t],
+  )
 
   const toggle = React.useCallback(
     (nextPath?: string) => {
@@ -188,11 +221,55 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       previous: () => step(-1),
       next: () => step(1),
       visible,
+      preparing,
     }),
-    [audio, path, playing, currentTime, duration, select, toggle, seek, queue, step, visible],
+    [
+      audio,
+      path,
+      playing,
+      currentTime,
+      duration,
+      select,
+      toggle,
+      seek,
+      queue,
+      step,
+      visible,
+      preparing,
+    ],
   )
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>
+}
+
+function fileName(path: string | null) {
+  return path?.split(/[\\/]/).pop() ?? '—'
+}
+
+function reportFailure(
+  error: unknown,
+  element: HTMLAudioElement,
+  path: string | null,
+  t: ReturnType<typeof useT>,
+  setPreparing: (value: boolean) => void,
+  setPlaying: (value: boolean) => void,
+) {
+  setPreparing(false)
+  setPlaying(false)
+  const code = element.error?.code ?? (error instanceof DOMException ? error.code : 0)
+  const reason = mediaErrorReason(code, t)
+  toast.error(`${t('player.playbackError')} ${fileName(path)} · ${reason}`)
+}
+
+function mediaErrorReason(code: number, t: ReturnType<typeof useT>) {
+  const keys = [
+    'player.mediaError0',
+    'player.mediaError1',
+    'player.mediaError2',
+    'player.mediaError3',
+    'player.mediaError4',
+  ] as const
+  return t(keys[code] ?? keys[0])
 }
 
 export function usePlayer(): PlayerContextValue {

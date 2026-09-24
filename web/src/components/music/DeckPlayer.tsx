@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronLeft, ChevronRight, Pause, Play, Volume2, VolumeX } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import { usePlayer } from '@/lib/player'
 import { getJson } from '@/lib/api'
 import { TrackArtwork } from './TrackArtwork'
@@ -33,6 +33,7 @@ export function DeckPlayer() {
     previous,
     next,
     visible,
+    preparing,
   } = usePlayer()
   const [peaks, setPeaks] = React.useState<number[]>([])
   const [volume, setVolume] = React.useState(0.8)
@@ -63,7 +64,7 @@ export function DeckPlayer() {
       aria-label={t('player.title')}
     >
       <div className="flex w-[220px] min-w-0 items-center gap-2">
-        <TrackArtwork camelotKey={track.key} size={40} />
+        <TrackArtwork camelotKey={track.key} path={track.path} size={40} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium text-zinc-100">{track.title}</p>
           <p className="truncate text-[11px] text-zinc-500">{track.artist}</p>
@@ -86,8 +87,15 @@ export function DeckPlayer() {
           aria-label={playing ? t('music.pause') : t('music.play')}
           className="flex size-8 items-center justify-center rounded-full bg-brand text-zinc-950"
         >
-          {playing ? <Pause className="size-4" /> : <Play className="ml-0.5 size-4 fill-current" />}
+          {preparing ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : playing ? (
+            <Pause className="size-4" />
+          ) : (
+            <Play className="ml-0.5 size-4 fill-current" />
+          )}
         </button>
+        {preparing && <span className="text-[10px] text-zinc-400">{t('player.preparing')}</span>}
         <button
           type="button"
           onClick={next}

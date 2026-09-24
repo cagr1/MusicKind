@@ -64,7 +64,12 @@ export function TrackInspector({
     >
       <div key={track.id} className="flex-1 space-y-6 overflow-y-auto p-5">
         <div className="flex flex-col items-center gap-3 text-center">
-          <TrackArtwork camelotKey={camelot} size={96} className="border border-line" />
+          <TrackArtwork
+            camelotKey={camelot}
+            path={track.path}
+            size={96}
+            className="border border-line"
+          />
           <div className="w-full px-2">
             <h2 className="truncate text-[15px] font-semibold text-zinc-100">{track.title}</h2>
             <p className="mt-0.5 truncate text-[13px] text-zinc-400">{track.artist}</p>

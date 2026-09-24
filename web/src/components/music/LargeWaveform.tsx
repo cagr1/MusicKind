@@ -1,4 +1,4 @@
-import { Pause, Play } from 'lucide-react'
+import { Loader2, Pause, Play } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { getJson } from '@/lib/api'
 import { useT } from '@/i18n/I18nProvider'
@@ -14,7 +14,7 @@ export function LargeWaveform({ path, className = '' }: LargeWaveformProps) {
   const t = useT()
   const [peaks, setPeaks] = useState<number[] | null>(null)
   const [waveDuration, setWaveDuration] = useState(0)
-  const { path: activePath, playing, currentTime, duration, toggle, seek } = usePlayer()
+  const { path: activePath, playing, preparing, currentTime, duration, toggle, seek } = usePlayer()
 
   useEffect(() => {
     setPeaks(null)
@@ -112,7 +112,9 @@ export function LargeWaveform({ path, className = '' }: LargeWaveformProps) {
             className="flex size-5 items-center justify-center rounded-full border border-line
               bg-black/70 text-white hover:bg-brand"
           >
-            {isActive && playing ? (
+            {isActive && preparing ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : isActive && playing ? (
               <Pause className="size-3" />
             ) : (
               <Play className="ml-0.5 size-3 fill-current" />

@@ -706,7 +706,7 @@ function MetadataRowView({
       </td>
       <td>
         <div className="flex items-center gap-3">
-          <TrackArtwork camelotKey={row.key} size={30} />
+          <TrackArtwork camelotKey={row.key} path={row.path} size={30} />
           <div className="min-w-0">
             <p className="truncate text-[12px] text-zinc-200">
               {display(row.metadata.title) === '—' ? row.name : display(row.metadata.title)}

@@ -75,7 +75,14 @@
     "seek": "Buscar en la pista",
     "volume": "Volumen",
     "mute": "Silenciar",
-    "unmute": "Activar sonido"
+    "unmute": "Activar sonido",
+    "playbackError": "No se pudo reproducir",
+    "preparing": "Preparando…",
+    "mediaError0": "Error desconocido (código 0)",
+    "mediaError1": "Reproducción interrumpida (código 1)",
+    "mediaError2": "Error de red (código 2)",
+    "mediaError3": "Formato de audio no válido (código 3)",
+    "mediaError4": "Formato de audio no compatible (código 4)"
   },
   "bpm": {
     "title": "Analizador BPM",

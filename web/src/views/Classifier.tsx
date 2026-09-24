@@ -578,7 +578,7 @@ function ResultsTable({
               </td>
               <td className="min-w-0 pr-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <TrackArtwork camelotKey={result.key} size={30} />
+                  <TrackArtwork camelotKey={result.key} path={result.path} size={30} />
                   <div className="min-w-0">
                     <p className="truncate text-[12px] text-zinc-200">{result.title}</p>
                     <p className="truncate text-[11px] text-zinc-500">{result.artist}</p>

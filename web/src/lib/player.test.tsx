@@ -2,6 +2,8 @@ import { act, createElement, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PlayerProvider, usePlayer } from './player'
+import { I18nProvider } from '@/i18n/I18nProvider'
+import { toast } from 'sonner'
 
 class FakeAudio {
   paused = true
@@ -43,7 +45,13 @@ describe('PlayerProvider', () => {
 
     const root = createRoot(document.createElement('div'))
     await act(async () => {
-      root.render(createElement(PlayerProvider, null, createElement(Harness)))
+      root.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(PlayerProvider, null, createElement(Harness)),
+        ),
+      )
     })
     await act(async () => {
       toggle?.('/music/a.mp3')
@@ -78,7 +86,13 @@ describe('PlayerProvider', () => {
     const host = document.createElement('div')
     const root = createRoot(host)
     await act(async () => {
-      root.render(createElement(PlayerProvider, null, createElement(Harness)))
+      root.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(PlayerProvider, null, createElement(Harness)),
+        ),
+      )
     })
     await act(async () => {
       host
@@ -88,6 +102,44 @@ describe('PlayerProvider', () => {
     })
     expect(instance.play).toHaveBeenCalledOnce()
     expect(api?.playing).toBe(true)
+    root.unmount()
+  })
+
+  it('shows an actionable toast with the filename and MediaError code when playback fails', async () => {
+    const instance = new FakeAudio() as FakeAudio & { error: MediaError }
+    instance.error = { code: 4 } as MediaError
+    instance.play.mockRejectedValue(new DOMException('Unsupported format', 'NotSupportedError'))
+    vi.stubGlobal(
+      'Audio',
+      class {
+        constructor() {
+          return instance
+        }
+      },
+    )
+    const toastError = vi.spyOn(toast, 'error').mockImplementation(() => 'toast-id')
+    let toggle: ((path: string) => void) | undefined
+    function Harness() {
+      toggle = usePlayer().toggle
+      return null
+    }
+    const root = createRoot(document.createElement('div'))
+    await act(async () =>
+      root.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(PlayerProvider, null, createElement(Harness)),
+        ),
+      ),
+    )
+    await act(async () => {
+      toggle?.('/music/unplayable.aiff')
+      await Promise.resolve()
+    })
+
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('unplayable.aiff'))
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('código 4'))
     root.unmount()
   })
 
@@ -108,7 +160,13 @@ describe('PlayerProvider', () => {
     }
     const root = createRoot(document.createElement('div'))
     await act(async () => {
-      root.render(createElement(PlayerProvider, null, createElement(Harness)))
+      root.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(PlayerProvider, null, createElement(Harness)),
+        ),
+      )
     })
     await act(async () => {
       api?.setQueue([
@@ -146,7 +204,13 @@ describe('PlayerProvider', () => {
     }
     const root = createRoot(document.createElement('div'))
     await act(async () => {
-      root.render(createElement(PlayerProvider, null, createElement(Harness)))
+      root.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(PlayerProvider, null, createElement(Harness)),
+        ),
+      )
     })
     await act(async () => {
       api?.setQueue([
@@ -191,7 +255,13 @@ describe('PlayerProvider', () => {
     host.append(input)
     const root = createRoot(host)
     await act(async () => {
-      root.render(createElement(PlayerProvider, null, createElement(Harness)))
+      root.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(PlayerProvider, null, createElement(Harness)),
+        ),
+      )
     })
     await act(async () => {
       toggle?.('/a')
