@@ -675,6 +675,22 @@ Modo por defecto del Clasificador (el método viejo queda en un `Select` "Métod
    (manifiestos). Reproductor, selección y carátulas como el resto.
 4. Tests vitest: construcción de `moves` (excluye revisar/duplicados, respeta correcciones), filtros y conteos, lote de cambio de género.
 
+### E2.1 · Protección en el servidor y géneros del back (QA en vivo, 2026-09-24) — CRÍTICO
+QA del cerebro sobre el disco real (solo análisis, nada movido): sin carpeta protegida la vista analizó 2,684 pistas **incluyendo `2026`**
+y habilitó "Mover propuestas · 2443". La protección dependía de que el cliente enviara `excludeRoots`. Corregir:
+1. **Carpetas protegidas en el servidor:** `config/settings.json` gana `protectedRoots: string[]` (rutas absolutas; `GET/POST /api/settings`
+   las lee/guarda sin perder las demás claves). `/api/classify-by-tags`, `/api/classify-apply` y `/api/classify-undo` **siempre** unen
+   `settings.protectedRoots` con lo que envíe el cliente (el cliente no puede quitarlas). Tests node: con `protectedRoots` en settings y
+   `excludeRoots: []` en la petición, apply de un archivo protegido → 400 y nada se mueve; classify-by-tags no lo lista.
+2. **UI:** "Ejemplos protegidos" del Clasificador y una sección "Carpetas protegidas" en Configuración leen/escriben `protectedRoots`
+   (no `localStorage`); botón visible con texto "Agregar" cuando la lista está vacía. Si `protectedRoots` está vacío, el botón Mover muestra
+   un Tooltip de advertencia y el diálogo de confirmación lista las carpetas protegidas (o "ninguna" en rojo).
+3. **Géneros:** nuevo `GET /api/genre-aliases` → `{ canonical: string[] }` desde `config/genre-aliases.json`. El Select de género, los filtros
+   y la leyenda usan **solo** `result.genre` del back y esa lista canónica (eliminar `TAG_GENRES`, `web/src/views/Classifier.tsx:571`).
+   Hoy aparecen valores crudos ("Latin Tech", "Afro Latin", "Nu Disco / Disco") en la leyenda y una fila "Afro Latin" con Select vacío.
+4. **Método:** el control de método muestra el método **actual** (Select con valor), no el otro.
+Tests vitest de 2–4.
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)
