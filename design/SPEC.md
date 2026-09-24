@@ -611,6 +611,34 @@ caché en `.cache/embeddings/<backend>/<sha1(path|size|mtime)>.npy` (dentro del 
 4. Salida: `.cache/eval/report.md` + `.cache/eval/report.json` y resumen en stdout. No toca `web/`, `src/` salvo lectura.
 **Gate (cerebro):** reporte con los 3 backends (o el error de MERT), números reproducibles en una segunda corrida desde caché.
 
+### E0 · Resultado (medido por el cerebro, 2026-09-24)
+- Audio con los ejemplos de `2026` (184): kNN LOO exactitud librosa 0.571 · CLAP 0.636 · MERT 0.598 — **igual a la base "siempre Tech house" (0.630)**;
+  recall por clase fuera de Tech house 0–0.27. Centroide balanceado: macro-recall 0.26–0.29 (azar 0.17). Rechazo de fuera-de-gusto: CLAP 38%.
+  → El audio **no** sirve para decidir género con 11–16 ejemplos por clase.
+- Tags de género: 100% de `2026` tiene tag y coincide con la carpeta de Carlos ~93% exacto / ~97% con alias. En las 2,487 a clasificar:
+  ~90% con tag Beatport limpio; 157 sin tag + ~30 con basura (URLs).
+  → **Etapa 1 = género por tag normalizado**; sin tag/basura/desconocido → "Por revisar". Audio: etapa 2 (gusto) y, opcional, E0b
+  (entrenar con las ~2,300 pistas etiquetadas para sugerir en las ~190 sin tag).
+
+### E1 · Motor de clasificación por tags (back, solo propone)
+1. `config/genre-aliases.json`: géneros canónicos y alias (comparación sin mayúsculas, espacios colapsados, `&`/`and`, `/`, `:` normalizados):
+   Tech House ← Latin Tech · Afro House ← Afro Latin, Afro / Latin · Deep House · House ← Funky House · Indie Dance ← Nu Disco, NuDisco,
+   Nu Disco / Disco, Nu Disco / Indie Dance, Indie Dance / Nu Disco · Minimal Deep Tech ← Minimal, Minimal / Deep Tech, Deep Tech ·
+   Melodic House & Techno ← Melodic House, Melodic Techno · Progressive House · Organic House ← Organic House / Downtempo · Techno ·
+   Electronica ← Electronic · Dance Pop ← Dance, Dance / Pop, Dance / Electro Pop, Europop · DJ Tools ← DJ Tools / Acapellas.
+   Tag con `http`, `www.` o `.com` = basura.
+2. `src/tag-classifier.js` (Node, `music-metadata` `parseFile(path, {duration:false, skipCovers:true})`): recorre `inputRoot` recursivo con
+   `services/audio-discovery.js`, **excluyendo** `excludeRoots` (y cualquier ruta dentro de ellas). Por pista:
+   `{ path, tagGenre, genre|null, status: 'ok'|'review'|'duplicate', reason, destination|null }`.
+   `status:'review'` si no hay tag, es basura o no está en la tabla; `duplicate` si existe un archivo con mismo nombre y tamaño en un
+   `excludeRoot` (es un ejemplo ya clasificado: no se mueve). `destination = destRoot/<genre>/<nombre>`.
+3. `POST /api/classify-by-tags` (SSE, `runProcessWithProgress` con `parseJsonResult`, script CLI `src/tag-classifier-cli.js`):
+   body `{ inputRoot, excludeRoots, destRoot }`. **Rechaza (400)** si `destRoot` o `inputRoot` están dentro de un `excludeRoot`, o si
+   algún `excludeRoot` está dentro de `destRoot`. Nunca escribe ni mueve nada. `[PROGRESS:X/Y] Processing: nombre` por archivo.
+4. Tests node con archivos generados en tmp (ffmpeg `-metadata genre=…`): alias, basura, sin tag, desconocido, duplicado, exclusión de
+   `excludeRoots`, validaciones 400, y que el árbol de entrada queda idéntico (mismos mtimes) tras correr.
+**Gate:** `node --test tests/*.test.js` exit 0 + corrida real del cerebro sobre `MUSIC BACKUP` con `excludeRoots=[…/2026]` (solo lectura).
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)
