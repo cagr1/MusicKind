@@ -65,6 +65,8 @@ def separate_file(file_path, output_dir, stems_mode, fmt):
 
         # Demucs output: tmp_dir/<model_name>/<song_stem>/vocals.ext + no_vocals.ext
         created = []
+        vocals = None
+        instrumental = None
         for model_dir in sorted(Path(tmp_dir).iterdir()):
             song_dir = model_dir / song_stem
             if not song_dir.exists():
@@ -73,23 +75,25 @@ def separate_file(file_path, output_dir, stems_mode, fmt):
             if stems_mode in ("vocals", "both"):
                 src = song_dir / f"vocals.{ext}"
                 if src.exists():
-                    dst = Path(output_dir) / f"{song_stem}_vocals.{ext}"
+                    dst = Path(output_dir).resolve() / f"{song_stem}_vocals.{ext}"
                     shutil.copy2(str(src), str(dst))
-                    created.append(str(dst))
+                    vocals = str(dst)
+                    created.append(vocals)
 
             if stems_mode in ("instrumental", "both"):
                 src = song_dir / f"no_vocals.{ext}"
                 if src.exists():
-                    dst = Path(output_dir) / f"{song_stem}_instrumental.{ext}"
+                    dst = Path(output_dir).resolve() / f"{song_stem}_instrumental.{ext}"
                     shutil.copy2(str(src), str(dst))
-                    created.append(str(dst))
+                    instrumental = str(dst)
+                    created.append(instrumental)
 
             break  # Use first model dir found
 
         if not created:
             return {"ok": False, "error": "No output files found from demucs"}
 
-        return {"ok": True, "files": created}
+        return {"ok": True, "files": created, "vocals": vocals, "instrumental": instrumental}
 
 
 if __name__ == "__main__":

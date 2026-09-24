@@ -8,6 +8,7 @@ import {
   renameFile,
   generateFilename,
   writeMetadata,
+  readMetadata,
 } from "../src/metadata_editor.js";
 
 function ffmpegAvailable() {
@@ -148,6 +149,15 @@ test("writeMetadata rechaza con error claro si el archivo no existe", async () =
     () => writeMetadata("/tmp/nonexistent-musickind.mp3", { title: "Test" }),
     /File not found/
   );
+});
+
+test("readMetadata expone bpm y key desde los tags", { skip: !ffmpegAvailable() }, async () => {
+  const dir = makeTempDir();
+  const filePath = makeToneFile(dir);
+  await writeMetadata(filePath, { bpm: 128.7, key: "Am" });
+  const result = await readMetadata(filePath);
+  assert.equal(Number(result.metadata.bpm), 129);
+  assert.equal(result.metadata.key, "Am");
 });
 
 test("writeMetadata escribe bpm redondeado a entero (TBPM/bpm) y key (TKEY/initialkey)", { skip: !ffmpegAvailable() }, async () => {

@@ -13,6 +13,7 @@ import { loadOverrides, classifyFromOverrides } from "./overrides.js";
 import { discoverAudioFiles } from "./services/audio-discovery.js";
 import { resolvePython } from "./python-env.js";
 import { runBpmAnalyzer as runBpmAnalyzerProcess } from "./bpm-runner.js";
+import { sourceFromReason } from "./classification-source.js";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const bpmAnalyzerPath = path.join(scriptDir, "bpm_analyzer.py");
@@ -325,6 +326,29 @@ for (const filePath of files) {
 }
 
 writeCsv(reportRows, reportPath, dryRun);
+
+const structuredRows = await Promise.all(reportRows.map(async (row) => {
+  const absolutePath = path.resolve(inputDir, row.file);
+  let tags = { bpm: null, key: null };
+  try {
+    const readablePath = fs.existsSync(absolutePath)
+      ? absolutePath
+      : path.join(inputDir, row.genre, path.basename(row.file));
+    const metadata = await parseFile(readablePath);
+    tags = { bpm: metadata.common.bpm ?? null, key: metadata.common.key ?? null };
+  } catch (_) {
+    // The classifier's report remains available even if tags cannot be reread.
+  }
+  return {
+    ...row,
+    path: absolutePath,
+    source: sourceFromReason(row.reason),
+    destination: path.resolve(inputDir, row.genre),
+    bpm: tags.bpm,
+    key: tags.key
+  };
+}));
+console.log(JSON.stringify(structuredRows, null, 2));
 
 function parseArgs(argv) {
   const out = {};

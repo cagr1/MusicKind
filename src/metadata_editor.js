@@ -51,6 +51,8 @@ export async function readMetadata(filePath) {
         album: metadata.common.album || "",
         year: metadata.common.year || null,
         genre: metadata.common.genre?.[0] || "",
+        bpm: metadata.common.bpm ?? null,
+        key: metadata.common.key || null,
         duration: metadata.format.duration || 0,
         bitrate: metadata.format.bitrate || 0,
         sampleRate: metadata.format.sampleRate || 0,

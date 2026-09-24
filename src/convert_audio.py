@@ -1,4 +1,5 @@
 import os
+import json
 import argparse
 import subprocess
 from pathlib import Path
@@ -47,6 +48,7 @@ def convert_audio(input_path, output_path, fmt, bitrate_kbps=None):
         cmd += ["-b:a", f"{bitrate_kbps}k"]
     cmd.append(str(output_path))
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return output_path
 
 
 def parse_args():
@@ -82,6 +84,7 @@ def main():
     if total == 0:
         raise SystemExit("No se encontraron archivos de audio en la carpeta.")
 
+    results = []
     for idx, file_path in enumerate(files, start=1):
         if input_path.is_file():
             out_path = output_dir / file_path.name
@@ -89,8 +92,32 @@ def main():
             rel = file_path.relative_to(input_dir)
             out_path = output_dir / rel
         out_path = out_path.with_suffix(f".{args.format}")
-        convert_audio(file_path, out_path, args.format, args.bitrate)
+        size_in = file_path.stat().st_size
+        try:
+            actual_output = convert_audio(file_path, out_path, args.format, args.bitrate)
+            results.append({
+                "ok": True,
+                "input": str(file_path.resolve()),
+                "output": str(actual_output.resolve()),
+                "format": args.format,
+                "bitrate": args.bitrate,
+                "sizeIn": size_in,
+                "sizeOut": actual_output.stat().st_size
+            })
+        except Exception as error:
+            results.append({
+                "ok": False,
+                "input": str(file_path.resolve()),
+                "output": str(out_path.resolve()),
+                "format": args.format,
+                "bitrate": args.bitrate,
+                "sizeIn": size_in,
+                "sizeOut": None,
+                "error": str(error)
+            })
         print(f"[PROGRESS:{idx}/{total}] Processing: {file_path.name}", flush=True)
+
+    print(json.dumps(results, indent=2))
 
 
 if __name__ == "__main__":

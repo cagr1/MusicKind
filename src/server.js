@@ -1,6 +1,7 @@
 import http from "http";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 import { StringDecoder } from "string_decoder";
@@ -8,7 +9,7 @@ import { config as loadEnv } from "dotenv";
 import { readMetadata, renameFile, writeMetadata, generateFilename, identifyAndTag } from "./metadata_editor.js";
 import { SpotifyClient } from "./spotify.js";
 import { JsonCache } from "./cache.js";
-import { discoverAudioFiles } from "./services/audio-discovery.js";
+import { discoverAudioFiles, getAudioExtensions } from "./services/audio-discovery.js";
 import { buildMetadataListResponse } from "./services/metadata-list-api.js";
 import {
   resolvePython
@@ -120,6 +121,21 @@ if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
 }
 
 async function handleApi(req, res, url, { installHandler = installPythonDependencies } = {}) {
+  if (req.method === "GET" && (url.pathname === "/api/audio" || url.pathname === "/api/waveform")) {
+    const filePath = url.searchParams.get("path") || "";
+    const validation = validateMediaPath(filePath);
+    if (validation.error) return sendJson(res, validation.error, validation.status);
+    if (url.pathname === "/api/audio") return serveAudio(res, filePath, req.headers.range);
+
+    const rawBins = url.searchParams.get("bins");
+    const bins = rawBins === null ? 200 : Number(rawBins);
+    if (!Number.isInteger(bins) || bins < 32 || bins > 1000) {
+      return sendJson(res, { ok: false, error: "bins debe ser un entero entre 32 y 1000" }, 400);
+    }
+    const waveform = await buildWaveform(filePath, bins);
+    return sendJson(res, waveform.payload, waveform.status);
+  }
+
   if (req.method === "GET" && url.pathname === "/api/genres") {
     const genres = readGenres();
     return sendJson(res, { ok: true, genres });
@@ -159,7 +175,7 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     
     // Note: runProcessWithProgress handles response completion (res.end())
     // so no further response should be sent after this
-    await runProcessWithProgress(process.execPath, args, res, processId);
+    await runProcessWithProgress(process.execPath, args, res, processId, { parseJsonResult: true });
     return; // Response already sent by runProcessWithProgress
   }
 
@@ -256,7 +272,7 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
 
     // Note: runProcessWithProgress handles response completion (res.end())
     // so no further response should be sent after this
-    await runProcessWithProgress(pyCmd, args, res, processId);
+    await runProcessWithProgress(pyCmd, args, res, processId, { parseJsonResult: true });
     return; // Response already sent by runProcessWithProgress
   }
 
@@ -719,6 +735,115 @@ function readJsonBody(req) {
       }
     });
   });
+}
+
+function validateMediaPath(filePath) {
+  if (!path.isAbsolute(filePath)) {
+    return { status: 400, error: { ok: false, error: `Ruta no absoluta: se recibió "${filePath}". Se requiere una ruta absoluta.` } };
+  }
+  const ext = path.extname(filePath).toLowerCase();
+  if (!getAudioExtensions().includes(ext)) {
+    return { status: 415, error: { ok: false, error: `Formato de audio no soportado: ${ext || "(sin extensión)"}` } };
+  }
+  if (!fs.existsSync(filePath)) {
+    return { status: 404, error: { ok: false, error: `No se encontró el archivo: ${filePath}` } };
+  }
+  return { status: 200 };
+}
+
+const AUDIO_CONTENT_TYPES = {
+  ".mp3": "audio/mpeg",
+  ".wav": "audio/wav",
+  ".aif": "audio/aiff",
+  ".aiff": "audio/aiff",
+  ".flac": "audio/flac",
+  ".m4a": "audio/mp4"
+};
+
+function serveAudio(res, filePath, rangeHeader) {
+  const stat = fs.statSync(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  let start = 0;
+  let end = stat.size - 1;
+  let status = 200;
+  const headers = { "Content-Type": AUDIO_CONTENT_TYPES[ext], "Accept-Ranges": "bytes" };
+
+  if (rangeHeader) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+    const rangeStart = match?.[1] === "" ? null : Number(match?.[1]);
+    const rangeEnd = match?.[2] === "" ? null : Number(match?.[2]);
+    if (!match || (rangeStart === null && rangeEnd === null) ||
+      (rangeStart !== null && (!Number.isInteger(rangeStart) || rangeStart < 0)) ||
+      (rangeEnd !== null && (!Number.isInteger(rangeEnd) || rangeEnd < 0)) ||
+      (rangeStart !== null && rangeStart >= stat.size) ||
+      (rangeStart !== null && rangeEnd !== null && rangeStart > rangeEnd)) {
+      res.writeHead(416, { "Content-Range": `bytes */${stat.size}` });
+      return res.end();
+    }
+    if (rangeStart === null) {
+      start = Math.max(0, stat.size - rangeEnd);
+    } else {
+      start = rangeStart;
+    }
+    end = rangeEnd === null ? end : Math.min(rangeEnd, end);
+    if (start > end) {
+      res.writeHead(416, { "Content-Range": `bytes */${stat.size}` });
+      return res.end();
+    }
+    status = 206;
+    headers["Content-Range"] = `bytes ${start}-${end}/${stat.size}`;
+  }
+  headers["Content-Length"] = end - start + 1;
+  const stream = fs.createReadStream(filePath, { start, end });
+  stream.on("error", () => {
+    if (!res.destroyed) res.destroy();
+  });
+  stream.pipe(res.writeHead(status, headers));
+}
+
+async function buildWaveform(filePath, bins) {
+  const stat = fs.statSync(filePath);
+  const cacheDir = path.join(projectRoot, ".cache", "waveforms");
+  const cacheKey = crypto.createHash("sha1")
+    .update(`v2|${filePath}|${stat.size}|${stat.mtimeMs}|${bins}`)
+    .digest("hex");
+  const cachePath = path.join(cacheDir, `${cacheKey}.json`);
+  if (fs.existsSync(cachePath)) {
+    return { status: 200, payload: JSON.parse(fs.readFileSync(cachePath, "utf8")) };
+  }
+
+  try {
+    const pcm = await new Promise((resolve, reject) => {
+      const child = spawn("ffmpeg", ["-v", "error", "-i", filePath, "-ac", "1", "-ar", "8000", "-f", "s16le", "-"]);
+      const chunks = [];
+      let error = "";
+      child.stdout.on("data", (chunk) => chunks.push(chunk));
+      child.stderr.on("data", (chunk) => { error += chunk.toString(); });
+      child.on("error", reject);
+      child.on("close", (code) => code === 0 ? resolve(Buffer.concat(chunks)) : reject(new Error(error.trim() || `FFmpeg terminó con código ${code}`)));
+    });
+    const sampleCount = Math.floor(pcm.length / 2);
+    const rmsValues = Array.from({ length: bins }, (_, bucket) => {
+      const from = Math.floor(bucket * sampleCount / bins);
+      const to = Math.max(from + 1, Math.floor((bucket + 1) * sampleCount / bins));
+      const count = Math.max(0, Math.min(to, sampleCount) - from);
+      if (!count) return 0;
+      let sumSquares = 0;
+      for (let i = from; i < Math.min(to, sampleCount); i++) {
+        const sample = pcm.readInt16LE(i * 2) / 32768;
+        sumSquares += sample * sample;
+      }
+      return Math.sqrt(sumSquares / count);
+    });
+    const maxRms = Math.max(...rmsValues, 0);
+    const peaks = rmsValues.map((rms) => Number((maxRms === 0 ? 0 : rms / maxRms).toFixed(2)));
+    const payload = { ok: true, peaks, duration: sampleCount / 8000 };
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(cachePath, JSON.stringify(payload));
+    return { status: 200, payload };
+  } catch (error) {
+    return { status: 503, payload: { ok: false, error: `FFmpeg no disponible o falló: ${error.message}` } };
+  }
 }
 
 function sendJson(res, payload, status = 200) {
