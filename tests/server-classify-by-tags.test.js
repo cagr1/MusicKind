@@ -6,8 +6,8 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { createServer } from "../src/server.js";
 
-async function withServer(run) {
-  const server = createServer();
+async function withServer(run, options = {}) {
+  const server = createServer(options);
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   try { await run(`http://127.0.0.1:${server.address().port}`); }
   finally { await new Promise((resolve) => server.close(resolve)); }
@@ -40,20 +40,25 @@ test("/api/classify-by-tags propone tags reales con FFmpeg en tmp y no altera el
   const destination = path.join(root, "classified");
   fs.mkdirSync(input);
   fs.mkdirSync(excluded);
+  const settingsFile = path.join(root, "settings.json");
+  fs.writeFileSync(settingsFile, JSON.stringify({ protectedRoots: [excluded], retained: "keep" }));
   const tagged = path.join(input, "tagged.mp3");
+  const protectedTrack = path.join(excluded, "example.mp3");
   assert.equal(spawnSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.2", "-metadata", "genre=Latin Tech", "-q:a", "9", tagged]).status, 0);
+  assert.equal(spawnSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=0.2", "-metadata", "genre=House", "-q:a", "9", protectedTrack]).status, 0);
   const before = fs.statSync(tagged);
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   await withServer(async (base) => {
     const response = await fetch(`${base}/api/classify-by-tags`, {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ inputRoot: input, excludeRoots: [excluded], destRoot: destination })
+      body: JSON.stringify({ inputRoot: input, excludeRoots: [], destRoot: destination })
     });
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type"), /text\/event-stream/);
     const events = (await response.text()).split("\n\n").filter(Boolean).map((chunk) => JSON.parse(chunk.replace(/^data: /, "")));
     const result = events.find((event) => event.type === "result");
     assert.equal(result.results[0].tagGenre, "Latin Tech");
+    assert.equal(result.results.length, 1, "la carpeta protegida del servidor no se escanea aunque el cliente mande []");
     assert.equal(result.results[0].genre, "Tech House");
     assert.equal(result.results[0].destination, path.join(destination, "Tech House", "tagged.mp3"));
     assert.equal(events.at(-1).success, true);
@@ -61,5 +66,5 @@ test("/api/classify-by-tags propone tags reales con FFmpeg en tmp y no altera el
     const after = fs.statSync(tagged);
     assert.equal(after.mtimeMs, before.mtimeMs);
     assert.equal(after.size, before.size);
-  });
+  }, { settingsFile });
 });

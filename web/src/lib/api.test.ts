@@ -91,6 +91,13 @@ describe('dispatchSseLine', () => {
     expect(onResult).toHaveBeenCalledWith([1, 2, 3])
   })
 
+  it('forwards result payloads without a results property', () => {
+    const onResult = vi.fn()
+    const event = { type: 'result', manifestPath: '/out/manifest.json' }
+    dispatchSseLine('data: ' + JSON.stringify(event), { onResult })
+    expect(onResult).toHaveBeenCalledWith(event)
+  })
+
   it('reports a successful complete event via onDone', () => {
     const onDone = vi.fn()
     const onError = vi.fn()

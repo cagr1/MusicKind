@@ -39,9 +39,10 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
 9. [~] **Lote 6 — Clasificar por ejemplos** (`design/SPEC.md` § Lote 6). **PAUSADO 2026-09-24 a pedido de Carlos.**
    - [x] E0 medición (audio ≈ base "siempre Tech house"; tag ~97%) · [x] E1 motor por tags (`0ee9157`) · [x] E3 mover con manifiesto/deshacer (verificado sobre copia) · [x] E3.1 excluir destino + validar deshacer (`5b528a1`).
    - [ ] **E2 vista "Clasificar por etiquetas"**: hecha por Luna, **SIN COMMIT y NO VERIFICADA** (working tree: `web/src/views/Classifier.tsx`, `web/src/lib/tag-classifier.ts`, `api.ts`, i18n, `web/package.json` con `@tanstack/react-virtual`).
-   - [ ] **E2.1 CRÍTICO** (spec escrita, commit `docs: E2.1…`): la corrida de Luna se **interrumpió a mitad** → `src/server.js` puede tener cambios parciales. Al retomar: `git diff src/server.js`, decidir si descartar solo ese archivo, y re-delegar E2.1 completo a `gpt-6-luna`.
-     Motivo: en QA sin carpeta protegida la vista analizó 2,684 pistas incluyendo `2026` y ofreció "Mover 2443". Nada se movió (disco verificado intacto, sin `Clasificado/`).
-   - **No usar la vista E2 sobre el backup real hasta cerrar E2.1** (`protectedRoots` en el servidor).
+   - [x] **E2.1** (Luna, 1 corrida tras la interrumpida) — `protectedRoots` en `config/settings.json` unidas en servidor a classify-by-tags/apply/undo; `GET /api/genre-aliases`; UI Clasificador + Configuración leen/escriben `protectedRoots`; Select de método con valor. **Sin commit.**
+     Verificado por el cerebro 2026-09-24: node 75/75, build 0, lint 0 errores (4 warnings), vitest 86/86; en vivo (3099, archivos tmp): con `excludeRoots: []` la carpeta protegida no se lista, alias `Afro Latin`→`Afro House`, settings conserva claves. Falta QA visual de la vista (E2 sigue sin QA en UI).
+     Nota QA: `MUSIC_KIND_DATA_DIR` **no** afecta a `settings.json` (siempre `config/settings.json`); la prueba escribió ahí y se revirtió.
+   - Antes de usar E2 sobre el backup real: agregar `…/2026` en Configuración → Carpetas protegidas y hacer QA visual.
    - Pendiente después: E4 `.m3u8` Warmup/Peak/Closing; E0b (entrenar audio con las ~2,300 etiquetadas para sugerir en las ~190 sin tag).
    - QA: servidor aparte en `PORT=3099` con `MUSIC_KIND_DATA_DIR="$HOME/Library/Application Support/MusicKind"`; copia de prueba del backup en el scratchpad de la sesión (temporal).
 

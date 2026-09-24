@@ -99,12 +99,12 @@ function getUiRoot() {
   return legacyUiRoot;
 }
 
-export function createServer({ installHandler = installPythonDependencies, mediaSpawn = spawn } = {}) {
+export function createServer({ installHandler = installPythonDependencies, mediaSpawn = spawn, settingsFile = settingsPath } = {}) {
   return http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
     if (url.pathname.startsWith("/api/")) {
-      await handleApi(req, res, url, { installHandler, mediaSpawn });
+      await handleApi(req, res, url, { installHandler, mediaSpawn, settingsFile });
       return;
     }
 
@@ -133,7 +133,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   createServer().listen(PORT, HOST, () => console.log(`MusicKind dashboard running on http://${HOST}:${PORT} (loopback only)`));
 }
 
-async function handleApi(req, res, url, { installHandler = installPythonDependencies, mediaSpawn = spawn } = {}) {
+async function handleApi(req, res, url, { installHandler = installPythonDependencies, mediaSpawn = spawn, settingsFile = settingsPath } = {}) {
   if (req.method === "GET" && ["/api/audio", "/api/waveform", "/api/artwork"].includes(url.pathname)) {
     const filePath = url.searchParams.get("path") || "";
     const validation = validateMediaPath(filePath);
@@ -155,6 +155,15 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     return sendJson(res, { ok: true, genres });
   }
 
+  if (req.method === "GET" && url.pathname === "/api/genre-aliases") {
+    try {
+      const aliases = JSON.parse(fs.readFileSync(path.join(projectRoot, "config", "genre-aliases.json"), "utf8"));
+      return sendJson(res, { canonical: Object.keys(aliases) });
+    } catch {
+      return sendJson(res, { ok: false, error: "No se pudieron cargar los géneros canónicos" }, 500);
+    }
+  }
+
   if (req.method === "POST" && url.pathname === "/api/genres") {
     const body = await readJsonBody(req);
     const genres = Array.isArray(body.genres) ? body.genres : [];
@@ -172,7 +181,9 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     const body = await readJsonBody(req);
     const inputRoot = typeof body.inputRoot === "string" ? body.inputRoot : "";
     const destRoot = typeof body.destRoot === "string" ? body.destRoot : "";
-    const excludeRoots = Array.isArray(body.excludeRoots) ? body.excludeRoots : [];
+    const settings = loadSettings(settingsFile);
+    const clientExcludes = Array.isArray(body.excludeRoots) ? body.excludeRoots : [];
+    const excludeRoots = [...new Set([...settings.protectedRoots, ...clientExcludes])];
     const pathValues = [inputRoot, destRoot, ...excludeRoots];
     if (!inputRoot || !destRoot || !Array.isArray(body.excludeRoots) || excludeRoots.some((root) => typeof root !== "string" || !root)) {
       return sendJson(res, { ok: false, error: "inputRoot, excludeRoots y destRoot requeridos" }, 400);
@@ -207,8 +218,11 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
 
   if (req.method === "POST" && ["/api/classify-apply", "/api/classify-undo"].includes(url.pathname)) {
     const body = await readJsonBody(req);
+    const settings = loadSettings(settingsFile);
+    const excludeRoots = [...new Set([...settings.protectedRoots, ...(Array.isArray(body.excludeRoots) ? body.excludeRoots : [])])];
     if (url.pathname === "/api/classify-apply") {
-      try { validateMoves({ moves: body.moves, excludeRoots: body.excludeRoots, destRoot: body.destRoot }); }
+      if (!Array.isArray(body.excludeRoots)) return sendJson(res, { ok: false, error: "excludeRoots debe ser una lista" }, 400);
+      try { validateMoves({ moves: body.moves, excludeRoots, destRoot: body.destRoot }); }
       catch (error) { return sendJson(res, { ok: false, error: error.message }, 400); }
     } else if (typeof body.manifestPath !== "string" || !path.isAbsolute(body.manifestPath)) {
       return sendJson(res, { ok: false, error: "manifestPath debe ser una ruta absoluta" }, 400);
@@ -221,8 +235,8 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     try {
       const options = url.pathname === "/api/classify-apply"
-        ? { moves: body.moves, excludeRoots: body.excludeRoots, destRoot: body.destRoot }
-        : { manifestPath: body.manifestPath };
+        ? { moves: body.moves, excludeRoots, destRoot: body.destRoot }
+        : { manifestPath: body.manifestPath, excludeRoots };
       const operationFn = url.pathname === "/api/classify-apply" ? applyClassifyMoves : undoClassifyManifest;
       const result = await operationFn({ ...options, cancelled: () => operation.cancelled, onProgress: (progress) => sendEvent({ type: "progress", ...progress }) });
       sendEvent({ type: "result", ...result });
@@ -246,7 +260,7 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
       return sendJson(res, { ok: false, error: "inputPath requerido" }, 400);
     }
 
-    const settings = loadSettings();
+    const settings = loadSettings(settingsFile);
     const spotifyClientId = process.env.SPOTIFY_CLIENT_ID || settings.spotifyClientId;
     const spotifyClientSecret = process.env.SPOTIFY_CLIENT_SECRET || settings.spotifyClientSecret;
     const hasSpotify = Boolean(spotifyClientId && spotifyClientSecret);
@@ -360,21 +374,19 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
 
   // Settings API
   if (req.method === "GET" && url.pathname === "/api/settings") {
-    const settings = loadSettings();
+    const settings = loadSettings(settingsFile);
     return sendJson(res, { ok: true, settings });
   }
 
   if (req.method === "POST" && url.pathname === "/api/settings") {
     const body = await readJsonBody(req);
-    const settings = {
-      spotifyClientId: body.spotifyClientId ? String(body.spotifyClientId).trim() : "",
-      spotifyClientSecret: body.spotifyClientSecret ? String(body.spotifyClientSecret).trim() : "",
-      lastfmApiKey: body.lastfmApiKey ? String(body.lastfmApiKey).trim() : "",
-      acoustidApiKey: body.acoustidApiKey ? String(body.acoustidApiKey).trim() : "",
-      language: body.language ? String(body.language).trim() : "es",
-      defaultOutputDir: body.defaultOutputDir ? String(body.defaultOutputDir).trim() : "output"
-    };
-    saveSettings(settings);
+    const previous = loadSettings(settingsFile);
+    const settings = { ...previous };
+    for (const key of ["spotifyClientId", "spotifyClientSecret", "lastfmApiKey", "acoustidApiKey", "language", "defaultOutputDir"]) {
+      if (key in body) settings[key] = body[key] ? String(body[key]).trim() : (key === "defaultOutputDir" ? "output" : "");
+    }
+    if ("protectedRoots" in body) settings.protectedRoots = normalizeProtectedRoots(body.protectedRoots);
+    saveSettings(settings, settingsFile);
     return sendJson(res, { ok: true, message: "Configuracion guardada" });
   }
 
@@ -540,7 +552,7 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     }
 
     try {
-      const settings = loadSettings();
+      const settings = loadSettings(settingsFile);
 
       let identifyResult = null;
       let identifyError = null;
@@ -779,26 +791,33 @@ function readGenres() {
   }
 }
 
-function loadSettings() {
+function loadSettings(settingsFile = settingsPath) {
   const defaultSettings = {
     spotifyClientId: "",
     spotifyClientSecret: "",
     lastfmApiKey: "",
     acoustidApiKey: "",
     language: "es",
-    defaultOutputDir: "output"
+    defaultOutputDir: "output",
+    protectedRoots: []
   };
-  if (!fs.existsSync(settingsPath)) return defaultSettings;
+  if (!fs.existsSync(settingsFile)) return defaultSettings;
   try {
-    const parsed = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
-    return { ...defaultSettings, ...parsed };
+    const parsed = JSON.parse(fs.readFileSync(settingsFile, "utf-8"));
+    return { ...defaultSettings, ...parsed, protectedRoots: normalizeProtectedRoots(parsed.protectedRoots) };
   } catch {
     return defaultSettings;
   }
 }
 
-function saveSettings(settings) {
-  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
+function normalizeProtectedRoots(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((root) => typeof root === "string" && path.isAbsolute(root)).map((root) => path.resolve(root)))];
+}
+
+function saveSettings(settings, settingsFile = settingsPath) {
+  fs.mkdirSync(path.dirname(settingsFile), { recursive: true });
+  fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2), "utf-8");
 }
 
 async function countAudioFiles(dirPath) {

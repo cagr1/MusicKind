@@ -123,7 +123,7 @@ export function listClassifyManifests(destRoot) {
   });
 }
 
-export async function undoClassifyManifest({ manifestPath, cancelled = () => false, onProgress = () => {}, renameSync = fs.renameSync }) {
+export async function undoClassifyManifest({ manifestPath, excludeRoots = [], cancelled = () => false, onProgress = () => {}, renameSync = fs.renameSync }) {
   if (typeof manifestPath !== "string" || !path.isAbsolute(manifestPath) || path.extname(manifestPath) !== ".json") throw new Error("manifestPath inválido");
   const resolved = path.resolve(manifestPath);
   const manifest = JSON.parse(fs.readFileSync(resolved, "utf8"));
@@ -135,7 +135,7 @@ export async function undoClassifyManifest({ manifestPath, cancelled = () => fal
     if (cancelled()) break;
     try {
       if (!within(move.to, manifest.destRoot)) throw new Error("Destino del movimiento fuera de destRoot del manifiesto");
-      if (!fs.existsSync(move.to) || fs.existsSync(move.from) || isProtected(move.from, manifest.excludeRoots || [])) throw new Error("Destino ausente, origen ocupado o ruta protegida");
+      if (!fs.existsSync(move.to) || fs.existsSync(move.from) || isProtected(move.from, [...(manifest.excludeRoots || []), ...excludeRoots])) throw new Error("Destino ausente, origen ocupado o ruta protegida");
       await moveFile(move.to, move.from, renameSync);
       move.status = "undone";
       delete move.undoReason;

@@ -52,10 +52,15 @@ describe('classifier source labels', () => {
 
 describe('classifier simulation switch', () => {
   it("renders the thumb with data-state='checked'", async () => {
+    HTMLElement.prototype.scrollIntoView = vi.fn()
     const fetchMock = vi.fn((path: string) =>
       Promise.resolve({
         ok: true,
-        json: async () => (path === '/api/genres' ? { genres: [] } : { settings: {} }),
+      json: async () => {
+        if (path === '/api/genres') return { genres: [] }
+        if (path === '/api/genre-aliases') return { canonical: ['Tech House'] }
+        return { settings: { protectedRoots: [] } }
+      },
       }),
     )
     vi.stubGlobal('fetch', fetchMock)
@@ -72,8 +77,15 @@ describe('classifier simulation switch', () => {
       )
     })
 
-    const thumb = container.querySelector('span[data-state="checked"]')
-    expect(thumb).not.toBeNull()
+    const method = container.querySelector<HTMLButtonElement>('button[aria-label="Método"]')
+    expect(method?.textContent).toContain('etiquetas')
+    await act(async () => {
+      method?.click()
+    })
+    const legacyOption = Array.from(document.body.querySelectorAll('[role="option"]')).find((item) => item.textContent?.includes('reglas online'))
+    expect(legacyOption).not.toBeUndefined()
+    await act(async () => { legacyOption?.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(container.querySelector('button[aria-label="Método"]')?.textContent).toContain('reglas online')
     root.unmount()
     vi.unstubAllGlobals()
   })

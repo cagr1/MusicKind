@@ -35,6 +35,24 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
 import { usePlayer } from '@/lib/player'
+import { useVirtualizer } from '@tanstack/react-virtual'
+import { streamProcess } from '@/lib/api'
+import {
+  buildClassifyMoves,
+  changeTagGenre,
+  filterTagResults,
+  tagResultCounts,
+  type TagResult,
+  type TagStatusFilter,
+} from '@/lib/tag-classifier'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { toast } from 'sonner'
 
 const SOURCE_LABEL_KEYS: Record<string, TranslationKey> = {
   embedded: 'classifier.sourceLabels.embedded',
@@ -124,6 +142,15 @@ async function readTrackMetadata(
 }
 
 export function Classifier() {
+  const [method, setMethod] = React.useState('tags')
+  return method === 'tags' ? (
+    <TagClassifier method={method} onMethodChange={setMethod} />
+  ) : (
+    <LegacyClassifier method={method} onMethodChange={setMethod} />
+  )
+}
+
+function LegacyClassifier({ method, onMethodChange }: { method: string; onMethodChange: (method: string) => void }) {
   const { setQueue, toggle, path: playingPath } = usePlayer()
   const t = useT()
   const { view, setView } = useView()
@@ -328,6 +355,10 @@ export function Classifier() {
             )}
           </div>
           <div className="flex items-center gap-2">
+            <Select value={method} onValueChange={onMethodChange}>
+              <SelectTrigger className="h-8 w-56 text-[11px]" aria-label={t('classifier.method')}><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="tags">{t('classifier.methodTags')}</SelectItem><SelectItem value="legacy">{t('classifier.methodOnline')}</SelectItem></SelectContent>
+            </Select>
             <SelectionControls selection={selection} t={t} hasRows={results.length > 0} />
             {isBusy && (
               <>
@@ -506,6 +537,593 @@ export function Classifier() {
         )}
       </TrackInspector>
     </div>
+  )
+}
+
+function TagClassifier({ method, onMethodChange }: { method: string; onMethodChange: (method: string) => void }) {
+  const t = useT()
+  const { toggle, path: playingPath, setQueue } = usePlayer()
+  const [inputRoot, setInputRoot] = React.useState('')
+  const [excludeRoots, setExcludeRoots] = React.useState<string[]>([])
+  const [genres, setGenres] = React.useState<string[]>([])
+  const [protectedLoaded, setProtectedLoaded] = React.useState(false)
+  const [destRoot, setDestRoot] = React.useState('')
+  const [results, setResults] = React.useState<TagResult[]>([])
+  const [selectedPath, setSelectedPath] = React.useState<string | null>(null)
+  const [selectedPaths, setSelectedPaths] = React.useState<string[]>([])
+  const [statusFilter, setStatusFilter] = React.useState<TagStatusFilter>('all')
+  const [genreFilter, setGenreFilter] = React.useState('all')
+  const [confirmOpen, setConfirmOpen] = React.useState(false)
+  const [historyOpen, setHistoryOpen] = React.useState(false)
+  const [manifests, setManifests] = React.useState<
+    Array<{ manifestPath: string; createdAt: string; total: number; done: number; undone: boolean }>
+  >([])
+  const [error, setError] = React.useState<string | null>(null)
+  const [busy, setBusy] = React.useState(false)
+  const [progress, setProgress] = React.useState('')
+  const scrollRef = React.useRef<HTMLDivElement>(null)
+  const filtered = React.useMemo(
+    () => filterTagResults(results, statusFilter, genreFilter),
+    [results, statusFilter, genreFilter],
+  )
+  const counts = React.useMemo(() => tagResultCounts(results), [results])
+  const moves = React.useMemo(() => buildClassifyMoves(results), [results])
+  const selected = results.find((item) => item.path === selectedPath) ?? results[0] ?? null
+  const virtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 54,
+    overscan: 8,
+  })
+  React.useEffect(() => {
+    let cancelled = false
+    void Promise.all([
+      getJson<{ settings?: { protectedRoots?: string[] } }>('/api/settings'),
+      getJson<{ canonical?: string[] }>('/api/genre-aliases'),
+    ]).then(([settings, aliases]) => {
+      if (cancelled) return
+      setExcludeRoots(settings.settings?.protectedRoots ?? [])
+      setGenres(aliases.canonical ?? [])
+      setProtectedLoaded(true)
+    }).catch((e) => setError(e instanceof Error ? e.message : String(e)))
+    return () => { cancelled = true }
+  }, [])
+  React.useEffect(() => {
+    void setQueue(
+      results.map((item) => ({
+        path: item.path,
+        title: item.title || fileName(item.path),
+        artist: item.artist || '—',
+        bpm: item.bpm ?? null,
+        key: item.key ?? null,
+      })),
+    )
+  }, [results, setQueue])
+  const choose = async (label: string, setter: (path: string) => void) => {
+    const path = await electron.openDirectory(label)
+    if (path) setter(path)
+  }
+  const analyze = async () => {
+    if (!inputRoot || !destRoot || busy) return
+    setError(null)
+    setResults([])
+    setBusy(true)
+    await streamProcess(
+      '/api/classify-by-tags',
+      { inputRoot, excludeRoots, destRoot },
+      {
+        onProgress: (p) => setProgress(`${p.current}/${p.total} · ${p.file}`),
+        onResult: (value) => {
+          if (!Array.isArray(value)) return
+          const rows = value as TagResult[]
+          setResults(rows)
+          void readTrackMetadata(rows as unknown as ClassifierResult[], (path, meta) =>
+            setResults((current) =>
+              current.map((row) => (row.path === path ? { ...row, ...meta } : row)),
+            ),
+          )
+        },
+        onError: setError,
+        onDone: ({ success }) => {
+          setBusy(false)
+          if (success) setProgress('')
+        },
+      },
+    )
+    setBusy(false)
+  }
+  const updateMany = (paths: string[], genre: string) =>
+    setResults((current) => changeTagGenre(current, paths, genre, destRoot))
+  const refreshHistory = async () => {
+    if (!destRoot) return
+    try {
+      const response = await getJson<{ manifests: typeof manifests }>(
+        `/api/classify-manifests?destRoot=${encodeURIComponent(destRoot)}`,
+      )
+      setManifests(response.manifests ?? [])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  const runApply = async (endpoint: string, body: Record<string, unknown>, successText: string) => {
+    setBusy(true)
+    setError(null)
+    setConfirmOpen(false)
+    let manifestPath: string | null = null
+    let completed = false
+    await streamProcess(endpoint, body, {
+      onProgress: (p) => setProgress(`${p.current}/${p.total} · ${p.file}`),
+      onResult: (value) => {
+        if (
+          value &&
+          typeof value === 'object' &&
+          'manifestPath' in value &&
+          typeof value.manifestPath === 'string'
+        )
+          manifestPath = value.manifestPath
+      },
+      onError: setError,
+      onDone: ({ success }) => {
+        completed = success
+        setBusy(false)
+        setProgress('')
+        if (success && manifestPath && endpoint.endsWith('apply'))
+          toast.success(successText, {
+            action: {
+              label: t('classifier.undo'),
+              onClick: () =>
+                void runApply('/api/classify-undo', { manifestPath }, t('classifier.undone')),
+            },
+          })
+        else if (success) toast.success(successText)
+        void refreshHistory()
+      },
+    })
+    setBusy(false)
+    if (completed && endpoint.endsWith('apply')) {
+      setResults((current) =>
+        current.filter((row) => !moves.some((move) => move.from === row.path)),
+      )
+      setSelectedPaths([])
+    }
+  }
+  const selectedTrack: InspectorTrack | null = selected
+    ? {
+        id: selected.path,
+        path: selected.path,
+        title: selected.title || fileName(selected.path),
+        artist: selected.artist || '—',
+        bpm: selected.bpm ?? null,
+        key: selected.key ?? null,
+        tagBpm: selected.bpm ?? null,
+        analyzedBpm: null,
+      }
+    : null
+  const distribution = React.useMemo(
+    () =>
+      genreDistribution(
+        results.map(
+          (row) =>
+            ({
+              ...row,
+              id: row.path,
+              genre: row.genre ?? t('classifier.review'),
+              source: null,
+            }) as ClassifierResult,
+        ),
+      ),
+    [results, t],
+  )
+  return (
+    <div className="flex h-full min-w-0 overflow-hidden">
+      <section className="flex min-w-0 flex-1 flex-col">
+        <header className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-2">
+          <div className="flex items-center gap-3">
+            <h1 className="text-[15px] font-semibold">{t('classifier.title')}</h1>
+            <span className="text-[11px] text-zinc-500">
+              {results.length} {t('classifier.tracks')}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={method} onValueChange={onMethodChange}>
+              <SelectTrigger className="h-8 w-56 text-[11px]" aria-label={t('classifier.method')}><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="tags">{t('classifier.methodTags')}</SelectItem><SelectItem value="legacy">{t('classifier.methodOnline')}</SelectItem></SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setHistoryOpen(true)
+                void refreshHistory()
+              }}
+            >
+              {t('classifier.history')}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => void analyze()}
+              disabled={busy || !inputRoot || !destRoot}
+            >
+              <Activity />
+              {t('classifier.analyze')}
+            </Button>
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={excludeRoots.length === 0 && moves.length > 0 ? 0 : -1}>
+                    <Button
+                      size="sm"
+                      onClick={() => setConfirmOpen(true)}
+                      disabled={busy || moves.length === 0}
+                    >
+                      {t('classifier.move')} · {moves.length}
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {excludeRoots.length === 0 && (
+                  <TooltipContent>{t('classifier.noProtectedWarning')}</TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        </header>
+        <div className="grid shrink-0 gap-2 border-b border-line px-5 py-3 text-[11px] md:grid-cols-3">
+          <FolderField
+            label={t('classifier.inputRoot')}
+            value={inputRoot}
+            onClick={() =>
+              void choose(t('classifier.inputRoot'), (p) => {
+                setInputRoot(p)
+                if (!destRoot) setDestRoot(`${p}/Clasificado`)
+              })
+            }
+          />
+          <FolderField
+            label={`${t('classifier.excludeRoots')}${excludeRoots.length === 0 ? ` · ${t('classifier.addProtected')}` : ''}`}
+            value={excludeRoots.join(' · ') || t('classifier.noProtected')}
+            onClick={async () => {
+              const p = await electron.openDirectory(t('classifier.addProtected'))
+              if (p && !excludeRoots.includes(p)) {
+                const next = [...excludeRoots, p]
+                await postJson('/api/settings', { protectedRoots: next })
+                setExcludeRoots(next)
+              }
+            }}
+          />
+          <FolderField
+            label={t('classifier.destRoot')}
+            value={destRoot}
+            onClick={() => void choose(t('classifier.destRoot'), setDestRoot)}
+          />
+        </div>
+        {protectedLoaded && excludeRoots.length === 0 && (
+          <div className="border-b border-red-500/30 bg-red-500/5 px-5 py-2 text-[11px] text-red-200">{t('classifier.noProtectedWarning')}</div>
+        )}
+        {excludeRoots.length > 0 && (
+          <div className="flex flex-wrap gap-1 border-b border-line px-5 py-2">
+            {excludeRoots.map((root) => (
+              <span
+                key={root}
+                className="rounded border border-line px-2 py-1 text-[10px] text-zinc-400"
+              >
+                {root}
+              </span>
+            ))}
+          </div>
+        )}
+        {busy && (
+          <div className="border-b border-line px-5 py-2 font-mono text-[11px] text-zinc-400">
+            {progress || t('classifier.running')}
+          </div>
+        )}
+        {error && (
+          <div className="flex items-center justify-between border-b border-red-500/30 bg-red-500/5 px-5 py-2 text-[11px] text-red-200">
+            <span>{error}</span>
+            <Button size="sm" variant="outline" onClick={() => void analyze()}>
+              {t('classifier.retry')}
+            </Button>
+          </div>
+        )}
+        {results.length === 0 && !busy ? (
+          <EmptyState
+            title={t('classifier.chooseFolder')}
+            onAction={() => void choose(t('classifier.inputRoot'), setInputRoot)}
+            onDrop={(event) => {
+              event.preventDefault()
+              void resolveDroppedFiles(event.dataTransfer.files).then(
+                (paths) => paths[0] && setInputRoot(paths[0]),
+              )
+            }}
+          />
+        ) : (
+          <>
+            <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-5 py-2">
+              <Select
+                value={statusFilter}
+                onValueChange={(v) => setStatusFilter(v as TagStatusFilter)}
+              >
+                <SelectTrigger
+                  className="h-7 w-48 text-[11px]"
+                  aria-label={t('classifier.filterStatus')}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(
+                    ['all', 'ok', 'review', 'duplicate', 'possibleDuplicate'] as TagStatusFilter[]
+                  ).map((v) => (
+                    <SelectItem key={v} value={v}>
+                      {t(`classifier.statuses.${v}` as TranslationKey)} ·{' '}
+                      {counts[v === 'all' ? 'all' : v]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={genreFilter} onValueChange={setGenreFilter}>
+                <SelectTrigger
+                  className="h-7 w-44 text-[11px]"
+                  aria-label={t('classifier.filterGenre')}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('classifier.allGenres')}</SelectItem>
+                  {genres.map((g) => (
+                    <SelectItem key={g} value={g}>
+                      {g}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="review">{t('classifier.review')}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value=""
+                onValueChange={(genre) => updateMany(selectedPaths, genre)}
+                disabled={!selectedPaths.length}
+              >
+                <SelectTrigger
+                  className="h-7 w-52 text-[11px]"
+                  aria-label={t('classifier.changeSelected')}
+                >
+                  <SelectValue
+                    placeholder={`${t('classifier.changeSelected')} (${selectedPaths.length})`}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="review">{t('classifier.review')}</SelectItem>
+                  {genres.map((g) => (
+                    <SelectItem key={g} value={g}>
+                      {g}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <button
+                className="ml-auto text-[11px] text-zinc-400"
+                onClick={() => setStatusFilter('all')}
+              >
+                {counts.ok} · {counts.review} · {counts.duplicate} · {counts.possibleDuplicate}
+              </button>
+            </div>
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto px-5">
+              <table className="w-full table-fixed text-left text-[11px]">
+                <thead className="sticky top-0 z-10 bg-surface-app text-zinc-500">
+                  <tr className="h-8">
+                    <th className="w-8">
+                      <Checkbox
+                        checked={selectedPaths.length === filtered.length && filtered.length > 0}
+                        onCheckedChange={(checked) =>
+                          setSelectedPaths(checked ? filtered.map((row) => row.path) : [])
+                        }
+                        aria-label={t('common.selectAll')}
+                      />
+                    </th>
+                    <th className="w-10">#</th>
+                    <th>{t('classifier.track')}</th>
+                    <th className="w-36">{t('classifier.originalTag')}</th>
+                    <th className="w-44">{t('classifier.genre')}</th>
+                    <th className="w-40">{t('classifier.status')}</th>
+                    <th className="w-52">{t('classifier.destination')}</th>
+                  </tr>
+                </thead>
+                <tbody style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+                  {virtualizer.getVirtualItems().map((item) => {
+                    const row = filtered[item.index]
+                    return (
+                      <tr
+                        key={row.path}
+                        onClick={() => setSelectedPath(row.path)}
+                        onDoubleClick={() => toggle(row.path)}
+                        className={`absolute left-0 flex h-[54px] w-full cursor-pointer items-center border-b border-line/60 ${selected?.path === row.path ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'}`}
+                        style={{ transform: `translateY(${item.start}px)` }}
+                      >
+                        <td className="w-8 shrink-0">
+                          <Checkbox
+                            checked={selectedPaths.includes(row.path)}
+                            onCheckedChange={(v) =>
+                              setSelectedPaths((prev) =>
+                                v ? [...prev, row.path] : prev.filter((p) => p !== row.path),
+                              )
+                            }
+                            aria-label={`${t('common.selectAll')} ${row.title || fileName(row.path)}`}
+                          />
+                        </td>
+                        <td className="w-10 shrink-0 text-center">
+                          {row.path === playingPath ? (
+                            <AudioLines className="mx-auto size-4 text-brand" />
+                          ) : (
+                            item.index + 1
+                          )}
+                        </td>
+                        <td className="min-w-0 flex-1 pr-3">
+                          <div className="flex items-center gap-2">
+                            <TrackArtwork path={row.path} camelotKey={row.key} size={34} />
+                            <div className="min-w-0">
+                              <p className="truncate text-zinc-200">
+                                {row.title || fileName(row.path)}
+                              </p>
+                              <p className="truncate text-zinc-500">{row.artist || '—'}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td
+                          className="w-36 shrink-0 truncate pr-2"
+                          title={row.tagGenre ?? undefined}
+                        >
+                          {row.tagGenre || '—'}
+                        </td>
+                        <td className="w-44 shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <Select
+                            value={row.genre ?? 'review'}
+                            onValueChange={(genre) => updateMany([row.path], genre)}
+                          >
+                            <SelectTrigger
+                              className="h-7 w-40 text-[10px]"
+                              aria-label={`${t('classifier.genre')}: ${row.title || fileName(row.path)}`}
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="review">{t('classifier.review')}</SelectItem>
+                              {genres.map((g) => (
+                                <SelectItem key={g} value={g}>
+                                  {g}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="w-40 shrink-0 truncate">
+                          {t(
+                            `classifier.statuses.${row.possibleDuplicate && row.status !== 'duplicate' ? 'possibleDuplicate' : row.status}` as TranslationKey,
+                          )}
+                        </td>
+                        <td
+                          className="w-52 shrink-0 truncate font-mono text-zinc-500"
+                          title={row.destination ?? undefined}
+                        >
+                          {row.destination ?? '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+        {distribution.length > 0 && <Distribution distribution={distribution} />}
+      </section>
+      <TrackInspector track={selectedTrack}>
+        {selected && (
+          <div className="space-y-2 rounded border border-line bg-surface-panel p-3 text-[11px]">
+            <p>
+              {t('classifier.originalTag')}: {selected.tagGenre || '—'}
+            </p>
+            <p>
+              {t('classifier.destination')}: {selected.destination || '—'}
+            </p>
+          </div>
+        )}
+      </TrackInspector>
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('classifier.confirmMove')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-zinc-400">
+            {moves.length} {t('classifier.move')} · {destRoot}
+          </p>
+          <div className={`max-h-20 overflow-auto text-xs ${excludeRoots.length ? 'text-zinc-400' : 'text-red-300'}`}>
+            <p>{t('classifier.protectedRoots')} · {excludeRoots.length ? excludeRoots.join(' · ') : t('classifier.none')}</p>
+          </div>
+          <div className="max-h-48 overflow-auto text-xs">
+            {Object.entries(
+              moves.reduce<Record<string, number>>((acc, move) => {
+                const genre = results.find((r) => r.path === move.from)?.genre ?? ''
+                acc[genre] = (acc[genre] ?? 0) + 1
+                return acc
+              }, {}),
+            ).map(([genre, n]) => (
+              <p key={genre}>
+                {genre}: {n}
+              </p>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              {t('classifier.cancel')}
+            </Button>
+            <Button
+              onClick={() =>
+                void runApply(
+                  '/api/classify-apply',
+                  { moves, excludeRoots, destRoot },
+                  t('classifier.moveDone'),
+                )
+              }
+            >
+              {t('classifier.move')} · {moves.length}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('classifier.history')}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-72 space-y-2 overflow-auto">
+            {manifests.map((m) => (
+              <div key={m.manifestPath} className="flex items-center justify-between gap-2 text-xs">
+                <span>
+                  {new Date(m.createdAt).toLocaleString()} · {m.done}/{m.total}
+                </span>
+                {!m.undone && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      void runApply(
+                        '/api/classify-undo',
+                        { manifestPath: m.manifestPath },
+                        t('classifier.undone'),
+                      )
+                    }
+                  >
+                    {t('classifier.undo')}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function FolderField({
+  label,
+  value,
+  onClick,
+}: {
+  label: string
+  value: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex min-w-0 items-center gap-2 rounded border border-line px-3 py-2 text-left hover:border-brand"
+    >
+      <FolderOpen className="size-4 shrink-0 text-brand" />
+      <span className="min-w-0">
+        <span className="block text-zinc-500">{label}</span>
+        <span className="block truncate font-mono text-zinc-200">{value || '—'}</span>
+      </span>
+    </button>
   )
 }
 

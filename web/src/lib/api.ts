@@ -163,7 +163,7 @@ export function dispatchSseLine(line: string, handlers: StreamHandlers): void {
       return
     }
     case 'result': {
-      handlers.onResult?.(data.results)
+      handlers.onResult?.(data.results ?? data)
       return
     }
     case 'complete': {
