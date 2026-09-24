@@ -639,6 +639,35 @@ caché en `.cache/embeddings/<backend>/<sha1(path|size|mtime)>.npy` (dentro del 
    `excludeRoots`, validaciones 400, y que el árbol de entrada queda idéntico (mismos mtimes) tras correr.
 **Gate:** `node --test tests/*.test.js` exit 0 + corrida real del cerebro sobre `MUSIC BACKUP` con `excludeRoots=[…/2026]` (solo lectura).
 
+### E3 · Aplicar movimientos con manifiesto y deshacer (back, crítico)
+1. `config/genre-aliases.json`: agregar alias Afro House ← "Afro / Latin / Brazilian", "Afro Melodic"; Electronica ← "Electronica / Downtempo".
+   `src/tag-classifier.js`: marcar `possibleDuplicate: true` (sin cambiar `status`) si existe en un `excludeRoot` un archivo con el mismo
+   nombre (sin distinguir mayúsculas) aunque el tamaño difiera (corrida real: 6 casos).
+2. `POST /api/classify-apply` (SSE, progreso por archivo) body `{ moves:[{from,to}], excludeRoots, destRoot }`:
+   - Validar **cada** movimiento antes de mover nada: `from` existe, es audio soportado y **no** está dentro de un `excludeRoot`;
+     `to` está dentro de `destRoot`; `destRoot` no está dentro de un `excludeRoot`. Un solo movimiento inválido → 400 y no se mueve nada.
+   - Escribir primero el manifiesto `destRoot/.musickind/manifests/<ISO>.json` `{createdAt, destRoot, moves:[{from,to,status:'pending'}]}`.
+   - Mover uno por uno: crear carpeta; si `to` existe, sufijo ` (2)`, ` (3)`… (nunca sobrescribir); `fs.rename`, y si falla con `EXDEV`,
+     copiar + verificar tamaño + borrar origen. Actualizar el manifiesto tras cada archivo (`done`/`error` con motivo). Cancelable.
+3. `GET /api/classify-manifests?destRoot=` lista manifiestos (fecha, total, hechos, deshecho sí/no). `POST /api/classify-undo`
+   `{ manifestPath }` (SSE): mueve de vuelta cada `done` si `to` sigue existiendo y `from` está libre (si no, `error` sin tocar);
+   marca `undone` en el manifiesto. El manifiesto debe estar dentro de `destRoot/.musickind/manifests`.
+4. Tests node en tmp: movimiento válido, colisión con sufijo, rechazo de `from` dentro de exclude (nada se mueve), rechazo de `to` fuera de
+   destRoot, cancelación a mitad deja manifiesto coherente, deshacer completo, deshacer con destino ocupado, EXDEV simulado.
+**Gate:** node tests exit 0 + corrida real del cerebro sobre una **copia** de 5 pistas (no sobre el backup).
+
+### E2 · Vista "Clasificar por etiquetas" (front)
+Modo por defecto del Clasificador (el método viejo queda en un `Select` "Método: Etiquetas (recomendado) · Reglas online").
+1. Tres carpetas: Carpeta a clasificar · Ejemplos protegidos (excluidas; se guardan en `localStorage` como conveniencia) · Destino
+   (por defecto `<carpeta a clasificar>/Clasificado`). Analizar → `/api/classify-by-tags`.
+2. Tabla virtualizada (`@tanstack/react-virtual`; 2,487 filas fluidas) con: carátula, título/artista, tag original, género propuesto
+   (Select con los canónicos + "Por revisar"; editable por fila y **en lote** para las seleccionadas), estado (Propuesto · Por revisar ·
+   Posible duplicado de ejemplos) y destino. Filtros por estado y por género con conteos; barra de distribución.
+3. "Mover N propuestas" → diálogo de confirmación con conteo por género y destino → `/api/classify-apply` solo con filas `ok` o
+   corregidas (nunca "Por revisar" ni duplicados); progreso; al terminar toast con "Deshacer" (`/api/classify-undo`) y panel "Historial"
+   (manifiestos). Reproductor, selección y carátulas como el resto.
+4. Tests vitest: construcción de `moves` (excluye revisar/duplicados, respeta correcciones), filtros y conteos, lote de cambio de género.
+
 ## Fuera de alcance
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)
