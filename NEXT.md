@@ -36,7 +36,14 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
 8. [x] **Lote 5** — S1 stems a elección + escucha por carril (verificado en vivo: envía `stems:"vocals"`, solo Voces audible) · S1.1 carriles no generados ocultos · C1 botón Instalar Chromaprint (brew/winget).
    **Antes de distribuir:** la app empaquetada abierta desde Finder no hereda el PATH de la terminal → no encontrará `ffmpeg`/`fpcalc`/`brew` en `/opt/homebrew/bin`. Resolver con rutas conocidas o binarios incluidos (junto con fijar versiones y Python propio).
 
-9. [ ] **Lote 6 — Clasificar por ejemplos** (`design/SPEC.md` § Lote 6): E0 medición [x] (audio ≈ base; tag ~97%) · E1 motor por tags [x] (corrida real solo lectura: 2,487 → 2,241 ok / 246 revisar, 1m22s, disco intacto) · E2 vista · E3 mover aprobado a `Clasificado/<Género>` con deshacer · E4 `.m3u8` del set. `2026/` intocable.
+9. [~] **Lote 6 — Clasificar por ejemplos** (`design/SPEC.md` § Lote 6). **PAUSADO 2026-09-24 a pedido de Carlos.**
+   - [x] E0 medición (audio ≈ base "siempre Tech house"; tag ~97%) · [x] E1 motor por tags (`0ee9157`) · [x] E3 mover con manifiesto/deshacer (verificado sobre copia) · [x] E3.1 excluir destino + validar deshacer (`5b528a1`).
+   - [ ] **E2 vista "Clasificar por etiquetas"**: hecha por Luna, **SIN COMMIT y NO VERIFICADA** (working tree: `web/src/views/Classifier.tsx`, `web/src/lib/tag-classifier.ts`, `api.ts`, i18n, `web/package.json` con `@tanstack/react-virtual`).
+   - [ ] **E2.1 CRÍTICO** (spec escrita, commit `docs: E2.1…`): la corrida de Luna se **interrumpió a mitad** → `src/server.js` puede tener cambios parciales. Al retomar: `git diff src/server.js`, decidir si descartar solo ese archivo, y re-delegar E2.1 completo a `gpt-6-luna`.
+     Motivo: en QA sin carpeta protegida la vista analizó 2,684 pistas incluyendo `2026` y ofreció "Mover 2443". Nada se movió (disco verificado intacto, sin `Clasificado/`).
+   - **No usar la vista E2 sobre el backup real hasta cerrar E2.1** (`protectedRoots` en el servidor).
+   - Pendiente después: E4 `.m3u8` Warmup/Peak/Closing; E0b (entrenar audio con las ~2,300 etiquetadas para sugerir en las ~190 sin tag).
+   - QA: servidor aparte en `PORT=3099` con `MUSIC_KIND_DATA_DIR="$HOME/Library/Application Support/MusicKind"`; copia de prueba del backup en el scratchpad de la sesión (temporal).
 
 **Siguiente (propuesto):** QA manual de Carlos en Electron (audio audible, arrastrar carpetas) → Back 3 (puntajes de Sets normalizados) → P2 del clasificador (ordenar/deshacer con manifiesto) → F9 corte `ui/`→`web/dist`. Back 1b (libkeyfinder) y la pérdida de remixer en `identify` como mejoras.
 
