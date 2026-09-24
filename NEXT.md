@@ -19,7 +19,10 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
 4. [~] **Front 2** — lote en `design/SPEC.md` § "Lote Front 2 (resto)".
    - [x] Convertidor — verificado en vivo (MP3→WAV, tags en fila/Inspector, tonalidad nula = —). Commit `9f90ea2`.
    - [x] L1 Metadatos — `identify` con `preview` (no escribe ni renombra; verificado con Spotify real, mtime igual), formulario con original tachado, tonalidad del tag (`Amin`→8A). Pendiente de producto: identify reemplaza "Chocolate Spread, Oscar P" por "Chocolate Spread" (pierde remixer).
-   - [ ] L2 Configuración · [ ] L3 Sets · [ ] L4 Clasificador · [ ] L5 Stems (demucs no instalado en QA)
+   - [ ] L2 Configuración ·
+   - [x] L3 Sets — 4 carpetas, agrupado por sección con rango BPM, medidor 3 segmentos, curva de energía, puntajes en Inspector (verificado en vivo con copias).
+     **Mejora de back pendiente (Back 3):** `style_analyzer.py` da 93–100% a casi todo (cosine sobre features sin normalizar; tempo domina) → estandarizar features (z-score por feature sobre las referencias) antes del coseno y medir separación.
+   - [ ] L4 Clasificador · [ ] L5 Stems (demucs no instalado en QA)
 
 Sigue pendiente en paralelo: revisión Terra del back (`e0c0424`), P1/P2 del clasificador, F3 contrato de escritura de tags.
 
