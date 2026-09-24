@@ -18,7 +18,8 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
    Nota: el plugin `impeccable` del entorno Codex crea `.impeccable/` en la raíz y empuja a Luna a añadir supresiones; se borró. Ignorado en `.gitignore`.
 4. [~] **Front 2** — lote en `design/SPEC.md` § "Lote Front 2 (resto)".
    - [x] Convertidor — verificado en vivo (MP3→WAV, tags en fila/Inspector, tonalidad nula = —). Commit `9f90ea2`.
-   - [ ] L1 Metadatos (+ `identify` con `preview`) · [ ] L2 Configuración · [ ] L3 Sets · [ ] L4 Clasificador · [ ] L5 Stems (demucs no instalado en QA)
+   - [x] L1 Metadatos — `identify` con `preview` (no escribe ni renombra; verificado con Spotify real, mtime igual), formulario con original tachado, tonalidad del tag (`Amin`→8A). Pendiente de producto: identify reemplaza "Chocolate Spread, Oscar P" por "Chocolate Spread" (pierde remixer).
+   - [ ] L2 Configuración · [ ] L3 Sets · [ ] L4 Clasificador · [ ] L5 Stems (demucs no instalado en QA)
 
 Sigue pendiente en paralelo: revisión Terra del back (`e0c0424`), P1/P2 del clasificador, F3 contrato de escritura de tags.
 

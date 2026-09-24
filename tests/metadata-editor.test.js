@@ -9,6 +9,7 @@ import {
   generateFilename,
   writeMetadata,
   readMetadata,
+  identifyAndTag,
 } from "../src/metadata_editor.js";
 
 function ffmpegAvailable() {
@@ -185,4 +186,35 @@ test("writeMetadata no escribe bpm/key cuando no se proveen", { skip: !ffmpegAva
   const lowerKeys = Object.keys(tags).map((k) => k.toLowerCase());
   assert.ok(!lowerKeys.includes("tbpm") && !lowerKeys.includes("bpm"));
   assert.ok(!lowerKeys.includes("tkey") && !lowerKeys.includes("initialkey"));
+});
+
+test("identifyAndTag preview no escribe ni renombra el archivo", { skip: !ffmpegAvailable() }, async () => {
+  const dir = makeTempDir();
+  const filePath = makeToneFile(dir);
+  const before = fs.statSync(filePath);
+
+  const result = await identifyAndTag(filePath, null, {
+    artist: "Bicep",
+    title: "Glue",
+    album: "Isles",
+    year: 2021,
+  }, { preview: true });
+
+  const after = fs.statSync(filePath);
+  assert.deepEqual(result, {
+    ok: true,
+    original: "tone.mp3",
+    metadata: {
+      title: "Glue",
+      artist: "Bicep",
+      album: "Isles",
+      year: 2021,
+      genre: "",
+      track: null,
+    },
+    newFilename: "Bicep - Glue.mp3",
+  });
+  assert.equal(after.mtimeMs, before.mtimeMs);
+  assert.ok(fs.existsSync(filePath));
+  assert.equal(fs.existsSync(path.join(dir, "Bicep - Glue.mp3")), false);
 });

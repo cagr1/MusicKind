@@ -117,5 +117,31 @@
     "original": "Original",
     "target": "Target",
     "output": "Output"
+  },
+  "metadata": {
+    "title": "Metadata",
+    "files": "files",
+    "chooseFolder": "Choose a folder",
+    "selectFolder": "Choose music folder",
+    "noFiles": "No audio files were found in this folder.",
+    "identify": "Identify",
+    "cancel": "Cancel",
+    "identifyError": "The file could not be identified.",
+    "identifyDone": "Identification complete",
+    "openSettings": "Go to Settings",
+    "retry": "Try again",
+    "saved": "Metadata saved",
+    "save": "Save",
+    "cancelEdit": "Discard",
+    "tableTrack": "Track",
+    "tableAlbum": "Album",
+    "tableYear": "Year",
+    "titleField": "Title",
+    "artistField": "Artist",
+    "albumField": "Album",
+    "yearField": "Year",
+    "genreField": "Genre",
+    "trackField": "Track number",
+    "filenameField": "New filename"
   }
 }

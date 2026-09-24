@@ -443,9 +443,16 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
   if (req.method === "POST" && url.pathname === "/api/metadata/identify") {
     const body = await readJsonBody(req);
     const filePath = body.filePath ? String(body.filePath) : "";
+    const preview = body.preview === true;
 
     if (!filePath) {
       return sendJson(res, { ok: false, error: "filePath required" }, 400);
+    }
+    if (!path.isAbsolute(filePath)) {
+      return sendJson(res, { ok: false, error: `Ruta no absoluta: se recibió "${filePath}". Se requiere una ruta absoluta.` }, 400);
+    }
+    if (!fs.existsSync(filePath)) {
+      return sendJson(res, { ok: false, error: `No se encontró el archivo: ${filePath}` }, 400);
     }
 
     try {
@@ -532,7 +539,7 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
         return sendJson(res, { ok: false, error: err }, 400);
       }
 
-      const result = await identifyAndTag(filePath, spotify, identifyResult);
+      const result = await identifyAndTag(filePath, spotify, identifyResult, { preview });
       return sendJson(res, result);
     } catch (error) {
       return sendJson(res, { ok: false, error: error.message }, 400);

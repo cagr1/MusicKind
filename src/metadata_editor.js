@@ -217,7 +217,12 @@ export function generateFilename(metadata, format = "{artist} - {title}") {
   return filename;
 }
 
-export async function identifyAndTag(filePath, spotifyClient, identifyResult = null) {
+export async function identifyAndTag(
+  filePath,
+  spotifyClient,
+  identifyResult = null,
+  { preview = false } = {}
+) {
   const currentData = await readMetadata(filePath);
   const currentMeta = currentData.metadata;
 
@@ -277,6 +282,17 @@ export async function identifyAndTag(filePath, spotifyClient, identifyResult = n
     throw new Error(
       "No se pudo identificar la canción. Configura tu clave API de AcoustID en Ajustes."
     );
+  }
+
+  const proposedFilename = `${generateFilename(newMetadata)}${path.extname(filePath)}`;
+
+  if (preview) {
+    return {
+      ok: true,
+      original: currentData.file.name,
+      metadata: newMetadata,
+      newFilename: proposedFilename
+    };
   }
 
   // 5. Write tags and rename file.

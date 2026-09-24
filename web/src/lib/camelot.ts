@@ -26,13 +26,53 @@ export const CAMELOT_MAP: Record<string, CamelotInfo> = Object.fromEntries(
   }),
 ) as Record<string, CamelotInfo>
 
+const PITCH_CLASSES: Record<string, number> = {
+  C: 0, 'B#': 0,
+  'C#': 1, Db: 1,
+  D: 2,
+  'D#': 3, Eb: 3,
+  E: 4, Fb: 4,
+  F: 5, 'E#': 5,
+  'F#': 6, Gb: 6,
+  G: 7,
+  'G#': 8, Ab: 8,
+  A: 9,
+  'A#': 10, Bb: 10,
+  B: 11, Cb: 11,
+}
+
+const CAMELOT_BY_PITCH_AND_MODE: Record<string, string> = {
+  '0-major': '8B', '1-major': '3B', '2-major': '10B', '3-major': '5B',
+  '4-major': '12B', '5-major': '7B', '6-major': '2B', '7-major': '9B',
+  '8-major': '4B', '9-major': '11B', '10-major': '6B', '11-major': '1B',
+  '0-minor': '5A', '1-minor': '12A', '2-minor': '7A', '3-minor': '2A',
+  '4-minor': '9A', '5-minor': '4A', '6-minor': '11A', '7-minor': '6A',
+  '8-minor': '1A', '9-minor': '8A', '10-minor': '3A', '11-minor': '10A',
+}
+
 export function normalizeCamelot(keyStr: string | null | undefined): string | null {
-  const normalized = keyStr?.trim().toUpperCase() ?? ''
+  if (typeof keyStr !== 'string') return null
+  const normalized = keyStr.trim().toUpperCase()
   if (CAMELOT_MAP[normalized]) return normalized
   const musicalMatch = Object.values(CAMELOT_MAP).find(
     (info) => info.musicalKey.toUpperCase() === normalized,
   )
-  return musicalMatch?.key ?? null
+  if (musicalMatch) return musicalMatch.key
+
+  const camelot = normalized.match(/^(0?[1-9]|1[0-2])\s*([AB])$/)
+  if (camelot) {
+    const candidate = `${Number(camelot[1])}${camelot[2]}`
+    return CAMELOT_MAP[candidate] ? candidate : null
+  }
+
+  const musical = keyStr.trim().match(/^([A-Ga-g])([#b]?)(?:\s*(m|min|minor|maj|major))?$/i)
+  if (!musical) return null
+  const pitchName = musical[1].toUpperCase() + musical[2]
+  const pitchClass = PITCH_CLASSES[pitchName]
+  if (pitchClass === undefined) return null
+  const suffix = (musical[3] ?? '').toLowerCase()
+  const mode = ['m', 'min', 'minor'].includes(suffix) ? 'minor' : 'major'
+  return CAMELOT_BY_PITCH_AND_MODE[`${pitchClass}-${mode}`] ?? null
 }
 
 export function getHarmonicMatches(keyStr: string | null | undefined) {

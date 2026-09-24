@@ -5,11 +5,28 @@ describe('camelot utilities', () => {
   it('normalizes valid Camelot and musical keys', () => {
     expect(normalizeCamelot(' 8a ')).toBe('8A')
     expect(normalizeCamelot('Am')).toBe('8A')
+    expect(normalizeCamelot('Amin')).toBe('8A')
+    expect(normalizeCamelot('A minor')).toBe('8A')
+    expect(normalizeCamelot('A Minor')).toBe('8A')
+    expect(normalizeCamelot('Amaj')).toBe('11B')
+    expect(normalizeCamelot('A major')).toBe('11B')
+    expect(normalizeCamelot('A')).toBe('11B')
+    expect(normalizeCamelot('F#m')).toBe('11A')
+    expect(normalizeCamelot('Gbm')).toBe('11A')
+    expect(normalizeCamelot('Dbm')).toBe('12A')
+    expect(normalizeCamelot('C#maj')).toBe('3B')
+    expect(normalizeCamelot('C#')).toBe('3B')
+    expect(normalizeCamelot('Bb')).toBe('6B')
+    expect(normalizeCamelot('08A')).toBe('8A')
+    expect(normalizeCamelot('12B')).toBe('12B')
   })
 
   it('returns null for missing or invalid keys', () => {
     expect(normalizeCamelot(null)).toBeNull()
     expect(normalizeCamelot('unknown')).toBeNull()
+    expect(normalizeCamelot('')).toBeNull()
+    expect(normalizeCamelot('13A')).toBeNull()
+    expect(normalizeCamelot('xyz')).toBeNull()
   })
 
   it('returns exact, relative and energy neighbours', () => {

@@ -344,6 +344,13 @@ salida redirigida a carpeta temporal) y hace commit antes de delegar la siguient
   zinc-600 / nuevo zinc-100; Guardar → `POST /api/metadata/write` y, si cambió el nombre, `POST /api/metadata/rename`; Cancelar descarta.
   Sin claves (identify responde 400 "Falta la clave API…"): mensaje accionable con botón a Configuración.
 
+### L1.1 · Corrección tras QA en vivo (2026-09-23)
+QA: identify con `preview` no toca el archivo (mtime y nombre iguales) y la vista muestra propuestas y formulario. Falta:
+1. `web/src/views/Metadata.tsx:75-76` fija `bpm: null, key: null`: usar `bpm`/`key` del tag (ya vienen de `/api/metadata`).
+2. `normalizeCamelot` (`web/src/lib/camelot.ts:29`) solo entiende `Am`/`8A`. Paridad con `parse_key` de `src/key_detection.py`: `Amin`, `A minor`,
+   `A Minor`, `Amaj`, `A major`, `A`, sostenidos/bemoles con enarmónicos (`Gbm`→11A, `Dbm`→12A, `C#maj`→3B, `C#`→3B, `Bb`→6B), Camelot
+   `8A`/`08A`/`12B`; basura (`""`, `xyz`, `13A`) → `null`. Tests vitest con esos mismos casos. (Tag real que falló: `Amin` → debe dar `8A`.)
+
 ### L2 · Configuración
 - `design/prototype/src/views/Settings.tsx`, una columna. `GET/POST /api/settings` (spotifyClientId, spotifyClientSecret, lastfmApiKey,
   acoustidApiKey, language, defaultOutputDir). Secretos con botón de icono mostrar/ocultar. Carpeta de salida con `electron.openDirectory`.
