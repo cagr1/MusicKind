@@ -23,6 +23,8 @@ import { LineBuffer } from "./line-buffer.js";
 import { parseFile } from "music-metadata";
 import { applyClassifyMoves, listClassifyManifests, undoClassifyManifest, validateMoves } from "./classify-apply.js";
 import { createSetPlaylists, listSetPlaylistGenres } from "./set-playlists.js";
+import { getDataDir } from "./python-env.js";
+import { loadLearnedCatalog } from "./tag-classifier.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -163,9 +165,28 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
   if (req.method === "GET" && url.pathname === "/api/genre-aliases") {
     try {
       const aliases = JSON.parse(fs.readFileSync(path.join(projectRoot, "config", "genre-aliases.json"), "utf8"));
-      return sendJson(res, { canonical: Object.keys(aliases) });
+      const catalog = JSON.parse(fs.readFileSync(path.join(projectRoot, "config", "genre-catalog.json"), "utf8"));
+      const styles = Object.values(catalog.families ?? {}).flat();
+      return sendJson(res, { canonical: [...new Set([...Object.keys(aliases), ...styles])] });
     } catch {
       return sendJson(res, { ok: false, error: "No se pudieron cargar los géneros canónicos" }, 500);
+    }
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/genre-catalog") {
+    try {
+      const factory = JSON.parse(fs.readFileSync(path.join(projectRoot, "config", "genre-catalog.json"), "utf8"));
+      const learned = loadLearnedCatalog(path.join(getDataDir(projectRoot), "genre-catalog-learned.json"));
+      const families = {};
+      for (const name of new Set([...Object.keys(factory.families ?? {}), ...Object.keys(learned.families ?? {})])) {
+        families[name] = {
+          factory: factory.families?.[name] ?? [],
+          learned: learned.families?.[name] ?? [],
+        };
+      }
+      return sendJson(res, { families });
+    } catch {
+      return sendJson(res, { ok: false, error: "No se pudo cargar el catálogo de géneros" }, 500);
     }
   }
 
@@ -186,19 +207,17 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     const body = await readJsonBody(req);
     const inputRoot = typeof body.inputRoot === "string" ? body.inputRoot : "";
     const destRoot = typeof body.destRoot === "string" ? body.destRoot : "";
-    const pathValues = [inputRoot, destRoot];
-    if (!inputRoot || !destRoot) {
-      return sendJson(res, { ok: false, error: "inputRoot y destRoot requeridos" }, 400);
-    }
-    if (pathValues.some((value) => !path.isAbsolute(value))) {
+    const inputPaths = Array.isArray(body.inputPaths) ? body.inputPaths : [];
+    const inputs = inputPaths.length ? inputPaths : inputRoot ? [inputRoot] : [];
+    if (!inputs.length || inputs.some((value) => typeof value !== "string" || !path.isAbsolute(value)) || (destRoot && !path.isAbsolute(destRoot))) {
       return sendJson(res, { ok: false, error: "Todas las rutas deben ser absolutas" }, 400);
     }
-    const normalized = pathValues.map((value) => path.resolve(value));
-    const [input, destination] = normalized;
-    if (!fs.existsSync(input) || !fs.statSync(input).isDirectory()) {
-      return sendJson(res, { ok: false, error: "inputRoot debe ser una carpeta existente" }, 400);
+    const normalizedInputs = inputs.map((value) => path.resolve(value));
+    if (normalizedInputs.some((input) => !fs.existsSync(input))) {
+      return sendJson(res, { ok: false, error: "Todas las entradas deben existir" }, 400);
     }
-    const args = [path.join(projectRoot, "src", "tag-classifier-cli.js"), "--input-root", input, "--dest-root", destination];
+    const args = [path.join(projectRoot, "src", "tag-classifier-cli.js"), "--input-paths", JSON.stringify(normalizedInputs)];
+    if (destRoot) args.push("--dest-root", path.resolve(destRoot));
     if (body.online === false) args.push("--no-online");
     const processId = body.processId || `tags-${Date.now()}`;
     await runProcessWithProgress(process.execPath, args, res, processId, { parseJsonResult: true });

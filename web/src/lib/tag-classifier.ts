@@ -2,7 +2,8 @@ export interface TagResult {
   path: string
   tagGenre: string | null
   genre: string | null
-  status: 'ok' | 'review'
+  family?: string | null
+  status: 'ok' | 'family' | 'review'
   reason?: string | null
   destination: string | null
   title?: string
@@ -17,7 +18,10 @@ export type TagStatusFilter = 'all' | TagResult['status'] | 'online'
 
 export function buildClassifyMoves(results: TagResult[]) {
   return results
-    .filter((result) => result.status === 'ok' && result.genre && result.destination)
+    .filter(
+      (result) =>
+        result.status !== 'review' && (result.genre || result.family) && result.destination,
+    )
     .map((result) => ({ from: result.path, to: result.destination as string }))
 }
 
@@ -26,10 +30,16 @@ export function filterTagResults(results: TagResult[], status: TagStatusFilter, 
     const statusMatches = status === 'all' || result.status === status
     const onlineMatches =
       status === 'online'
-        ? result.status === 'ok' &&
+        ? result.status !== 'review' &&
           (result.genreSource === 'lastfm' || result.genreSource === 'discogs')
         : statusMatches
-    return onlineMatches && (genre === 'all' || (result.genre ?? 'review') === genre)
+    return (
+      onlineMatches &&
+      (genre === 'all' ||
+        (genre.startsWith('family:')
+          ? result.family === genre.slice(7)
+          : (result.genre ?? 'review') === genre))
+    )
   })
 }
 
@@ -38,6 +48,7 @@ export function tagResultCounts(results: TagResult[]) {
     all: results.length,
     ok: results.filter((result) => result.status === 'ok').length,
     review: results.filter((result) => result.status === 'review').length,
+    family: results.filter((result) => result.status === 'family').length,
     online: results.filter(
       (result) =>
         result.status === 'ok' &&
@@ -57,11 +68,21 @@ export function canonicalTagDistribution(
   results: TagResult[],
   canonical: string[],
   reviewLabel: string,
+  familyLabel = 'Family only',
+  familyNames: Record<string, string> = {},
 ) {
   const allowed = new Set(canonical)
   const counts = new Map<string, number>()
   for (const result of results) {
-    const genre = result.genre && allowed.has(result.genre) ? result.genre : reviewLabel
+    const family = result.family ? (familyNames[result.family] ?? result.family) : '—'
+    const genre =
+      result.genre && allowed.has(result.genre)
+        ? result.family
+          ? `${family} → ${result.genre}`
+          : result.genre
+        : result.family
+          ? `${family} · ${familyLabel}`
+          : reviewLabel
     counts.set(genre, (counts.get(genre) ?? 0) + 1)
   }
   const total = results.length
@@ -88,9 +109,10 @@ export function changeTagGenre(
     return {
       ...result,
       genre: genre === 'review' ? null : genre,
+      family: null,
       status,
       destination:
-        genre === 'review'
+        genre === 'review' || !destRoot
           ? null
           : `${destRoot.replace(/[\\/]$/, '')}/${genre}/${result.path.split(/[\\/]/).pop()}`,
     }

@@ -42,9 +42,29 @@ describe('tag classifier view logic', () => {
     expect(tagResultCounts(rows)).toEqual({
       all: 3,
       ok: 2,
+      family: 0,
       review: 1,
       online: 0,
     })
+  })
+
+  it('keeps family-only rows separate and cannot create moves without a destination', () => {
+    const familyRow: TagResult = {
+      path: '/music/rock.mp3',
+      tagGenre: 'Rock',
+      genre: null,
+      family: 'Rock',
+      status: 'family',
+      destination: null,
+    }
+    expect(filterTagResults([familyRow], 'family', 'all')).toEqual([familyRow])
+    expect(buildClassifyMoves([familyRow])).toEqual([])
+    expect(canonicalTagDistribution([familyRow], [], 'Review', 'Family only')).toMatchObject([
+      { genre: 'Rock · Family only', count: 1 },
+    ])
+    expect(
+      changeTagGenre([familyRow], [familyRow.path], 'Rock & Roll', '')[0].destination,
+    ).toBeNull()
   })
 
   it('keeps the back canonical genre when metadata fills track fields', () => {

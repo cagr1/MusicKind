@@ -538,6 +538,7 @@ function LegacyClassifier({
 
 interface TagClassifierSnapshot {
   inputRoot: string
+  inputPaths: string[]
   destRoot: string
   results: TagResult[]
   selectedPath: string | null
@@ -558,6 +559,10 @@ function TagClassifier({
   const { results: savedResults, setResult, active, setActive } = useProcess()
   const savedSnapshot = savedResults['classifier-tags'] as TagClassifierSnapshot | undefined
   const [inputRoot, setInputRoot] = React.useState(() => savedSnapshot?.inputRoot ?? '')
+  const [inputPaths, setInputPaths] = React.useState<string[]>(
+    () => savedSnapshot?.inputPaths ?? [],
+  )
+  const [addedFileCount, setAddedFileCount] = React.useState(0)
   const [genres, setGenres] = React.useState<string[]>([])
   const [destRoot, setDestRoot] = React.useState(() => savedSnapshot?.destRoot ?? '')
   const [results, setResults] = React.useState<TagResult[]>(() => savedSnapshot?.results ?? [])
@@ -610,6 +615,7 @@ function TagClassifier({
   React.useEffect(() => {
     setResult('classifier-tags', {
       inputRoot,
+      inputPaths,
       destRoot,
       results,
       selectedPath,
@@ -621,6 +627,7 @@ function TagClassifier({
     destRoot,
     genreFilter,
     inputRoot,
+    inputPaths,
     results,
     selectedPath,
     selectedPaths,
@@ -672,7 +679,7 @@ function TagClassifier({
     if (path) setter(path)
   }
   const analyze = async () => {
-    if (!inputRoot || !destRoot || isBusy) return
+    if ((!inputRoot && !inputPaths.length) || isBusy) return
     setError(null)
     setResults([])
     setSelectedPath(null)
@@ -681,7 +688,11 @@ function TagClassifier({
     setActive({ view: 'classifier-tags', name: t('classifier.title'), status: 'running' })
     await streamProcess(
       '/api/classify-by-tags',
-      { inputRoot, destRoot },
+      {
+        inputRoot: inputPaths.length ? undefined : inputRoot,
+        inputPaths: inputPaths.length ? inputPaths : undefined,
+        destRoot: destRoot || undefined,
+      },
       {
         onStart: (processId) => setActive({ processId, status: 'running' }),
         onProgress: (p) => {
@@ -694,6 +705,7 @@ function TagClassifier({
           setResults(rows)
           setResult('classifier-tags', {
             inputRoot,
+            inputPaths,
             destRoot,
             results: rows,
             selectedPath: rows[0]?.path ?? null,
@@ -709,6 +721,7 @@ function TagClassifier({
               )
               setResult('classifier-tags', {
                 inputRoot,
+                inputPaths,
                 destRoot,
                 results: updated,
                 selectedPath: rows[0]?.path ?? null,
@@ -869,7 +882,30 @@ function TagClassifier({
       }
     : null
   const distribution = React.useMemo(
-    () => canonicalTagDistribution(results, genres, t('classifier.review')),
+    () =>
+      canonicalTagDistribution(
+        results,
+        genres,
+        t('classifier.review'),
+        t('classifier.statuses.family'),
+        {
+          Electronic: t('classifier.families.Electronic'),
+          Latin: t('classifier.families.Latin'),
+          Rock: t('classifier.families.Rock'),
+          Pop: t('classifier.families.Pop'),
+          'Hip Hop': t('classifier.families.Hip Hop'),
+          Jazz: t('classifier.families.Jazz'),
+          'Funk / Soul': t('classifier.families.Funk / Soul'),
+          Reggae: t('classifier.families.Reggae'),
+          Blues: t('classifier.families.Blues'),
+          Classical: t('classifier.families.Classical'),
+          'Folk, World, & Country': t('classifier.families.Folk, World, & Country'),
+          'Stage & Screen': t('classifier.families.Stage & Screen'),
+          'Brass & Military': t('classifier.families.Brass & Military'),
+          "Children's": t("classifier.families.Children's"),
+          'Non-Music': t('classifier.families.Non-Music'),
+        },
+      ),
     [results, genres, t],
   )
   return (
@@ -913,7 +949,7 @@ function TagClassifier({
             <Button
               size="sm"
               onClick={() => void analyze()}
-              disabled={isBusy || !inputRoot || !destRoot}
+              disabled={isBusy || (!inputRoot && !inputPaths.length)}
             >
               <Activity />
               {t('classifier.analyze')}
@@ -921,7 +957,8 @@ function TagClassifier({
             <Button
               size="sm"
               onClick={() => setConfirmOpen(true)}
-              disabled={isBusy || moves.length === 0}
+              disabled={isBusy || moves.length === 0 || !destRoot}
+              title={!destRoot ? t('classifier.chooseDestinationToMove') : undefined}
             >
               {t('classifier.move')} · {moves.length}
             </Button>
@@ -934,6 +971,7 @@ function TagClassifier({
             onClick={() =>
               void choose(t('classifier.inputRoot'), (p) => {
                 setInputRoot(p)
+                setInputPaths([p])
                 if (!destRoot) setDestRoot(`${p}/Clasificado`)
               })
             }
@@ -942,7 +980,30 @@ function TagClassifier({
             label={t('classifier.destRoot')}
             value={destRoot}
             onClick={() => void choose(t('classifier.destRoot'), setDestRoot)}
+            emptyLabel={t('classifier.analyzeNoDestination')}
+            clearLabel={t('classifier.clearDestination')}
+            onClear={() => setDestRoot('')}
           />
+          <div className="flex gap-2 md:col-span-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                void electron.openFiles(t('classifier.addFiles'), true).then((picked) => {
+                  const paths = typeof picked === 'string' ? [picked] : (picked ?? [])
+                  setInputPaths((current) => [...new Set([...current, ...paths])])
+                  setAddedFileCount((count) => count + paths.length)
+                })
+              }
+            >
+              {t('classifier.addFiles')}
+            </Button>
+            <span className="self-center text-zinc-500">
+              {addedFileCount > 0
+                ? `${addedFileCount} ${t(addedFileCount === 1 ? 'classifier.addedFile' : 'classifier.addedFiles')}`
+                : ''}
+            </span>
+          </div>
         </div>
         {isBusy && (
           <div className="border-b border-line px-5 py-2 font-mono text-[11px] text-zinc-400">
@@ -963,9 +1024,11 @@ function TagClassifier({
             onAction={() => void choose(t('classifier.inputRoot'), setInputRoot)}
             onDrop={(event) => {
               event.preventDefault()
-              void resolveDroppedFiles(event.dataTransfer.files).then(
-                (paths) => paths[0] && setInputRoot(paths[0]),
-              )
+              void resolveDroppedFiles(event.dataTransfer.files).then((paths) => {
+                setInputRoot('')
+                setInputPaths((current) => [...new Set([...current, ...paths])])
+                setAddedFileCount((count) => count + paths.length)
+              })
             }}
           />
         ) : (
@@ -982,7 +1045,7 @@ function TagClassifier({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(['all', 'ok', 'online', 'review'] as TagStatusFilter[]).map((v) => (
+                  {(['all', 'ok', 'family', 'online', 'review'] as TagStatusFilter[]).map((v) => (
                     <SelectItem key={v} value={v}>
                       {t(`classifier.statuses.${v}` as TranslationKey)} ·{' '}
                       {counts[v === 'all' ? 'all' : v]}
@@ -999,6 +1062,17 @@ function TagClassifier({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">{t('classifier.allGenres')}</SelectItem>
+                  {Array.from(
+                    new Set(
+                      results
+                        .map((r) => r.family)
+                        .filter((family): family is string => Boolean(family)),
+                    ),
+                  ).map((family) => (
+                    <SelectItem key={`family:${family}`} value={`family:${family}`}>
+                      {t(`classifier.families.${family}` as TranslationKey)}
+                    </SelectItem>
+                  ))}
                   {genres.map((g) => (
                     <SelectItem key={g} value={g}>
                       {g}
@@ -1030,7 +1104,8 @@ function TagClassifier({
                 </SelectContent>
               </Select>
               <span className="ml-auto text-[11px] text-zinc-400">
-                {counts.ok - counts.online} {t('classifier.statuses.ok')} · {counts.online}{' '}
+                {counts.ok - counts.online} {t('classifier.statuses.ok')} · {counts.family}{' '}
+                {t('classifier.statuses.family')} · {counts.online}{' '}
                 {t('classifier.statuses.online')} · {counts.review} {t('classifier.review')}
               </span>
             </div>
@@ -1107,8 +1182,12 @@ function TagClassifier({
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <Select
-                            value={row.genre ?? 'review'}
-                            onValueChange={(genre) => updateMany([row.path], genre)}
+                            value={row.genre ?? (row.family ? `family:${row.family}` : 'review')}
+                            onValueChange={(genre) =>
+                              genre.startsWith('family:')
+                                ? undefined
+                                : updateMany([row.path], genre)
+                            }
                           >
                             <SelectTrigger
                               className="h-7 w-40 text-[10px]"
@@ -1118,6 +1197,12 @@ function TagClassifier({
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="review">{t('classifier.review')}</SelectItem>
+                              {row.family && !row.genre && (
+                                <SelectItem value={`family:${row.family}`}>
+                                  {t(`classifier.families.${row.family}` as TranslationKey)} ·{' '}
+                                  {t('classifier.statuses.family')}
+                                </SelectItem>
+                              )}
                               {genres.map((g) => (
                                 <SelectItem key={g} value={g}>
                                   {g}
@@ -1153,6 +1238,16 @@ function TagClassifier({
           <div className="space-y-2 rounded border border-line bg-surface-panel p-3 text-[11px]">
             <p>
               {t('classifier.originalTag')}: {selected.tagGenre || '—'}
+            </p>
+            <p>
+              {t('classifier.genre')}: {selected.genre || '—'} · {t('classifier.family')}:{' '}
+              {selected.family
+                ? t(`classifier.families.${selected.family}` as TranslationKey)
+                : '—'}{' '}
+              ·{' '}
+              {t(
+                `classifier.sourceLabels.${selected.genreSource === 'tag' ? 'embedded' : selected.genreSource || 'unmatched'}` as TranslationKey,
+              )}
             </p>
             <p>
               {t('classifier.destination')}: {selected.destination || '—'}
@@ -1302,23 +1397,46 @@ function FolderField({
   label,
   value,
   onClick,
+  emptyLabel,
+  clearLabel,
+  onClear,
 }: {
   label: string
   value: string
   onClick: () => void
+  emptyLabel?: string
+  clearLabel?: string
+  onClear?: () => void
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex min-w-0 items-center gap-2 rounded border border-line px-3 py-2 text-left hover:border-brand"
-    >
-      <FolderOpen className="size-4 shrink-0 text-brand" />
-      <span className="min-w-0">
-        <span className="block text-zinc-500">{label}</span>
-        <span className="block truncate font-mono text-zinc-200">{value || '—'}</span>
-      </span>
-    </button>
+    <div className="flex min-w-0 items-stretch rounded border border-line hover:border-brand">
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left"
+      >
+        <FolderOpen className="size-4 shrink-0 text-brand" />
+        <span className="min-w-0">
+          <span className="block text-zinc-500">{label}</span>
+          <span className={`block truncate ${value ? 'font-mono text-zinc-200' : 'text-zinc-500'}`}>
+            {value || emptyLabel || '—'}
+          </span>
+        </span>
+      </button>
+      {value && onClear && (
+        <Button
+          type="button"
+          size="icon-sm"
+          variant="ghost"
+          className="my-auto mr-1 shrink-0"
+          onClick={onClear}
+          aria-label={clearLabel}
+          title={clearLabel}
+        >
+          <X />
+        </Button>
+      )}
+    </div>
   )
 }
 
@@ -1460,7 +1578,7 @@ function Distribution({
   const remainder = compact ? canonicalItems.slice(6) : []
   return (
     <div
-      className={`flex shrink-0 items-center gap-3 px-5 ${compact ? 'h-9 border-b border-line' : 'border-t border-line py-3'}`}
+      className={`flex shrink-0 flex-wrap items-center gap-3 px-5 ${compact ? 'min-h-9 border-b border-line py-2' : 'border-t border-line py-3'}`}
     >
       <div className="flex h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-zinc-800">
         {distribution.map((item) => (
@@ -1471,15 +1589,13 @@ function Distribution({
           />
         ))}
       </div>
-      <div
-        className={`flex items-center justify-end gap-x-3 text-[10px] text-zinc-400 ${compact ? 'min-w-0 flex-nowrap overflow-hidden' : 'max-w-[45%] flex-wrap'}`}
-      >
+      <div className="flex min-w-0 max-w-[45%] flex-wrap items-center justify-end gap-x-3 text-[10px] text-zinc-400">
         {visible.map((item) => (
-          <span key={item.genre}>
+          <span key={item.genre} className="whitespace-nowrap">
             <i
               className={`mr-1 inline-block size-1.5 rounded-full ${item.majority ? 'bg-brand' : 'bg-zinc-600'}`}
             />
-            {label(item.genre)} {item.count}
+            {label(item.genre)} · {item.count}
           </span>
         ))}
         {remainder.length > 0 && (

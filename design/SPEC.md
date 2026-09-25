@@ -1040,3 +1040,67 @@ al cerrar la app); se borra únicamente con la acción existente de limpiar o al
 **en curso** al cambiar de pestaña, al volver se ve el progreso/resultado (el proceso ya vive en `ProcessProvider`; comprobar).
 Tests vitest: desmontar y volver a montar conserva resultados, filtros y selección; limpiar los borra. No tocar otras vistas.
 **Gate:** vitest/build/lint/format:check + QA en vivo: analizar → ir a otra pestaña → volver → lista intacta.
+
+## Géneros para cualquier música (2026-09-25, decisión de Carlos)
+El usuario no tiene que saber de géneros: la app trae un catálogo de fábrica (taxonomía de Discogs: familias + estilos) y
+Configuración solo **muestra** lo detectado (G2). Analizar nunca mueve; mover sigue siendo un botón explícito.
+
+### G1 · Catálogo + familia + analizar sin destino + archivos sueltos
+1. **`config/genre-catalog.json`** (nuevo, versionado): `{ "source": "<URL Discogs>", "families": { "Electronic": [estilos…],
+   "Latin": […], "Rock": […], "Pop": […], "Hip Hop": […], "Jazz": […], "Funk / Soul": […], "Reggae": […], "Blues": […],
+   "Classical": […], "Folk, World, & Country": […], "Stage & Screen": […], "Brass & Military": […], "Children's": […],
+   "Non-Music": […] } }` con la lista oficial de estilos de Discogs (citar fuente; no inventar estilos). Añadir alias
+   latinos comunes que Beatport/tiendas usan y Discogs escribe distinto (p. ej. "Reggaeton"→"Reggaeton", "Latin Pop"→familia
+   Latin/estilo "Latin Pop" si existe, "Bachata", "Merengue", "Cumbia", "Salsa") solo si el estilo existe en el catálogo.
+   i18n es/en de los nombres de familia (Latin → "Latina", etc.); los estilos se muestran tal cual.
+2. **Resolución** (`src/tag-classifier.js`), función pura `resolveGenre(value, {aliasTable, catalog})` →
+   `{genre|null, family|null}`, en orden: (a) `config/genre-aliases.json` (los 13 electrónicos de Carlos, mandan; familia
+   Electronic), (b) estilo del catálogo (normalizado con `normalizeGenre`) → genre = estilo, family = su familia (si un estilo
+   está en varias familias, la primera en el orden del JSON), (c) nombre de familia → genre null, family = esa familia.
+   Tags genéricos (`GENERIC_ONLINE_TAGS`: electronic, dance, pop, edm…) **solo pueden fijar familia**, nunca género.
+3. **Filas**: se añade `family`. Nuevo estado `family` ("Solo familia") cuando hay familia pero no género: destino
+   `<destRoot>/<Familia>/` (en español según idioma? **no**: carpeta con el nombre de catálogo en inglés, estable). `review`
+   solo si no hay ni género ni familia. Online (Discogs) usa también `genres` de la búsqueda para la familia
+   (`discogsClient.getGenres` o el mismo resultado); Last.fm igual con el filtro de basura existente.
+4. **Destino opcional**: `/api/classify-by-tags` acepta sin `destRoot` → `destination: null` en todas las filas.
+   **Entradas**: acepta `inputPaths: [absolutas]` (archivos y/o carpetas; carpetas recursivas) además de `inputRoot`
+   (compatibilidad). UI: analizar sin destino; "Mover propuestas" deshabilitado con tooltip "Elige un destino para mover";
+   soltar/elegir uno o varios archivos o carpetas; Inspector muestra "Género · Familia · fuente (tag/Discogs/Last.fm)".
+   Filtro de estado incluye "Solo familia"; distribución arriba agrupa por familia→género.
+5. **Tests**: resolveGenre (alias manda, estilo latino, familia sola, genérico solo familia, basura → review), fila `family`,
+   sin destRoot → destinos null y 200, `inputPaths` con archivo suelto y carpeta, UI mover deshabilitado sin destino.
+No tocar Sets, Convertidor ni otras vistas; playlists E4 siguen igual. **Gate (cerebro):** node/vitest/build/lint/format:check;
+en vivo con archivos del disco (solo lectura) y copias con tags de género `Salsa`, `Rock`, `Pop`, `Reggaeton` y sin tag.
+
+### G2 · Configuración → Géneros (esbozo, tras G1)
+Colección aprendida (géneros detectados + nº de pistas, agrupados por familia, guardada en `userData`); unir y renombrar
+(afecta a análisis futuros vía alias del usuario, que tienen prioridad). Solo lectura por defecto.
+
+### G1.1 · Catálogo que aprende (revisión del cerebro)
+Medido: de 92 estilos reales devueltos por Discogs (caché de la API), 17 no están en `genre-catalog.json` (18%): Tropical House,
+Indie Pop, Pop Rock, Dance-pop, Power Pop, Prog Rock, Goth Rock, Neo Trance, Progressive Breaks, Synthpunk, Anarcho-Punk,
+Horror Rock, Jangle Pop, No Wave, Psychobilly, Sound Collage, Speech. Las familias (11 vistas) sí están todas. La página de
+estilos de Discogs responde 403: no hay lista oficial descargable. Diseño:
+1. Añadir esos 17 al catálogo en su familia correcta (Tropical House/Neo Trance/Progressive Breaks → Electronic;
+   Indie Pop/Dance-pop/Power Pop/Jangle Pop → Pop; Pop Rock/Prog Rock/Goth Rock/Horror Rock/Synthpunk/Anarcho-Punk/No Wave/
+   Psychobilly → Rock; Sound Collage → Electronic; Speech → Non-Music).
+2. **Online Discogs**: un estilo devuelto que no esté en el catálogo se **acepta** igual (genre = estilo tal cual, family =
+   primer `genres` del mismo resultado que sea familia del catálogo) y se guarda en `<dataDir>/genre-catalog-learned.json`
+   (`{family: [estilos]}`, escritura atómica, sin duplicados normalizados). `resolveGenre` consulta catálogo de fábrica + aprendido
+   (el de fábrica manda). Así un tag de archivo "Tropical House" se resuelve en análisis futuros.
+   Last.fm **no** aprende (tags ruidosos): solo resuelve contra catálogo + aprendido.
+3. `GET /api/genre-catalog` → `{families: {familia: {factory:[…], learned:[…]}}}` (base para G2).
+Tests: estilo desconocido de Discogs se acepta con su familia y queda aprendido; Last.fm desconocido no aprende; aprendido resuelve
+un tag de archivo; escritura atómica. **Gate:** node/vitest/build/lint/format; re-medición sobre la caché: 0 estilos sin resolver.
+
+### G1.2 · Pulido visual del clasificador (captura del cerebro)
+Solo `web/src/views/Classifier.tsx` + i18n.
+1. "Analizar sin destino" hoy es texto suelto que parece etiqueta: convertirlo en acción clara junto al campo Destino
+   ("Quitar destino" como botón ghost con icono X dentro del FolderField, visible solo si hay destino). Sin destino, el campo
+   muestra "Sin destino — solo analizar" en gris.
+2. "1 elementos seleccionados" aparece sin selección y con mal plural: mostrar solo cuando se agregaron archivos sueltos,
+   como "N archivos agregados" (singular/plural correcto, es/en).
+3. Leyenda de distribución: el contador va en la misma línea que la etiqueta ("Latina → Salsa · 1"), sin salto.
+**Gate:** vitest/build/lint/format:check + captura.
+**G1.2.1:** el punto 3 sigue fallando con 7 elementos: cada elemento de la leyenda debe ser `whitespace-nowrap` y el contenedor
+`flex-wrap` (varias filas de elementos completos), nunca partir "etiqueta · N". Gate: captura.

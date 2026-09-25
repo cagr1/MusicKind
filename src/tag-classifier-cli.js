@@ -8,25 +8,42 @@ import { LastFmClient } from "./providers/lastfm.js";
 import { DiscogsClient } from "./providers/discogs.js";
 import { loadAppKeys } from "./providers/app-keys.js";
 
-const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const projectRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const settingsPath = path.join(projectRoot, "config", "settings.json");
 const online = !process.argv.includes("--no-online");
-const settings = online && fs.existsSync(settingsPath) ? JSON.parse(fs.readFileSync(settingsPath, "utf8")) : {};
+const settings =
+  online && fs.existsSync(settingsPath)
+    ? JSON.parse(fs.readFileSync(settingsPath, "utf8"))
+    : {};
 const cache = new JsonCache(path.join(projectRoot, ".cache", "api-cache.json"));
 const keys = online ? loadAppKeys({ settings }) : {};
-const lastfmClient = keys.lastfmApiKey ? new LastFmClient({ apiKey: keys.lastfmApiKey, cache }) : null;
-const discogsClient = keys.discogsKey && keys.discogsSecret ? new DiscogsClient({ key: keys.discogsKey, secret: keys.discogsSecret, cache }) : null;
+const lastfmClient = keys.lastfmApiKey
+  ? new LastFmClient({ apiKey: keys.lastfmApiKey, cache })
+  : null;
+const discogsClient =
+  keys.discogsKey && keys.discogsSecret
+    ? new DiscogsClient({
+        key: keys.discogsKey,
+        secret: keys.discogsSecret,
+        cache,
+      })
+    : null;
 if (lastfmClient) lastfmClient.timeoutMs = 8000;
-
 
 function arg(name) {
   const index = process.argv.indexOf(name);
-  return index < 0 ? null : process.argv[index + 1] ?? null;
+  return index < 0 ? null : (process.argv[index + 1] ?? null);
 }
 
 try {
   await classifyByTags({
     inputRoot: arg("--input-root"),
+    inputPaths: arg("--input-paths")
+      ? JSON.parse(arg("--input-paths"))
+      : undefined,
     destRoot: arg("--dest-root"),
     online,
     lastfmClient,

@@ -1,4 +1,4 @@
-import { cached, cleanTrackTitle, fetchJson, USER_AGENT } from './http.js';
+import { cached, cleanTrackTitle, fetchJson, USER_AGENT } from "./http.js";
 export class DiscogsClient {
   constructor({ key, secret, cache, fetcher = fetchJson } = {}) {
     this.key = key;
@@ -11,15 +11,18 @@ export class DiscogsClient {
   async request(url) {
     const task = this.queue.then(async () => {
       const waitMs = Math.max(0, 1100 - (Date.now() - this.lastRequestAt));
-      if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
+      if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
       this.lastRequestAt = Date.now();
-      return this.fetcher(url, { headers: { 'User-Agent': USER_AGENT } });
+      return this.fetcher(url, { headers: { "User-Agent": USER_AGENT } });
     });
     this.queue = task.catch(() => {});
     return task;
   }
   async search(artist, track) {
-    const structured = await this.searchQuery(`artist=${artist}|track=${track}`, { artist, track });
+    const structured = await this.searchQuery(
+      `artist=${artist}|track=${track}`,
+      { artist, track },
+    );
     if (structured.length) return structured;
 
     const cleanTrack = cleanTrackTitle(track);
@@ -28,13 +31,32 @@ export class DiscogsClient {
   }
   async searchQuery(cacheKey, params) {
     return cached(this.cache, `discogs:${cacheKey}`, async () => {
-      const url = new URL('https://api.discogs.com/database/search');
-      url.search = new URLSearchParams({ type: 'release', ...params, key: this.key, secret: this.secret }).toString();
+      const url = new URL("https://api.discogs.com/database/search");
+      url.search = new URLSearchParams({
+        type: "release",
+        ...params,
+        key: this.key,
+        secret: this.secret,
+      }).toString();
       const data = await this.request(url.toString());
-      return (data.results || []).slice(0, 3).map(result => ({ styles: result.style || [], genres: result.genre || [] }));
+      return (data.results || [])
+        .slice(0, 3)
+        .map((result) => ({
+          styles: result.style || [],
+          genres: result.genre || [],
+        }));
     });
   }
-  async getStyleResults(artist, track) { return (await this.search(artist, track)).map(x => x.styles); }
-  async getTags(artist, track) { return (await this.search(artist, track)).flatMap(x => x.styles); }
-  async getGenres(artist, track) { return (await this.search(artist, track)).flatMap(x => x.genres); }
+  async getStyleResults(artist, track) {
+    return (await this.search(artist, track)).map((x) => x.styles);
+  }
+  async getGenreResults(artist, track) {
+    return (await this.search(artist, track)).map((x) => x.genres);
+  }
+  async getTags(artist, track) {
+    return (await this.search(artist, track)).flatMap((x) => x.styles);
+  }
+  async getGenres(artist, track) {
+    return (await this.search(artist, track)).flatMap((x) => x.genres);
+  }
 }

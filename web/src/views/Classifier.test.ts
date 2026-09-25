@@ -150,6 +150,31 @@ describe('classifier simulation switch', () => {
 })
 
 describe('tag classifier in-memory state', () => {
+  it('keeps moving disabled while no destination is selected', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: true, json: async () => ({ canonical: [] }) })),
+    )
+    const container = document.createElement('div')
+    const root = createRoot(container)
+    await act(async () =>
+      root.render(
+        createElement(
+          I18nProvider,
+          null,
+          createElement(ProcessProvider, null, createElement(Classifier)),
+        ),
+      ),
+    )
+    await act(async () => Promise.resolve())
+    const move = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Mover propuestas'),
+    )
+    expect(move?.disabled).toBe(true)
+    root.unmount()
+    vi.unstubAllGlobals()
+  })
+
   it('restores results, filters, and selection after unmounting', async () => {
     HTMLElement.prototype.scrollIntoView = vi.fn()
     vi.stubGlobal(
