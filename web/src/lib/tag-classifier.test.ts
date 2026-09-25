@@ -48,18 +48,35 @@ describe('tag classifier view logic', () => {
   })
 
   it('keeps the back canonical genre when metadata fills track fields', () => {
-    const row = { ...rows[1], genre: 'Tech House', status: 'ok' as const, destination: '/out/Tech House/b.mp3' }
-    expect(mergeTrackMetadata(row, { title: 'Title', artist: 'Artist', bpm: 124, key: 'Amin' })).toMatchObject({
-      title: 'Title', artist: 'Artist', bpm: 124, key: 'Amin', genre: 'Tech House', status: 'ok', destination: '/out/Tech House/b.mp3',
+    const row = {
+      ...rows[1],
+      genre: 'Tech House',
+      status: 'ok' as const,
+      destination: '/out/Tech House/b.mp3',
+    }
+    expect(
+      mergeTrackMetadata(row, { title: 'Title', artist: 'Artist', bpm: 124, key: 'Amin' }),
+    ).toMatchObject({
+      title: 'Title',
+      artist: 'Artist',
+      bpm: 124,
+      key: 'Amin',
+      genre: 'Tech House',
+      status: 'ok',
+      destination: '/out/Tech House/b.mp3',
     })
   })
 
   it('shows only canonical genres and the translated review bucket in the distribution', () => {
-    const distribution = canonicalTagDistribution([
-      { ...rows[0], genre: 'Tech House' },
-      { ...rows[1], genre: 'electronicfresh.com' },
-      { ...rows[0], genre: 'House' },
-    ], ['Tech House', 'House'], 'Por revisar')
+    const distribution = canonicalTagDistribution(
+      [
+        { ...rows[0], genre: 'Tech House' },
+        { ...rows[1], genre: 'electronicfresh.com' },
+        { ...rows[0], genre: 'House' },
+      ],
+      ['Tech House', 'House'],
+      'Por revisar',
+    )
     expect(distribution.map((item) => item.genre)).toEqual(['Tech House', 'Por revisar', 'House'])
   })
 

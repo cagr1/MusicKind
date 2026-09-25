@@ -305,14 +305,28 @@ export function Settings() {
             </div>
           ) : null}
           <details className="rounded border border-line px-3 py-2">
-            <summary className="cursor-pointer text-xs font-medium text-zinc-300">{t('settings.advancedKeys')}</summary>
+            <summary className="cursor-pointer text-xs font-medium text-zinc-300">
+              {t('settings.advancedKeys')}
+            </summary>
             <div className="mt-3 space-y-3">
               <SettingRow label={t('settings.discogsKey')}>
-                <Input value={form.discogsKey} onChange={(event) => setField('discogsKey', event.target.value)} className="h-7 w-full max-w-[320px] border-line bg-surface-elevated font-mono text-[11px]" />
+                <Input
+                  value={form.discogsKey}
+                  onChange={(event) => setField('discogsKey', event.target.value)}
+                  className="h-7 w-full max-w-[320px] border-line bg-surface-elevated font-mono text-[11px]"
+                />
               </SettingRow>
               {secretRows.map(({ key, label }) => (
                 <SettingRow key={key} label={label}>
-                  <SecretInput value={form[key] as string} visible={visibleSecrets[key]} label={visibleSecrets[key] ? t('settings.hideSecret') : t('settings.showSecret')} onChange={(value) => setField(key, value)} onToggle={() => toggleSecret(key)} />
+                  <SecretInput
+                    value={form[key] as string}
+                    visible={visibleSecrets[key]}
+                    label={
+                      visibleSecrets[key] ? t('settings.hideSecret') : t('settings.showSecret')
+                    }
+                    onChange={(value) => setField(key, value)}
+                    onToggle={() => toggleSecret(key)}
+                  />
                 </SettingRow>
               ))}
             </div>

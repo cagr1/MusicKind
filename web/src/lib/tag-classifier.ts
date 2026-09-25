@@ -17,21 +17,18 @@ export type TagStatusFilter = 'all' | TagResult['status'] | 'online'
 
 export function buildClassifyMoves(results: TagResult[]) {
   return results
-    .filter(
-      (result) =>
-        result.status === 'ok' && result.genre && result.destination,
-    )
+    .filter((result) => result.status === 'ok' && result.genre && result.destination)
     .map((result) => ({ from: result.path, to: result.destination as string }))
 }
 
 export function filterTagResults(results: TagResult[], status: TagStatusFilter, genre: string) {
   return results.filter((result) => {
-    const statusMatches =
-      status === 'all' ||
-      result.status === status
-    const onlineMatches = status === 'online'
-      ? result.status === 'ok' && (result.genreSource === 'lastfm' || result.genreSource === 'discogs')
-      : statusMatches
+    const statusMatches = status === 'all' || result.status === status
+    const onlineMatches =
+      status === 'online'
+        ? result.status === 'ok' &&
+          (result.genreSource === 'lastfm' || result.genreSource === 'discogs')
+        : statusMatches
     return onlineMatches && (genre === 'all' || (result.genre ?? 'review') === genre)
   })
 }
@@ -41,15 +38,26 @@ export function tagResultCounts(results: TagResult[]) {
     all: results.length,
     ok: results.filter((result) => result.status === 'ok').length,
     review: results.filter((result) => result.status === 'review').length,
-    online: results.filter((result) => result.status === 'ok' && (result.genreSource === 'lastfm' || result.genreSource === 'discogs')).length,
+    online: results.filter(
+      (result) =>
+        result.status === 'ok' &&
+        (result.genreSource === 'lastfm' || result.genreSource === 'discogs'),
+    ).length,
   }
 }
 
-export function mergeTrackMetadata<T extends TagResult>(row: T, metadata: { title?: string; artist?: string; bpm?: number | null; key?: string | null }): T {
+export function mergeTrackMetadata<T extends TagResult>(
+  row: T,
+  metadata: { title?: string; artist?: string; bpm?: number | null; key?: string | null },
+): T {
   return { ...row, ...metadata, genre: row.genre, status: row.status, destination: row.destination }
 }
 
-export function canonicalTagDistribution(results: TagResult[], canonical: string[], reviewLabel: string) {
+export function canonicalTagDistribution(
+  results: TagResult[],
+  canonical: string[],
+  reviewLabel: string,
+) {
   const allowed = new Set(canonical)
   const counts = new Map<string, number>()
   for (const result of results) {
@@ -57,12 +65,14 @@ export function canonicalTagDistribution(results: TagResult[], canonical: string
     counts.set(genre, (counts.get(genre) ?? 0) + 1)
   }
   const total = results.length
-  return [...counts].sort((a, b) => b[1] - a[1]).map(([genre, count], index) => ({
-    genre,
-    count,
-    percentage: total ? (count / total) * 100 : 0,
-    majority: index === 0,
-  }))
+  return [...counts]
+    .sort((a, b) => b[1] - a[1])
+    .map(([genre, count], index) => ({
+      genre,
+      count,
+      percentage: total ? (count / total) * 100 : 0,
+      majority: index === 0,
+    }))
 }
 
 export function changeTagGenre(

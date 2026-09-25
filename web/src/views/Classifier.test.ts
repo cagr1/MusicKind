@@ -56,11 +56,11 @@ describe('classifier simulation switch', () => {
     const fetchMock = vi.fn((path: string) =>
       Promise.resolve({
         ok: true,
-      json: async () => {
-        if (path === '/api/genres') return { genres: [] }
-        if (path === '/api/genre-aliases') return { canonical: ['Tech House'] }
-        return { settings: {} }
-      },
+        json: async () => {
+          if (path === '/api/genres') return { genres: [] }
+          if (path === '/api/genre-aliases') return { canonical: ['Tech House'] }
+          return { settings: {} }
+        },
       }),
     )
     vi.stubGlobal('fetch', fetchMock)
@@ -82,10 +82,16 @@ describe('classifier simulation switch', () => {
     await act(async () => {
       method?.click()
     })
-    const legacyOption = Array.from(document.body.querySelectorAll('[role="option"]')).find((item) => item.textContent?.includes('reglas online'))
+    const legacyOption = Array.from(document.body.querySelectorAll('[role="option"]')).find(
+      (item) => item.textContent?.includes('reglas online'),
+    )
     expect(legacyOption).not.toBeUndefined()
-    await act(async () => { legacyOption?.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    expect(container.querySelector('button[aria-label="Método"]')?.textContent).toContain('reglas online')
+    await act(async () => {
+      legacyOption?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(container.querySelector('button[aria-label="Método"]')?.textContent).toContain(
+      'reglas online',
+    )
     root.unmount()
     vi.unstubAllGlobals()
   })

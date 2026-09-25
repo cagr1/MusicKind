@@ -19,7 +19,7 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
 4. [x] **Front 2** — lote en `design/SPEC.md` § "Lote Front 2 (resto)".
    - [x] Convertidor — verificado en vivo (MP3→WAV, tags en fila/Inspector, tonalidad nula = —). Commit `9f90ea2`.
    - [x] L1 Metadatos — `identify` con `preview` (no escribe ni renombra; verificado con Spotify real, mtime igual), formulario con original tachado, tonalidad del tag (`Amin`→8A). Pendiente de producto: identify reemplaza "Chocolate Spread, Oscar P" por "Chocolate Spread" (pierde remixer).
-   - [ ] L2 Configuración ·
+   - [x] L2 Configuración (L2/L2.1/L2.2 en `19f4a78`/`9017847`; claves solo en "Avanzado" opcional). 2026-09-24: `format:check` volvía a fallar en 5 archivos de E2 → formateado; vitest 89/89, build 0.
    - [x] L3 Sets — 4 carpetas, agrupado por sección con rango BPM, medidor 3 segmentos, curva de energía, puntajes en Inspector (verificado en vivo con copias).
      **Mejora de back pendiente (Back 3):** `style_analyzer.py` da 93–100% a casi todo (cosine sobre features sin normalizar; tempo domina) → estandarizar features (z-score por feature sobre las referencias) antes del coseno y medir separación.
    -
@@ -58,7 +58,7 @@ Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`des
 
 **Back 3 [x]** (Luna, 1 corrida; spec `design/SPEC.md` § Back 3) — puntajes de Sets por z-score + percentil frente a las propias referencias.
 Verificado por el cerebro 2026-09-24: unittest 6/6, test_basic 4/4; medición repetida idéntica (`.cache/eval/sets-report.md`, 3 carpetas de `2026`, 5 particiones): acierto `best` 29,4% → 44,7% (azar 33%), desviación 1,3 → 28,7, puntajes ≥90 100% → 2,4%. En vivo `/api/set-analyze` (3099, 20 copias, 8 refs/sección): puntajes 0–100 repartidos. Observaciones: con pocas referencias el puntaje va en saltos (8 refs → múltiplos de 12,5); si todo da 0 igual se asigna `best`; warnings de NumPy por `float(tempo)` en el log.
-**Siguiente (2026-09-24):** L2 Configuración (Front 2).
+**Siguiente (2026-09-24):** Front 2 completo. Queda QA visual de Carlos en Electron (Clasificar por etiquetas, audio, arrastrar) → Lote 6 pausado (E4, E0b) → punto final.
 **Punto final (decisión de Carlos):** app autosuficiente — incluir o instalar desde la app ffmpeg, fpcalc, Python + librerías; nada por terminal ni PATH; probar `.dmg` en la MacBook Pro 2017 (Intel, tras actualizar a Ventura; Electron 44 exige macOS 12+).
 
 Sigue pendiente en paralelo: revisión Terra del back (`e0c0424`), P1/P2 del clasificador, F3 contrato de escritura de tags.

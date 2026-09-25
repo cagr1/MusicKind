@@ -152,7 +152,13 @@ export function Classifier() {
   )
 }
 
-function LegacyClassifier({ method, onMethodChange }: { method: string; onMethodChange: (method: string) => void }) {
+function LegacyClassifier({
+  method,
+  onMethodChange,
+}: {
+  method: string
+  onMethodChange: (method: string) => void
+}) {
   const { setQueue, toggle, path: playingPath } = usePlayer()
   const t = useT()
   const { view } = useView()
@@ -352,8 +358,13 @@ function LegacyClassifier({ method, onMethodChange }: { method: string; onMethod
           </div>
           <div className="flex items-center gap-2">
             <Select value={method} onValueChange={onMethodChange}>
-              <SelectTrigger className="h-8 w-56 text-[11px]" aria-label={t('classifier.method')}><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="tags">{t('classifier.methodTags')}</SelectItem><SelectItem value="legacy">{t('classifier.methodOnline')}</SelectItem></SelectContent>
+              <SelectTrigger className="h-8 w-56 text-[11px]" aria-label={t('classifier.method')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tags">{t('classifier.methodTags')}</SelectItem>
+                <SelectItem value="legacy">{t('classifier.methodOnline')}</SelectItem>
+              </SelectContent>
             </Select>
             <SelectionControls selection={selection} t={t} hasRows={results.length > 0} />
             {isBusy && (
@@ -524,7 +535,13 @@ function LegacyClassifier({ method, onMethodChange }: { method: string; onMethod
   )
 }
 
-function TagClassifier({ method, onMethodChange }: { method: string; onMethodChange: (method: string) => void }) {
+function TagClassifier({
+  method,
+  onMethodChange,
+}: {
+  method: string
+  onMethodChange: (method: string) => void
+}) {
   const t = useT()
   const { toggle, path: playingPath, setQueue } = usePlayer()
   const [inputRoot, setInputRoot] = React.useState('')
@@ -550,10 +567,14 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
   )
   const counts = React.useMemo(() => tagResultCounts(results), [results])
   const moves = React.useMemo(() => buildClassifyMoves(results), [results])
-  const onlineMoveCount = React.useMemo(() => moves.filter((move) => {
-    const row = results.find((item) => item.path === move.from)
-    return row?.genreSource === 'lastfm' || row?.genreSource === 'discogs'
-  }).length, [moves, results])
+  const onlineMoveCount = React.useMemo(
+    () =>
+      moves.filter((move) => {
+        const row = results.find((item) => item.path === move.from)
+        return row?.genreSource === 'lastfm' || row?.genreSource === 'discogs'
+      }).length,
+    [moves, results],
+  )
   const selected = results.find((item) => item.path === selectedPath) ?? results[0] ?? null
   const virtualizer = useVirtualizer({
     count: filtered.length,
@@ -563,11 +584,15 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
   })
   React.useEffect(() => {
     let cancelled = false
-    void getJson<{ canonical?: string[] }>('/api/genre-aliases').then((aliases) => {
-      if (cancelled) return
-      setGenres(aliases.canonical ?? [])
-    }).catch((e) => setError(e instanceof Error ? e.message : String(e)))
-    return () => { cancelled = true }
+    void getJson<{ canonical?: string[] }>('/api/genre-aliases')
+      .then((aliases) => {
+        if (cancelled) return
+        setGenres(aliases.canonical ?? [])
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+    return () => {
+      cancelled = true
+    }
   }, [])
   React.useEffect(() => {
     void setQueue(
@@ -681,8 +706,7 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
       }
     : null
   const distribution = React.useMemo(
-    () =>
-      canonicalTagDistribution(results, genres, t('classifier.review')),
+    () => canonicalTagDistribution(results, genres, t('classifier.review')),
     [results, genres, t],
   )
   return (
@@ -697,8 +721,13 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Select value={method} onValueChange={onMethodChange}>
-              <SelectTrigger className="h-8 w-56 text-[11px]" aria-label={t('classifier.method')}><SelectValue /></SelectTrigger>
-              <SelectContent><SelectItem value="tags">{t('classifier.methodTags')}</SelectItem><SelectItem value="legacy">{t('classifier.methodOnline')}</SelectItem></SelectContent>
+              <SelectTrigger className="h-8 w-56 text-[11px]" aria-label={t('classifier.method')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="tags">{t('classifier.methodTags')}</SelectItem>
+                <SelectItem value="legacy">{t('classifier.methodOnline')}</SelectItem>
+              </SelectContent>
             </Select>
             <Button
               variant="outline"
@@ -782,9 +811,7 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(
-                    ['all', 'ok', 'online', 'review'] as TagStatusFilter[]
-                  ).map((v) => (
+                  {(['all', 'ok', 'online', 'review'] as TagStatusFilter[]).map((v) => (
                     <SelectItem key={v} value={v}>
                       {t(`classifier.statuses.${v}` as TranslationKey)} ·{' '}
                       {counts[v === 'all' ? 'all' : v]}
@@ -832,10 +859,17 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
                 </SelectContent>
               </Select>
               <span className="ml-auto text-[11px] text-zinc-400">
-                {counts.ok - counts.online} {t('classifier.statuses.ok')} · {counts.online} {t('classifier.statuses.online')} · {counts.review} {t('classifier.review')}
+                {counts.ok - counts.online} {t('classifier.statuses.ok')} · {counts.online}{' '}
+                {t('classifier.statuses.online')} · {counts.review} {t('classifier.review')}
               </span>
             </div>
-            {distribution.length > 0 && <Distribution distribution={distribution} compact reviewLabel={t('classifier.review')} />}
+            {distribution.length > 0 && (
+              <Distribution
+                distribution={distribution}
+                compact
+                reviewLabel={t('classifier.review')}
+              />
+            )}
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto px-5">
               <table className="w-full min-w-[980px] text-left text-[11px]">
                 <thead className="sticky top-0 z-10 bg-surface-app text-zinc-500">
@@ -897,10 +931,7 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
                             </div>
                           </div>
                         </td>
-                        <td
-                          className="truncate pr-2"
-                          title={row.tagGenre ?? undefined}
-                        >
+                        <td className="truncate pr-2" title={row.tagGenre ?? undefined}>
                           {row.tagGenre || '—'}
                         </td>
                         <td onClick={(e) => e.stopPropagation()}>
@@ -925,7 +956,11 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
                           </Select>
                         </td>
                         <td className="truncate">
-                          {t(row.genreSource === 'lastfm' || row.genreSource === 'discogs' ? 'classifier.statuses.online' : `classifier.statuses.${row.status}` as TranslationKey)}
+                          {t(
+                            row.genreSource === 'lastfm' || row.genreSource === 'discogs'
+                              ? 'classifier.statuses.online'
+                              : (`classifier.statuses.${row.status}` as TranslationKey),
+                          )}
                         </td>
                         <td
                           className="truncate font-mono text-zinc-500"
@@ -951,7 +986,12 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
             <p>
               {t('classifier.destination')}: {selected.destination || '—'}
             </p>
-            {(selected.genreSource === 'lastfm' || selected.genreSource === 'discogs') && <p>{selected.onlineTag} · {t(`classifier.sourceLabels.${selected.genreSource}` as TranslationKey)}</p>}
+            {(selected.genreSource === 'lastfm' || selected.genreSource === 'discogs') && (
+              <p>
+                {selected.onlineTag} ·{' '}
+                {t(`classifier.sourceLabels.${selected.genreSource}` as TranslationKey)}
+              </p>
+            )}
           </div>
         )}
       </TrackInspector>
@@ -961,7 +1001,9 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
             <DialogTitle>{t('classifier.confirmMove')}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-zinc-400">
-            {moves.length} {t('classifier.move')} · {moves.length - onlineMoveCount} {t('classifier.moveFromTags')} · {onlineMoveCount} {t('classifier.moveFromOnline')} · {destRoot}
+            {moves.length} {t('classifier.move')} · {moves.length - onlineMoveCount}{' '}
+            {t('classifier.moveFromTags')} · {onlineMoveCount} {t('classifier.moveFromOnline')} ·{' '}
+            {destRoot}
           </p>
           <div className="max-h-48 overflow-auto text-xs">
             {Object.entries(
@@ -982,11 +1024,7 @@ function TagClassifier({ method, onMethodChange }: { method: string; onMethodCha
             </Button>
             <Button
               onClick={() =>
-                void runApply(
-                  '/api/classify-apply',
-                  { moves, destRoot },
-                  t('classifier.moveDone'),
-                )
+                void runApply('/api/classify-apply', { moves, destRoot }, t('classifier.moveDone'))
               }
             >
               {t('classifier.move')} · {moves.length}
@@ -1167,14 +1205,32 @@ function ResultsTable({
   )
 }
 
-function Distribution({ distribution, compact = false, reviewLabel }: { distribution: ReturnType<typeof genreDistribution>; compact?: boolean; reviewLabel?: string }) {
-  const label = (genre: string) => genre === 'Por revisar' || genre === 'Review' ? reviewLabel ?? genre : genre
-  const reviewItems = compact ? distribution.filter((item) => item.genre === reviewLabel || item.genre === 'Por revisar' || item.genre === 'Review') : []
-  const canonicalItems = compact ? distribution.filter((item) => !reviewItems.includes(item)) : distribution
+function Distribution({
+  distribution,
+  compact = false,
+  reviewLabel,
+}: {
+  distribution: ReturnType<typeof genreDistribution>
+  compact?: boolean
+  reviewLabel?: string
+}) {
+  const label = (genre: string) =>
+    genre === 'Por revisar' || genre === 'Review' ? (reviewLabel ?? genre) : genre
+  const reviewItems = compact
+    ? distribution.filter(
+        (item) =>
+          item.genre === reviewLabel || item.genre === 'Por revisar' || item.genre === 'Review',
+      )
+    : []
+  const canonicalItems = compact
+    ? distribution.filter((item) => !reviewItems.includes(item))
+    : distribution
   const visible = compact ? [...canonicalItems.slice(0, 6), ...reviewItems] : distribution
   const remainder = compact ? canonicalItems.slice(6) : []
   return (
-    <div className={`flex shrink-0 items-center gap-3 px-5 ${compact ? 'h-9 border-b border-line' : 'border-t border-line py-3'}`}>
+    <div
+      className={`flex shrink-0 items-center gap-3 px-5 ${compact ? 'h-9 border-b border-line' : 'border-t border-line py-3'}`}
+    >
       <div className="flex h-1.5 min-w-24 flex-1 overflow-hidden rounded-full bg-zinc-800">
         {distribution.map((item) => (
           <span
@@ -1184,7 +1240,9 @@ function Distribution({ distribution, compact = false, reviewLabel }: { distribu
           />
         ))}
       </div>
-      <div className={`flex items-center justify-end gap-x-3 text-[10px] text-zinc-400 ${compact ? 'min-w-0 flex-nowrap overflow-hidden' : 'max-w-[45%] flex-wrap'}`}>
+      <div
+        className={`flex items-center justify-end gap-x-3 text-[10px] text-zinc-400 ${compact ? 'min-w-0 flex-nowrap overflow-hidden' : 'max-w-[45%] flex-wrap'}`}
+      >
         {visible.map((item) => (
           <span key={item.genre}>
             <i
@@ -1193,7 +1251,18 @@ function Distribution({ distribution, compact = false, reviewLabel }: { distribu
             {label(item.genre)} {item.count}
           </span>
         ))}
-        {remainder.length > 0 && <TooltipProvider delayDuration={0}><Tooltip><TooltipTrigger asChild><button className="shrink-0 text-zinc-300">+{remainder.length}</button></TooltipTrigger><TooltipContent>{remainder.map((item) => `${label(item.genre)} ${item.count}`).join(' · ')}</TooltipContent></Tooltip></TooltipProvider>}
+        {remainder.length > 0 && (
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button className="shrink-0 text-zinc-300">+{remainder.length}</button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {remainder.map((item) => `${label(item.genre)} ${item.count}`).join(' · ')}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </div>
     </div>
   )
