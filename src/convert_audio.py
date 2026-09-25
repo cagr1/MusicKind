@@ -40,6 +40,31 @@ def unique_output_path(path):
         counter += 1
 
 
+def output_path_for(file_path, output_dir, fmt, relative_root=None):
+    if relative_root is not None:
+        try:
+            rel = file_path.resolve().relative_to(relative_root.resolve())
+            out_path = output_dir / file_path.name if not rel.parts else output_dir / rel
+        except ValueError:
+            out_path = output_dir / file_path.name
+    else:
+        out_path = output_dir / file_path.name
+    out_path = out_path.with_suffix(f".{fmt}")
+    # The output path is always rooted below output_dir, even if a caller supplies
+    # a path that cannot be represented relative to relative_root.
+    return out_path
+
+
+def ensure_output_inside(output_path, output_dir):
+    resolved_output = output_path.resolve()
+    resolved_root = output_dir.resolve()
+    try:
+        resolved_output.relative_to(resolved_root)
+    except ValueError as error:
+        raise ValueError(f"Ruta de salida fuera de la carpeta de salida: {resolved_output}") from error
+    return resolved_output
+
+
 def convert_audio(input_path, output_path, fmt, bitrate_kbps=None):
     output_path = unique_output_path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -57,6 +82,7 @@ def parse_args():
     parser.add_argument("--output", required=True, help="Carpeta de salida")
     parser.add_argument("--format", choices=["mp3", "wav", "aiff", "flac"], required=True)
     parser.add_argument("--bitrate", type=int, default=None, help="Bitrate kbps para mp3")
+    parser.add_argument("--relative-to", default=None, help="Preserve paths relative to this input root")
     return parser.parse_args()
 
 
@@ -64,6 +90,7 @@ def main():
     args = parse_args()
     input_path = Path(args.input)
     output_dir = Path(args.output)
+    relative_root = Path(args.relative_to).resolve() if args.relative_to else None
 
     if not input_path.exists():
         raise SystemExit(f"Input no existe: {input_path}")
@@ -86,14 +113,16 @@ def main():
 
     results = []
     for idx, file_path in enumerate(files, start=1):
-        if input_path.is_file():
-            out_path = output_dir / file_path.name
+        if relative_root:
+            out_path = output_path_for(file_path, output_dir, args.format, relative_root)
+        elif input_path.is_file():
+            out_path = output_path_for(file_path, output_dir, args.format)
         else:
-            rel = file_path.relative_to(input_dir)
-            out_path = output_dir / rel
-        out_path = out_path.with_suffix(f".{args.format}")
+            out_path = output_dir / file_path.relative_to(input_dir)
+            out_path = out_path.with_suffix(f".{args.format}")
         size_in = file_path.stat().st_size
         try:
+            ensure_output_inside(out_path, output_dir)
             actual_output = convert_audio(file_path, out_path, args.format, args.bitrate)
             results.append({
                 "ok": True,

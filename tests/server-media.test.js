@@ -127,16 +127,21 @@ test("/api/audio entrega el archivo completo y rangos 206", { skip: !ffmpeg }, a
 test("/api/convert emite el resultado estructurado por SSE", { skip: !ffmpeg }, async (t) => {
   const input = makeWav();
   const output = fs.mkdtempSync(path.join(os.tmpdir(), "musickind-convert-"));
+  const inputRoot = fs.mkdtempSync(path.join(os.tmpdir(), "musickind-convert-root-"));
+  const nested = path.join(inputRoot, "folder", "tone.wav");
+  fs.mkdirSync(path.dirname(nested), { recursive: true });
+  fs.copyFileSync(input, nested);
   const server = await startServer();
-  t.after(() => server.close());
+  t.after(() => { server.close(); fs.rmSync(inputRoot, { recursive: true, force: true }); fs.rmSync(output, { recursive: true, force: true }); });
 
   const response = await fetch(`${base(server)}/api/convert`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      inputPath: input,
+      inputPath: nested,
       outputPath: output,
-      format: "wav",
+      format: "flac",
+      relativeTo: inputRoot,
       processId: `test-convert-${Date.now()}`
     })
   });
@@ -149,6 +154,17 @@ test("/api/convert emite el resultado estructurado por SSE", { skip: !ffmpeg }, 
   assert.ok(resultEvent);
   assert.equal(resultEvent.results[0].ok, true);
   assert.ok(resultEvent.results[0].sizeOut > 0);
+  assert.equal(resultEvent.results[0].output, fs.realpathSync(path.join(output, "folder", "tone.flac")));
+  assert.ok(fs.existsSync(resultEvent.results[0].output));
+
+  const outside = await fetch(`${base(server)}/api/convert`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ inputPath: input, outputPath: output, format: "flac", relativeTo: inputRoot, processId: `test-outside-${Date.now()}` })
+  });
+  const outsideEvents = (await outside.text()).split("\n").filter((line) => line.startsWith("data: ")).map((line) => JSON.parse(line.slice(6)));
+  const outsideResult = outsideEvents.find((event) => event.type === "result").results[0];
+  assert.equal(outsideResult.output, fs.realpathSync(path.join(output, "tone.flac")));
+  assert.equal(path.dirname(outsideResult.output), fs.realpathSync(output));
 });
 
 function expectContentRange(value) {

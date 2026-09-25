@@ -212,6 +212,7 @@
     "title": "Converter",
     "files": "files",
     "pending": "pending",
+    "pendingOne": "pending",
     "addFiles": "Add files",
     "dropToAdd": "Drop to add",
     "selected": "selected",
@@ -235,7 +236,13 @@
     "specs": "Specifications",
     "original": "Original",
     "target": "Target",
-    "output": "Output"
+    "output": "Output",
+    "general": "General",
+    "skip": "already {format} · skipped",
+    "outputFormat": "Output format",
+    "applyFormat": "Apply format",
+    "convertN": "Convert",
+    "origin": "Source"
   },
   "metadata": {
     "title": "Metadata",

@@ -212,6 +212,7 @@
     "title": "Convertidor",
     "files": "archivos",
     "pending": "pendientes",
+    "pendingOne": "pendiente",
     "addFiles": "Agregar archivos",
     "dropToAdd": "Soltar para agregar",
     "selected": "seleccionados",
@@ -235,7 +236,13 @@
     "specs": "Especificaciones",
     "original": "Original",
     "target": "Destino",
-    "output": "Salida"
+    "output": "Salida",
+    "general": "General",
+    "skip": "ya es {format} · se omite",
+    "outputFormat": "Formato de salida",
+    "applyFormat": "Aplicar formato",
+    "convertN": "Convertir",
+    "origin": "Origen"
   },
   "metadata": {
     "title": "Metadatos",

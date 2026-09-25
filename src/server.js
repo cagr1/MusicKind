@@ -319,11 +319,15 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     const inputPath = body.inputPath ? String(body.inputPath) : "";
     const outputPath = body.outputPath ? String(body.outputPath) : "";
     const format = body.format ? String(body.format) : "";
+    const relativeTo = body.relativeTo ? String(body.relativeTo) : "";
     const bitrate = body.bitrate ? Number(body.bitrate) : null;
     const processId = body.processId || `conv-${Date.now()}`;
 
     if (!inputPath || !outputPath || !format) {
       return sendJson(res, { ok: false, error: "inputPath, outputPath y format requeridos" }, 400);
+    }
+    if (relativeTo && !path.isAbsolute(relativeTo)) {
+      return sendJson(res, { ok: false, error: "relativeTo debe ser una ruta absoluta" }, 400);
     }
     
     // Check FFmpeg availability
@@ -342,6 +346,7 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
       format
     ];
     if (bitrate) args.push("--bitrate", String(bitrate));
+    if (relativeTo) args.push("--relative-to", relativeTo);
 
     let pyCmd;
     try {

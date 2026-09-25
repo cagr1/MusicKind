@@ -905,3 +905,65 @@ devuelve otra canción.
    Test: pedir "Losing It (Chris Lake Remix)" no acepta "Losing It"; sí acepta "Losing It (Chris Lake Remix)".
 2. `src/metadata_editor.js`: usar `splitArtists` y `normalizeArtistName` de `src/providers/http.js` en vez de repetir la regex y
    la normalización. Sin cambio de comportamiento. **Gate:** node tests en verde.
+
+### C2 · Convertidor: lista inmediata + formato por fila (2026-09-25)
+Pedido de Carlos: al soltar archivos/carpeta no ve qué canciones va a convertir (la vista sigue en `EmptyState`,
+`web/src/views/Converter.tsx:465`; la lista solo aparece al correr o con resultados). Quiere elegir formato por canción.
+Decisiones: mismo formato → se omite; carpeta → recursiva y la salida **mantiene la estructura** relativa a la carpeta soltada;
+archivos sueltos → salida plana.
+1. **Modelo** en `Converter.tsx`: `files: string[]` → `items: {path, root: string|null, format: ConversionFormat|null}`
+   (`format null` = sigue el general; `root` = carpeta soltada o `null` si fue archivo suelto). `expandPaths` (`:720`) usa
+   `recursive=true` y conserva `root`. Deduplicar por `path`.
+2. **Una sola tabla** desde que hay ≥1 ítem (antes de convertir): `EmptyState` solo con lista vacía; con lista, soltar encima sigue
+   agregando (`DropOverlay`). Columnas: #, título/artista (del tag, carga perezosa con la función existente; mientras tanto nombre de
+   archivo), origen (extensión en chip), **salida** (Select por fila: "General (WAV)" + MP3/WAV/AIFF/FLAC; si difiere del general,
+   borde/texto `brand`), estado (pendiente · convirtiendo · listo con tamaño · error · "ya es WAV — se omite"). La fila en curso
+   marcada. `RunningState` desaparece (la misma tabla muestra el progreso). Resultados se integran a la fila por `input`.
+3. **Formato efectivo** = `item.format ?? format general`. Si coincide con la extensión de origen (aif/aiff = aiff) → estado
+   "se omite", no se envía. Cambiar el general actualiza las filas con `format null`.
+4. **Selección múltiple** (`web/src/lib/selection.ts`, ya usada): Inspector con ≥2 seleccionadas muestra un Select "Formato de
+   salida" que aplica a todas (incluye "General"). Con 1 seleccionada, el Inspector muestra también su Select.
+5. **Envío:** `/api/convert` por ítem con `{inputPath, outputPath, format: efectivo, bitrate (si mp3, el general), relativeTo: root}`.
+   Botón "Convertir N" (N = pendientes no omitidos).
+6. **Back:** `src/server.js:317` acepta `relativeTo` opcional (string absoluta) y lo pasa como `--relative-to`.
+   `src/convert_audio.py`: con `--relative-to` y entrada archivo dentro de esa carpeta → salida `output/<ruta relativa>` con la nueva
+   extensión (crea subcarpetas); si no está dentro → plano. Sin `--relative-to` → igual que hoy. Nunca escribir fuera de `output`.
+7. i18n es/en para textos nuevos. Tests vitest: formato efectivo, omisión por mismo formato (aif≡aiff), cambio del general respeta
+   overrides, aplicar formato a selección; test Python/node de `--relative-to` (estructura preservada; fuera de la raíz → plano;
+   `..` no escapa de `output`).
+No tocar otras vistas. **Gate (cerebro):** vitest, build, lint 0 errores, `format:check`, node tests; QA en vivo (servidor 3099,
+copias en scratchpad): soltar carpeta con subcarpetas → lista visible antes de convertir; 1 fila en AIFF y resto WAV → archivos
+correctos en la estructura; un WAV omitido.
+
+### C2.1 · Soltar carpeta (revisión del cerebro)
+`Converter.tsx` `onDrop` (~:303): con una carpeta soltada, `resolveDroppedFiles` devuelve la ruta de la carpeta y hoy se agrega
+como ítem sin expandir (root = su padre). Además `commonParent` (~:918) no termina con 1 ruta (al pasar el final compara
+`undefined === undefined` y sigue). Corrección: `onDrop` usa siempre `expandPaths(next)` (carpeta → sus archivos recursivos con
+`root` = esa carpeta; archivo → `root null`), igual que `chooseDirectory`; borrar `commonParent` y la detección `webkitGetAsEntry`.
+Extraer a `converter-model.ts` una función pura `itemsFromPaths(paths, listDir)` (listDir inyectable) usada por drop, archivos y
+carpeta. Tests: carpeta → archivos con root = carpeta; archivo suelto → root null; mezcla carpeta + archivo; carpeta vacía → nada.
+**Gate:** vitest/build/lint/format:check.
+
+### C2.2 · Archivo suelto con raíz = sí mismo (revisión del cerebro, verificado en vivo)
+`/api/metadata/list?dir=<archivo>` devuelve `files:[<archivo>]` → `itemsFromPaths` le pone `root = <archivo>`. Con
+`--relative-to <archivo>`, `convert_audio.py` calcula `rel = "."` y escribe **`<output>.aiff` fuera de la carpeta de salida**
+(reproducido: `c2/out.aiff`).
+1. `converter-model.ts` `itemsFromPaths`: si `listDir` devuelve exactamente `[path]` (la misma ruta), es archivo → `root null`.
+   Test.
+2. `src/convert_audio.py` `output_path_for`: si `rel` es vacío o `.` (`rel.parts == ()`) → salida plana `output/<nombre>`.
+   Además, antes de convertir, `out_path.resolve()` debe estar dentro de `output_dir.resolve()`; si no, resultado `ok:false` con
+   error y **sin escribir**. Test Python/node: `--relative-to` = el propio archivo → `output/<nombre>.<fmt>` y nada fuera de `output`.
+**Gate:** vitest/build/lint/format:check, node tests, reproducción de arriba escribe dentro de `output`.
+
+### C2.3 · Pulido visual del convertidor (QA del cerebro, captura en vivo)
+Solo `web/src/views/Converter.tsx` e i18n.
+1. Select de salida (fila e Inspector) trunca "General (WAV)" → ancho suficiente (`min-w` o texto corto "Gral · WAV") sin cortar.
+2. Tamaño antes de convertir y en omitidos muestra "0.0 KB → —" → mostrar "—" hasta tener `sizeIn` real del resultado.
+3. Estado por fila dice "pendientes" (clave plural del encabezado) → nueva clave singular "pendiente"/"pending".
+4. Barra superior dice "4 seleccionados" sin ninguna fila marcada → mostrar la cantidad real seleccionada; sin selección, ocultar.
+5. Omitido: texto corto en una línea "ya es WAV · se omite" (con el formato real), sin salto.
+Tests vitest para 2 y 5 (funciones puras). **Gate:** vitest/build/lint/format:check + captura en vivo.
+**C2.3.1:** el punto 2 no se ve en vivo: en `ResultsTable` `results` son las filas (incluyen pendientes), así que
+`results.some(...)` (~`Converter.tsx:797`) siempre es verdadero. Corregir en origen: la fila sintética (~`:389`) lleva
+`sizeIn: null` (tipo `number | null`), la celda usa `formatBytes(result.sizeIn)` y se elimina `conversionInputSize` y su test
+(reemplazar por test de la fila sintética con `sizeIn null`). Gate: vitest/build/lint/format:check.
