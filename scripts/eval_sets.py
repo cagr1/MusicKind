@@ -44,11 +44,14 @@ def cosine_scores(query, refs_by_section):
 def metrics(rows, section_names):
     n = len(rows)
     correct = sum(row["predicted"] == row["actual"] for row in rows) / n
-    correct_scores = [row["scores"][row["actual"]] for row in rows]
-    other_scores = [row["scores"][name] for row in rows for name in section_names if name != row["actual"]]
-    all_scores = [row["scores"][name] for row in rows for name in section_names]
+    decided = [row for row in rows if row["predicted"] is not None]
+    correct_scores = [row["scores"].get(row["actual"], 0.0) for row in rows]
+    other_scores = [row["scores"].get(name, 0.0) for row in rows for name in section_names if name != row["actual"]]
+    all_scores = [row["scores"].get(name, 0.0) for row in rows for name in section_names]
     return {
         "best_accuracy_pct": round(correct * 100, 1),
+        "review_pct": round(sum(row["predicted"] is None for row in rows) / n * 100, 1),
+        "decided_accuracy_pct": round(sum(row["predicted"] == row["actual"] for row in decided) / len(decided) * 100, 1) if decided else "—",
         "mean_correct_section_score": round(float(np.mean(correct_scores)), 1),
         "mean_other_section_score": round(float(np.mean(other_scores)), 1),
         "score_stddev": round(float(np.std(all_scores)), 1),
@@ -97,9 +100,9 @@ def main():
             for path in paths:
                 query = vectors[(actual, path)]
                 old_scores, old_best = cosine_scores(query, refs)
-                new_scores, new_best = score_sections(query, refs)
+                new_scores, new_best, review_reason, _ref_counts = score_sections(query, refs)
                 rows_old.append({"actual": actual, "predicted": old_best, "scores": old_scores})
-                rows_new.append({"actual": actual, "predicted": new_best, "scores": new_scores})
+                rows_new.append({"actual": actual, "predicted": new_best, "scores": new_scores, "review_reason": review_reason})
 
     old, new = metrics(rows_old, list(files)), metrics(rows_new, list(files))
     lines = ["# Set score evaluation", "", "- Dataset: `" + str(args.root) + "` (read-only)",
@@ -107,10 +110,11 @@ def main():
              "- Fixed Tech house sample: 20 tracks, seed 42.", "- Five 60/40 partitions, seeds 42–46.",
              "- Tracks analyzed: " + str({k: len(v) for k, v in available.items()}), "",
              "| Metric | Old cosine | New percentile |", "|---|---:|---:|"]
-    labels = [("best_accuracy_pct", "Best accuracy (%)"), ("mean_correct_section_score", "Mean score, correct section"),
+    labels = [("best_accuracy_pct", "Best accuracy (%)"), ("review_pct", "Por revisar (%)"),
+              ("decided_accuracy_pct", "Accuracy on decided (%)"), ("mean_correct_section_score", "Mean score, correct section"),
               ("mean_other_section_score", "Mean score, other sections"), ("score_stddev", "Score standard deviation"),
               ("scores_ge_90_pct", "Scores ≥ 90 (%)"), ("evaluated_inputs", "Evaluated inputs")]
-    lines += [f"| {label} | {old[key]} | {new[key]} |" for key, label in labels]
+    lines += [f"| {label} | {'—' if key in ('review_pct', 'decided_accuracy_pct') else old[key]} | {new[key]} |" for key, label in labels]
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines), flush=True)
