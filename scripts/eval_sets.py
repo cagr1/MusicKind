@@ -7,11 +7,7 @@ import random
 import sys
 from pathlib import Path
 
-import numpy as np
-
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
-from style_analyzer import cosine_similarity, extract_features, score_sections
 
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".aiff", ".aif", ".flac", ".m4a"}
 SECTIONS = {"deep house": "deep house", "Tech house": "Tech house", "minimal : deep tech": "minimal : deep tech"}
@@ -60,20 +56,68 @@ def metrics(rows, section_names):
     }
 
 
+def parse_section(value):
+    name, sep, folder = value.partition("=")
+    if not sep or not name.strip() or not folder.strip():
+        raise argparse.ArgumentTypeError("section must be NOMBRE=RUTA")
+    return name.strip(), Path(folder.strip())
+
+
+def parse_ref_values(values):
+    result = []
+    for value in values:
+        for part in value.split(","):
+            try:
+                number = int(part.strip())
+            except ValueError as exc:
+                raise argparse.ArgumentTypeError("refs must be positive integers") from exc
+            if number < 1:
+                raise argparse.ArgumentTypeError("refs must be positive integers")
+            result.append(number)
+    return list(dict.fromkeys(result))
+
+
+def confusion_matrix(rows, section_names):
+    columns = [*section_names, "Por revisar"]
+    matrix = {actual: {predicted: 0 for predicted in columns} for actual in section_names}
+    for row in rows:
+        matrix[row["actual"]][row["predicted"] or "Por revisar"] += 1
+    return matrix
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path("/Volumes/Mac Backup/MUSIC BACKUP/2026"))
     parser.add_argument("--cache", type=Path, default=ROOT / ".cache/eval/sets")
     parser.add_argument("--report", type=Path, default=ROOT / ".cache/eval/sets-report.md")
+    parser.add_argument("--section", action="append", type=parse_section, default=[])
+    parser.add_argument("--refs", action="append", default=[], metavar="N[,N...]")
+    parser.add_argument("--max-per-section", type=int)
     args = parser.parse_args()
-    folders = {name: args.root / folder for name, folder in SECTIONS.items()}
+    global np, cosine_similarity, extract_features, score_sections
+    import numpy as np
+    sys.path.insert(0, str(ROOT / "src"))
+    from style_analyzer import cosine_similarity, extract_features, score_sections
+    custom_sections = bool(args.section)
+    folders = dict(args.section) if custom_sections else {name: args.root / folder for name, folder in SECTIONS.items()}
+    if len(folders) != len(set(folders)):
+        raise SystemExit("Section names must be unique")
     files = {name: audio_files(path) for name, path in folders.items()}
     if any(not paths for paths in files.values()):
         raise SystemExit("No audio found in one or more required section folders: " + str({k: len(v) for k, v in files.items()}))
-    rng = random.Random(42)
-    tech_sample = rng.sample(files["Tech house"], min(20, len(files["Tech house"])))
-    files["Tech house"] = sorted(tech_sample)
-    print("Audio per section after fixed Tech house sample:", {k: len(v) for k, v in files.items()}, flush=True)
+    if custom_sections:
+        max_per_section = args.max_per_section if args.max_per_section is not None else 40
+        if max_per_section < 1:
+            raise SystemExit("--max-per-section must be positive")
+        rng = random.Random(42)
+        files = {name: sorted(rng.sample(paths, min(max_per_section, len(paths)))) for name, paths in files.items()}
+        sample_note = f"- Sample: up to {max_per_section} tracks per section, seed 42."
+    else:
+        rng = random.Random(42)
+        tech_sample = rng.sample(files["Tech house"], min(20, len(files["Tech house"])))
+        files["Tech house"] = sorted(tech_sample)
+        sample_note = "- Fixed Tech house sample: 20 tracks, seed 42."
+    print("Audio per section after sampling:", {k: len(v) for k, v in files.items()}, flush=True)
     vectors = {}
     all_files = [(section, path) for section, paths in files.items() for path in paths]
     for index, (section, path) in enumerate(all_files, 1):
@@ -86,35 +130,53 @@ def main():
     if any(len(paths) < 2 for paths in available.values()):
         raise SystemExit("Need at least two successfully analyzed tracks per section: " + str({k: len(v) for k, v in available.items()}))
 
-    rows_old, rows_new = [], []
-    for fold in range(5):
-        fold_rng = random.Random(42 + fold)
-        refs, probes = {}, {}
-        for section, paths in available.items():
-            shuffled = list(paths)
-            fold_rng.shuffle(shuffled)
-            ref_count = max(1, min(len(shuffled) - 1, round(len(shuffled) * 0.6)))
-            refs[section] = np.asarray([vectors[(section, p)] for p in shuffled[:ref_count]])
-            probes[section] = shuffled[ref_count:]
-        for actual, paths in probes.items():
-            for path in paths:
-                query = vectors[(actual, path)]
-                old_scores, old_best = cosine_scores(query, refs)
-                new_scores, new_best, review_reason, _ref_counts = score_sections(query, refs)
-                rows_old.append({"actual": actual, "predicted": old_best, "scores": old_scores})
-                rows_new.append({"actual": actual, "predicted": new_best, "scores": new_scores, "review_reason": review_reason})
-
-    old, new = metrics(rows_old, list(files)), metrics(rows_new, list(files))
+    ref_counts = parse_ref_values(args.refs) if args.refs else [None]
+    reports = []
+    for requested_refs in ref_counts:
+        rows_old, rows_new, used_counts = [], [], {}
+        for fold in range(5):
+            fold_rng = random.Random(42 + fold)
+            refs, probes = {}, {}
+            for section, paths in available.items():
+                shuffled = list(paths)
+                fold_rng.shuffle(shuffled)
+                if requested_refs is None:
+                    ref_count = max(1, min(len(shuffled) - 1, round(len(shuffled) * 0.6)))
+                else:
+                    ref_count = min(requested_refs, len(shuffled) - 1)
+                    used_counts[section] = ref_count
+                refs[section] = np.asarray([vectors[(section, p)] for p in shuffled[:ref_count]])
+                probes[section] = shuffled[ref_count:]
+            for actual, paths in probes.items():
+                for path in paths:
+                    query = vectors[(actual, path)]
+                    old_scores, old_best = cosine_scores(query, refs)
+                    new_scores, new_best, review_reason, _ref_counts = score_sections(query, refs)
+                    rows_old.append({"actual": actual, "predicted": old_best, "scores": old_scores})
+                    rows_new.append({"actual": actual, "predicted": new_best, "scores": new_scores, "review_reason": review_reason})
+        reports.append((requested_refs, used_counts, metrics(rows_old, list(files)), metrics(rows_new, list(files)), rows_new))
     lines = ["# Set score evaluation", "", "- Dataset: `" + str(args.root) + "` (read-only)",
              "- Features: `extract_features`, `--analysis-seconds 30`; cache keyed by path, size, mtime, duration.",
-             "- Fixed Tech house sample: 20 tracks, seed 42.", "- Five 60/40 partitions, seeds 42–46.",
+             sample_note, "- Five partitions, seeds 42–46.",
              "- Tracks analyzed: " + str({k: len(v) for k, v in available.items()}), "",
-             "| Metric | Old cosine | New percentile |", "|---|---:|---:|"]
+             f"- Azar: {round(100 / len(files), 1)}% (100/nº de secciones).", ""]
     labels = [("best_accuracy_pct", "Best accuracy (%)"), ("review_pct", "Por revisar (%)"),
               ("decided_accuracy_pct", "Accuracy on decided (%)"), ("mean_correct_section_score", "Mean score, correct section"),
               ("mean_other_section_score", "Mean score, other sections"), ("score_stddev", "Score standard deviation"),
               ("scores_ge_90_pct", "Scores ≥ 90 (%)"), ("evaluated_inputs", "Evaluated inputs")]
-    lines += [f"| {label} | {'—' if key in ('review_pct', 'decided_accuracy_pct') else old[key]} | {new[key]} |" for key, label in labels]
+    for requested_refs, used_counts, old, new, rows_new in reports:
+        heading = requested_refs if requested_refs is not None else "reparto 60/40"
+        lines += [f"## Referencias: {heading}", "",
+                  (f"- Referencias usadas por sección: {used_counts}; N se reduce a len−1 en las secciones pequeñas." if requested_refs is not None else "- Reparto 60/40 actual."), "",
+                  "| Metric | Old cosine | New percentile |", "|---|---:|---:|"]
+        lines += [f"| {label} | {'—' if key in ('review_pct', 'decided_accuracy_pct') else old[key]} | {new[key]} |" for key, label in labels]
+        columns = [*files, "Por revisar"]
+        matrix = confusion_matrix(rows_new, list(files))
+        lines += ["", "### Matriz de confusión (actual → predicho)", "",
+                  "| Actual \\ Predicho | " + " | ".join(columns) + " |",
+                  "|" + "---:|" * (len(columns) + 1)]
+        lines += ["| " + actual + " | " + " | ".join(str(matrix[actual][predicted]) for predicted in columns) + " |" for actual in files]
+        lines.append("")
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("\n".join(lines), flush=True)
