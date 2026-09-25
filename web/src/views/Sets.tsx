@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { Activity, AudioLines, FolderOpen, Pause, Play, Sparkles, X } from 'lucide-react'
+import { Activity, AudioLines, Download, FolderOpen, Pause, Play, Sparkles, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { CamelotBadge } from '@/components/music/CamelotBadge'
@@ -36,6 +37,11 @@ type SectionKey = 'warmup' | 'peak' | 'closing'
 
 export function bestScore(track: SetResult): number | null {
   return track.best ? track[track.best] : null
+}
+
+export function exportConflictAction(status: number | undefined, confirmed: boolean) {
+  if (status !== 409) return 'propagate'
+  return confirmed ? 'retry' : 'cancel'
 }
 
 export function mergeTrackMetadata(
@@ -218,6 +224,65 @@ export function Sets() {
       )
     })
   }
+  const exportPlaylists = async () => {
+    const outputDir = await electron.openDirectory(t('sets.exportChooseFolder'))
+    if (!outputDir) return
+    const payload = {
+      outputDir,
+      baseName: folders.input ? fileName(folders.input) : 'MusicKind Set',
+      groups: Object.fromEntries(
+        groups.map((group) => [
+          group.key,
+          group.tracks.map((track) => ({
+            path: track.file,
+            title: track.title,
+            artist: track.artist,
+            duration: (track as SetResult & { duration?: number }).duration,
+          })),
+        ]),
+      ),
+    }
+    try {
+      const sendExport = async (body: typeof payload & { overwrite?: boolean }) => {
+        const response = await fetch('/api/set-export', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        const data = await response.json()
+        if (!response.ok) {
+          const failure = new Error(data.error || `Export failed: ${response.status}`) as Error & {
+            status: number
+            existing?: string[]
+          }
+          failure.status = response.status
+          failure.existing = data.existing
+          throw failure
+        }
+        return data as { ok: boolean; written: string[] }
+      }
+      let response: { ok: boolean; written: string[] }
+      try {
+        response = await sendExport(payload)
+      } catch (conflictError) {
+        const conflict = conflictError as Error & { status?: number; existing?: string[] }
+        if (conflict.status !== 409) throw conflictError
+        const confirmed = window.confirm(
+          t('sets.exportOverwrite').replace('{{names}}', conflict.existing?.join(', ') ?? ''),
+        )
+        if (exportConflictAction(conflict.status, confirmed) === 'cancel') return
+        response = await sendExport({ ...payload, overwrite: true })
+      }
+      toast.success(t('sets.exportDone').replace('{{count}}', String(response.written.length)), {
+        action: {
+          label: t('sets.exportShow'),
+          onClick: () => void electron.showInFolder(response.written[0]),
+        },
+      })
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : String(exportError))
+    }
+  }
   const selectedTrack: InspectorTrack | null = selected
     ? {
         id: selected.file,
@@ -244,6 +309,12 @@ export function Sets() {
           </div>
           <div className="flex items-center gap-2">
             <SelectionControls selection={selection} t={t} hasRows={results.length > 0} />
+            {results.length > 0 && !isBusy && (
+              <Button variant="outline" size="sm" onClick={() => void exportPlaylists()}>
+                <Download />
+                {t('sets.export')}
+              </Button>
+            )}
             {isBusy && (
               <>
                 <Button

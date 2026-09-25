@@ -249,7 +249,12 @@
     "reviewTie": "Empate entre secciones",
     "warmup": "Warmup",
     "peak": "Peak",
-    "closing": "Closing"
+    "closing": "Closing",
+    "export": "Exportar playlists",
+    "exportChooseFolder": "Carpeta para las playlists",
+    "exportOverwrite": "Ya existen estos archivos: {{names}}. ¿Sobrescribirlos?",
+    "exportDone": "{{count}} playlists exportadas",
+    "exportShow": "Mostrar en Finder"
   },
   "converter": {
     "title": "Convertidor",

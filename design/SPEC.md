@@ -1206,3 +1206,30 @@ Base: S3a (`.cache/eval/bpm-report.md`): Percival pista entera 98,5 % ±0.5 (2,4
 de `2026`, algunas con tag BPM borrado): tag → `bpmSource: tag` idéntico al tag; sin tag → Percival cerca del tag original
 (±1 o mitad/doble); ya no hay valores repetidos 129.2 en masa. Re-medir `scripts/eval_sets.py` con caché nueva y comparar
 con 44,7 % (reportar si baja).
+
+## X1 — Exportar resultados de Sets a `.m3u8` (2026-09-25, pedido de Carlos)
+
+Objetivo: los grupos que muestra la vista Sets se guardan como playlists `.m3u8` que abren VLC/Rekordbox/Serato sin MusicKind abierto. No reemplaza S5 (`plan.md:420`); es la versión mínima.
+
+**Back** — módulo nuevo `src/set-export.js`, ruta `POST /api/set-export` en `src/server.js` junto a `/api/set-playlists` (`src/server.js:227`).
+- Body: `{ outputDir, baseName, groups: { warmup?: Track[], peak?: Track[], closing?: Track[], review?: Track[] }, overwrite?: boolean }`, `Track = { path, artist?, title?, duration? }`.
+- Escribe un archivo por grupo no vacío: `<baseName> - Warmup.m3u8`, `- Peak`, `- Closing`, `- Por revisar`. Grupos vacíos no se escriben.
+- **Orden exacto recibido**, sin reordenar. **Rutas absolutas** (el playlist vive fuera del árbol de pistas; relativas se rompen). `#EXTM3U`; por pista `#EXTINF:<seg redondeados o -1>,<artist> - <title>` (sin artist/title → nombre de archivo sin extensión; quitar `\r\n`) y la ruta absoluta.
+- Validar: `outputDir` absoluta, existente, carpeta; no dentro de `MUSIC BACKUP/2026` (exportar y reutilizar `assertSafeRoot` de `src/set-playlists.js:14`); cada `path` absoluto y existente (si no existe → error 400 con la ruta); `baseName` no vacío, sin `/ \ :` ni `..`, se recorta.
+- Si alguno de los archivos destino existe y `overwrite !== true` → 409 `{ ok:false, existing:[nombres] }` sin escribir nada. Escritura atómica (exportar y reutilizar `atomicWrite` de `src/set-playlists.js:76`).
+- Respuesta 200 `{ ok:true, written:[rutas absolutas] }`.
+- No tocar el comportamiento de `/api/set-playlists` ni de `createSetPlaylists`.
+
+**Front** — `web/src/views/Sets.tsx`:
+- Botón "Exportar playlists" en la barra de resultados, visible con `results.length > 0` y sin proceso activo.
+- Pide carpeta con `electron.openDirectory`. `baseName` por defecto = nombre de la carpeta de entrada (`folders.input`), si no "MusicKind Set".
+- Grupos y orden = exactamente los de `groupSetResults(results)` (lo que ve el usuario), usando title/artist ya cargados.
+- 409 → `window.confirm` con los nombres existentes → reintenta con `overwrite:true`.
+- Éxito: `toast.success` con nº de archivos y acción "Mostrar en Finder" (`electron.showInFolder` del primero).
+- i18n `es.json`/`en.json` (claves `sets.export*`). Tokens de color existentes; sin hex.
+
+**Tests** — `tests/set-export.test.js` (node:test, carpeta temporal): 4 archivos con orden preservado y rutas absolutas; grupo vacío omitido; 409 sin sobrescribir y archivos intactos; `overwrite:true` reemplaza; rechaza ruta relativa, pista inexistente, baseName inválido y destino bajo `MUSIC BACKUP/2026`; saltos de línea en título eliminados. Vitest: helper puro que arma `groups` desde `groupSetResults` (si se extrae).
+
+**No tocar:** `src/style_analyzer.py`, `src/set-playlists.js` salvo añadir `export` a las dos funciones, Clasificador, `NEXT.md`, `plan.md`, specs. Sin commit.
+
+**Gate:** `node --test tests/*.test.js`, `npm --prefix web test`, `npm --prefix web run build`, `npm --prefix web run lint`, `npm --prefix web run format:check`.

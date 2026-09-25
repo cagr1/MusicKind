@@ -249,7 +249,12 @@
     "reviewTie": "Tie between sections",
     "warmup": "Warmup",
     "peak": "Peak",
-    "closing": "Closing"
+    "closing": "Closing",
+    "export": "Export playlists",
+    "exportChooseFolder": "Playlist destination folder",
+    "exportOverwrite": "These files already exist: {{names}}. Overwrite them?",
+    "exportDone": "{{count}} playlists exported",
+    "exportShow": "Show in Finder"
   },
   "converter": {
     "title": "Converter",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { groupSetResults, mergeTrackMetadata, type SetResult } from './Sets'
+import { exportConflictAction, groupSetResults, mergeTrackMetadata, type SetResult } from './Sets'
 
 const result = (best: SetResult['best'], bpm: number | null): SetResult => ({
   file: `/music/${best ?? 'unknown'}.wav`,
@@ -12,6 +12,12 @@ const result = (best: SetResult['best'], bpm: number | null): SetResult => ({
 })
 
 describe('set analysis helpers', () => {
+  it('propagates non-conflict export errors and retries conflicts only after confirmation', () => {
+    expect(exportConflictAction(400, false)).toBe('propagate')
+    expect(exportConflictAction(409, false)).toBe('cancel')
+    expect(exportConflictAction(409, true)).toBe('retry')
+  })
+
   it('keeps analyzed BPM and does not replace track metadata with empty values', () => {
     const track = {
       ...result('warmup', 129.2),

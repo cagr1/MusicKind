@@ -11,7 +11,7 @@ function within(candidate, root) {
   return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative));
 }
 
-function assertSafeRoot(root) {
+export function assertSafeRoot(root) {
   const parts = path.resolve(root).split(path.sep).filter(Boolean);
   for (let i = 0; i < parts.length - 1; i++) {
     if (parts[i].toLocaleLowerCase() === "music backup" && parts[i + 1] === "2026") {
@@ -70,7 +70,7 @@ function formatPlaylist(root, tracks) {
   return `${lines.join("\n")}\n`;
 }
 
-function atomicWrite(file, contents) {
+export function atomicWrite(file, contents) {
   const temporary = `${file}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
   try {
     fs.writeFileSync(temporary, contents, { encoding: "utf8", flag: "wx" });
