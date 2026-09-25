@@ -22,6 +22,7 @@ import { createPythonInstallHandler } from "./python-install.js";
 import { LineBuffer } from "./line-buffer.js";
 import { parseFile } from "music-metadata";
 import { applyClassifyMoves, listClassifyManifests, undoClassifyManifest, validateMoves } from "./classify-apply.js";
+import { createSetPlaylists, listSetPlaylistGenres } from "./set-playlists.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -202,6 +203,20 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
     const processId = body.processId || `tags-${Date.now()}`;
     await runProcessWithProgress(process.execPath, args, res, processId, { parseJsonResult: true });
     return;
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/set-playlists") {
+    try {
+      const body = await readJsonBody(req);
+      return sendJson(res, await createSetPlaylists(body));
+    } catch (error) {
+      return sendJson(res, { ok: false, error: error.message }, 400);
+    }
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/set-playlist-genres") {
+    try { return sendJson(res, { ok: true, ...listSetPlaylistGenres(url.searchParams.get("root") || "") }); }
+    catch (error) { return sendJson(res, { ok: false, error: error.message }, 400); }
   }
 
   if (req.method === "GET" && url.pathname === "/api/classify-manifests") {

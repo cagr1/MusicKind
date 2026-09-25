@@ -967,3 +967,35 @@ Tests vitest para 2 y 5 (funciones puras). **Gate:** vitest/build/lint/format:ch
 `results.some(...)` (~`Converter.tsx:797`) siempre es verdadero. Corregir en origen: la fila sintética (~`:389`) lleva
 `sizeIn: null` (tipo `number | null`), la celda usa `formatBytes(result.sizeIn)` y se elimina `conversionInputSize` y su test
 (reemplazar por test de la fila sintética con `sizeIn null`). Gate: vitest/build/lint/format:check.
+
+### E4 · Playlists del set (`.m3u8`) desde `Clasificado/` (2026-09-25)
+Etapa 2 del Lote 6: tres playlists a partir de las carpetas por género que dejó E3; **no mueve ni copia audio**.
+Por defecto: Warmup = Deep House + Afro House · Peak = Tech House · Closing = Indie Dance + House. Minimal y el resto, fuera.
+1. **Back** `src/set-playlists.js` (puro, testeable) + `POST /api/set-playlists` (JSON, no SSE):
+   - `{ root, sections: {warmup:[géneros], peak:[…], closing:[…]}, dryRun }`. `root` absoluta y existente; géneros = nombres de
+     subcarpetas directas de `root` (rechazar `..`, separadores o carpetas inexistentes → 400).
+   - Por sección: archivos de audio recursivos de esas carpetas (vía `services/audio-discovery.js`), leer con `music-metadata`
+     (`duration`, `artist`, `title`, `bpm`) — sin analizar audio. Orden: BPM ascendente (sin BPM al final), luego artista.
+   - `dryRun:true` → `{ok, sections:{warmup:{count, bpmMin, bpmMax, durationSec, tracks:[{path,artist,title,bpm}]}, …}}`.
+   - `dryRun:false` → escribe `root/Warmup.m3u8`, `Peak.m3u8`, `Closing.m3u8` (solo secciones con ≥1 pista), UTF-8 sin BOM:
+     `#EXTM3U`, por pista `#EXTINF:<seg>,<Artista> - <Título>` + **ruta relativa a `root`** con `/`. Escritura atómica (tmp + rename);
+     si ya existe se reemplaza (la UI avisa antes). Devuelve rutas escritas. Nunca escribe fuera de `root` ni en `MUSIC BACKUP/2026`
+     (rechazar `root` que sea o esté dentro de una carpeta llamada `2026` bajo `MUSIC BACKUP` — misma regla que E3).
+2. **UI** en la vista Clasificador, junto a los manifiestos: botón "Playlists del set" → panel/diálogo con la carpeta raíz
+   (por defecto el `destRoot` actual), tres filas Warmup/Peak/Closing con los géneros disponibles (subcarpetas de `root`) como
+   chips seleccionables (defaults de arriba si existen), vista previa con `dryRun` (N pistas · BPM min–max · duración total por
+   sección), botón "Crear playlists" (aviso si ya existen) y, al terminar, "Mostrar en Finder". i18n es/en. Tokens `brand`.
+3. **Tests** node: orden por BPM, sin BPM al final, rutas relativas con `/`, EXTINF correcto, secciones vacías no se escriben,
+   400 por género inexistente/`..`, escritura atómica no deja `.tmp`, dryRun no escribe nada. vitest de la función de defaults.
+No tocar otras vistas. **Gate (cerebro):** node/vitest/build/lint/format:check; en vivo (3099) sobre una copia con subcarpetas de
+género en el scratchpad: vista previa correcta, `.m3u8` escritos que abren en un reproductor (ffprobe de cada ruta relativa resuelve).
+
+### E4.1 · Pistas ilegibles y BPM a mitad/doble (QA del cerebro en vivo)
+Vista previa real sobre `MUSIC BACKUP` (solo lectura): 884 pistas, 35 s, BPM de tag entre 72 y 201. Escritura en copia: un archivo
+corrupto entró como `#EXTINF:-1,Desconocido - roto` (ffprobe no lo abre).
+1. `src/set-playlists.js`: si `readMetadata` lanza o no hay `format.duration` finita > 0 → la pista **no entra**; se devuelve en
+   `skipped:[{path, reason}]` por sección (y `skippedCount`). Nunca falla la petición por un archivo.
+2. BPM para ordenar: `bpmSort` = BPM del tag llevado a [85, 175) duplicando o dividiendo por 2 (79 → 158? no: 79×2 = 158 ✓; 201/2 = 100.5 ✓).
+   Orden y `bpmMin`/`bpmMax` usan `bpmSort`; `tracks[].bpm` conserva el del tag y se añade `bpmSort`.
+3. UI: en la vista previa mostrar "N omitidas (ilegibles)" por sección si > 0.
+Tests: archivo ilegible omitido y listado; 79→158, 201→100.5, 128→128 y orden resultante. **Gate:** node/vitest/build/lint/format.

@@ -55,6 +55,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { defaultSetPlaylistSections, type SetPlaylistSections } from '@/lib/set-playlists'
 
 const SOURCE_LABEL_KEYS: Record<string, TranslationKey> = {
   embedded: 'classifier.sourceLabels.embedded',
@@ -554,6 +555,25 @@ function TagClassifier({
   const [genreFilter, setGenreFilter] = React.useState('all')
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [historyOpen, setHistoryOpen] = React.useState(false)
+  const [playlistsOpen, setPlaylistsOpen] = React.useState(false)
+  const [playlistGenres, setPlaylistGenres] = React.useState<string[]>([])
+  const [existingPlaylists, setExistingPlaylists] = React.useState<string[]>([])
+  const [playlistSections, setPlaylistSections] = React.useState<SetPlaylistSections>({
+    warmup: [],
+    peak: [],
+    closing: [],
+  })
+  const [playlistPreview, setPlaylistPreview] = React.useState<Record<
+    string,
+    {
+      count: number
+      skippedCount: number
+      bpmMin: number | null
+      bpmMax: number | null
+      durationSec: number
+    }
+  > | null>(null)
+  const [playlistWritten, setPlaylistWritten] = React.useState<string[]>([])
   const [manifests, setManifests] = React.useState<
     Array<{ manifestPath: string; createdAt: string; total: number; done: number; undone: boolean }>
   >([])
@@ -651,6 +671,76 @@ function TagClassifier({
       setError(e instanceof Error ? e.message : String(e))
     }
   }
+  const openPlaylists = async () => {
+    if (!destRoot) return
+    setError(null)
+    try {
+      const response = await getJson<{ genres: string[]; existing: string[] }>(
+        `/api/set-playlist-genres?root=${encodeURIComponent(destRoot)}`,
+      )
+      setPlaylistGenres(response.genres)
+      setExistingPlaylists(response.existing)
+      setPlaylistSections(defaultSetPlaylistSections(response.genres))
+      setPlaylistPreview(null)
+      setPlaylistWritten([])
+      setPlaylistsOpen(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  const togglePlaylistGenre = (section: keyof SetPlaylistSections, genre: string) => {
+    setPlaylistSections((current) => ({
+      ...current,
+      [section]: current[section].includes(genre)
+        ? current[section].filter((item) => item !== genre)
+        : [...current[section], genre],
+    }))
+    setPlaylistPreview(null)
+  }
+  const previewPlaylists = async () => {
+    try {
+      const response = await postJson<{ sections: NonNullable<typeof playlistPreview> }>(
+        '/api/set-playlists',
+        { root: destRoot, sections: playlistSections, dryRun: true },
+      )
+      setPlaylistPreview(response.sections)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+  const createPlaylists = async () => {
+    try {
+      const sectionFiles: Record<keyof SetPlaylistSections, string> = {
+        warmup: 'Warmup.m3u8',
+        peak: 'Peak.m3u8',
+        closing: 'Closing.m3u8',
+      }
+      const replacing = (Object.keys(sectionFiles) as Array<keyof SetPlaylistSections>)
+        .filter((section) => (playlistPreview?.[section]?.count ?? 0) > 0)
+        .map((section) => sectionFiles[section])
+        .filter((name) => existingPlaylists.includes(name))
+      if (
+        replacing.length &&
+        !window.confirm(`${t('classifier.playlistReplace')} ${replacing.join(', ')}`)
+      )
+        return
+      const response = await postJson<{ written: string[] }>('/api/set-playlists', {
+        root: destRoot,
+        sections: playlistSections,
+        dryRun: false,
+      })
+      setPlaylistWritten(response.written)
+      setExistingPlaylists((current) => [
+        ...new Set([
+          ...current,
+          ...response.written.map((file) => file.split(/[\\/]/).pop() || ''),
+        ]),
+      ])
+      toast.success(t('classifier.playlistCreated'))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    }
+  }
   const runApply = async (endpoint: string, body: Record<string, unknown>, successText: string) => {
     setBusy(true)
     setError(null)
@@ -729,6 +819,14 @@ function TagClassifier({
                 <SelectItem value="legacy">{t('classifier.methodOnline')}</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void openPlaylists()}
+              disabled={busy || !destRoot}
+            >
+              {t('classifier.playlists')}
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1061,6 +1159,66 @@ function TagClassifier({
               </div>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={playlistsOpen} onOpenChange={setPlaylistsOpen}>
+        <DialogContent className="max-h-[85vh] overflow-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{t('classifier.playlists')}</DialogTitle>
+          </DialogHeader>
+          <p className="break-all text-xs text-zinc-500">{destRoot}</p>
+          {(['warmup', 'peak', 'closing'] as const).map((section) => (
+            <div key={section} className="space-y-2 rounded border border-line p-3">
+              <h3 className="text-sm font-medium">
+                {t(`classifier.playlistSections.${section}` as TranslationKey)}
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                {playlistGenres.map((genre) => {
+                  const active = playlistSections[section].includes(genre)
+                  return (
+                    <Button
+                      key={genre}
+                      size="sm"
+                      variant={active ? 'default' : 'outline'}
+                      onClick={() => togglePlaylistGenre(section, genre)}
+                    >
+                      {genre}
+                    </Button>
+                  )
+                })}
+              </div>
+              {playlistPreview && (
+                <p className="text-xs text-zinc-400">
+                  {playlistPreview[section]?.count ?? 0} {t('classifier.tracks')} ·{' '}
+                  {playlistPreview[section]?.bpmMin ?? '—'}–
+                  {playlistPreview[section]?.bpmMax ?? '—'} BPM ·{' '}
+                  {Math.round((playlistPreview[section]?.durationSec ?? 0) / 60)} min
+                  {(playlistPreview[section]?.skippedCount ?? 0) > 0 && (
+                    <>
+                      {' '}
+                      · {playlistPreview[section].skippedCount} {t('classifier.playlistSkipped')}
+                    </>
+                  )}
+                </p>
+              )}
+            </div>
+          ))}
+          {playlistWritten.length > 0 && (
+            <Button
+              variant="outline"
+              onClick={() => void electron.showInFolder(playlistWritten[0])}
+            >
+              {t('classifier.showPlaylists')}
+            </Button>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => void previewPlaylists()}>
+              {t('classifier.playlistPreview')}
+            </Button>
+            <Button disabled={!playlistPreview || busy} onClick={() => void createPlaylists()}>
+              {t('classifier.playlistCreate')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
