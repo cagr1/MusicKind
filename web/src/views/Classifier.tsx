@@ -536,6 +536,16 @@ function LegacyClassifier({
   )
 }
 
+interface TagClassifierSnapshot {
+  inputRoot: string
+  destRoot: string
+  results: TagResult[]
+  selectedPath: string | null
+  selectedPaths: string[]
+  statusFilter: TagStatusFilter
+  genreFilter: string
+}
+
 function TagClassifier({
   method,
   onMethodChange,
@@ -545,14 +555,22 @@ function TagClassifier({
 }) {
   const t = useT()
   const { toggle, path: playingPath, setQueue } = usePlayer()
-  const [inputRoot, setInputRoot] = React.useState('')
+  const { results: savedResults, setResult, active, setActive } = useProcess()
+  const savedSnapshot = savedResults['classifier-tags'] as TagClassifierSnapshot | undefined
+  const [inputRoot, setInputRoot] = React.useState(() => savedSnapshot?.inputRoot ?? '')
   const [genres, setGenres] = React.useState<string[]>([])
-  const [destRoot, setDestRoot] = React.useState('')
-  const [results, setResults] = React.useState<TagResult[]>([])
-  const [selectedPath, setSelectedPath] = React.useState<string | null>(null)
-  const [selectedPaths, setSelectedPaths] = React.useState<string[]>([])
-  const [statusFilter, setStatusFilter] = React.useState<TagStatusFilter>('all')
-  const [genreFilter, setGenreFilter] = React.useState('all')
+  const [destRoot, setDestRoot] = React.useState(() => savedSnapshot?.destRoot ?? '')
+  const [results, setResults] = React.useState<TagResult[]>(() => savedSnapshot?.results ?? [])
+  const [selectedPath, setSelectedPath] = React.useState<string | null>(
+    () => savedSnapshot?.selectedPath ?? null,
+  )
+  const [selectedPaths, setSelectedPaths] = React.useState<string[]>(
+    () => savedSnapshot?.selectedPaths ?? [],
+  )
+  const [statusFilter, setStatusFilter] = React.useState<TagStatusFilter>(
+    () => savedSnapshot?.statusFilter ?? 'all',
+  )
+  const [genreFilter, setGenreFilter] = React.useState(() => savedSnapshot?.genreFilter ?? 'all')
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [historyOpen, setHistoryOpen] = React.useState(false)
   const [playlistsOpen, setPlaylistsOpen] = React.useState(false)
@@ -578,13 +596,37 @@ function TagClassifier({
     Array<{ manifestPath: string; createdAt: string; total: number; done: number; undone: boolean }>
   >([])
   const [error, setError] = React.useState<string | null>(null)
+  const processIsActive = active.view === 'classifier-tags' && active.status === 'running'
   const [busy, setBusy] = React.useState(false)
   const [progress, setProgress] = React.useState('')
+  const isBusy = busy || processIsActive
+  const progressText =
+    processIsActive && active.file ? `${active.current}/${active.total} · ${active.file}` : progress
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const filtered = React.useMemo(
     () => filterTagResults(results, statusFilter, genreFilter),
     [results, statusFilter, genreFilter],
   )
+  React.useEffect(() => {
+    setResult('classifier-tags', {
+      inputRoot,
+      destRoot,
+      results,
+      selectedPath,
+      selectedPaths,
+      statusFilter,
+      genreFilter,
+    } satisfies TagClassifierSnapshot)
+  }, [
+    destRoot,
+    genreFilter,
+    inputRoot,
+    results,
+    selectedPath,
+    selectedPaths,
+    setResult,
+    statusFilter,
+  ])
   const counts = React.useMemo(() => tagResultCounts(results), [results])
   const moves = React.useMemo(() => buildClassifyMoves(results), [results])
   const onlineMoveCount = React.useMemo(
@@ -630,33 +672,64 @@ function TagClassifier({
     if (path) setter(path)
   }
   const analyze = async () => {
-    if (!inputRoot || !destRoot || busy) return
+    if (!inputRoot || !destRoot || isBusy) return
     setError(null)
     setResults([])
+    setSelectedPath(null)
+    setSelectedPaths([])
     setBusy(true)
+    setActive({ view: 'classifier-tags', name: t('classifier.title'), status: 'running' })
     await streamProcess(
       '/api/classify-by-tags',
       { inputRoot, destRoot },
       {
-        onProgress: (p) => setProgress(`${p.current}/${p.total} · ${p.file}`),
+        onStart: (processId) => setActive({ processId, status: 'running' }),
+        onProgress: (p) => {
+          setProgress(`${p.current}/${p.total} · ${p.file}`)
+          setActive({ current: p.current, total: p.total, file: p.file, status: 'running' })
+        },
         onResult: (value) => {
           if (!Array.isArray(value)) return
           const rows = value as TagResult[]
           setResults(rows)
+          setResult('classifier-tags', {
+            inputRoot,
+            destRoot,
+            results: rows,
+            selectedPath: rows[0]?.path ?? null,
+            selectedPaths: [],
+            statusFilter,
+            genreFilter,
+          } satisfies TagClassifierSnapshot)
+          setSelectedPath(rows[0]?.path ?? null)
           void readTrackMetadata(rows as unknown as ClassifierResult[], (path, meta) =>
-            setResults((current) =>
-              current.map((row) => (row.path === path ? mergeTrackMetadata(row, meta) : row)),
-            ),
+            setResults((current) => {
+              const updated = current.map((row) =>
+                row.path === path ? mergeTrackMetadata(row, meta) : row,
+              )
+              setResult('classifier-tags', {
+                inputRoot,
+                destRoot,
+                results: updated,
+                selectedPath: rows[0]?.path ?? null,
+                selectedPaths: [],
+                statusFilter,
+                genreFilter,
+              } satisfies TagClassifierSnapshot)
+              return updated
+            }),
           )
         },
         onError: setError,
         onDone: ({ success }) => {
           setBusy(false)
-          if (success) setProgress('')
+          setProgress('')
+          setActive({ status: success ? 'done' : 'error' })
         },
       },
     )
     setBusy(false)
+    setActive({ status: 'done' })
   }
   const updateMany = (paths: string[], genre: string) =>
     setResults((current) => changeTagGenre(current, paths, genre, destRoot))
@@ -823,7 +896,7 @@ function TagClassifier({
               variant="outline"
               size="sm"
               onClick={() => void openPlaylists()}
-              disabled={busy || !destRoot}
+              disabled={isBusy || !destRoot}
             >
               {t('classifier.playlists')}
             </Button>
@@ -840,7 +913,7 @@ function TagClassifier({
             <Button
               size="sm"
               onClick={() => void analyze()}
-              disabled={busy || !inputRoot || !destRoot}
+              disabled={isBusy || !inputRoot || !destRoot}
             >
               <Activity />
               {t('classifier.analyze')}
@@ -848,7 +921,7 @@ function TagClassifier({
             <Button
               size="sm"
               onClick={() => setConfirmOpen(true)}
-              disabled={busy || moves.length === 0}
+              disabled={isBusy || moves.length === 0}
             >
               {t('classifier.move')} · {moves.length}
             </Button>
@@ -871,9 +944,9 @@ function TagClassifier({
             onClick={() => void choose(t('classifier.destRoot'), setDestRoot)}
           />
         </div>
-        {busy && (
+        {isBusy && (
           <div className="border-b border-line px-5 py-2 font-mono text-[11px] text-zinc-400">
-            {progress || t('classifier.running')}
+            {progressText || t('classifier.running')}
           </div>
         )}
         {error && (
@@ -884,7 +957,7 @@ function TagClassifier({
             </Button>
           </div>
         )}
-        {results.length === 0 && !busy ? (
+        {results.length === 0 && !isBusy ? (
           <EmptyState
             title={t('classifier.chooseFolder')}
             onAction={() => void choose(t('classifier.inputRoot'), setInputRoot)}

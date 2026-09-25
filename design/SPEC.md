@@ -1031,3 +1031,12 @@ python-build-standalone 3.11 por arquitectura + librosa/numpy/scipy/soundfile pr
 ### P3 · Empaquetado y release (esbozo)
 `asarUnpack` de `src/**/*.py` y binarios; `npm run dist:mac` genera `MusicKind-<ver>-arm64.dmg` y `-x64.dmg`; prueba de humo del .app
 con PATH mínimo (BPM, tonalidad, convertir, identify); README con instalación y "Abrir igualmente"; release en GitHub **tras OK de Carlos**.
+
+### E2.4 · La lista del clasificador sobrevive al cambio de pestaña (pedido de Carlos, 2026-09-25)
+`Classifier.tsx` (vista por etiquetas, ~:548-560) guarda todo en `useState` local → al cambiar de pestaña se desmonta y se pierde.
+Guardar en `useProcess().setResult('classifier-tags', snapshot)` y restaurar al montar (mismo patrón que las demás vistas):
+`inputRoot`, `destRoot`, `results`, `selectedPath`, `selectedPaths`, `statusFilter`, `genreFilter`. Solo en memoria (se pierde
+al cerrar la app); se borra únicamente con la acción existente de limpiar o al lanzar un análisis nuevo. Si hay un análisis
+**en curso** al cambiar de pestaña, al volver se ve el progreso/resultado (el proceso ya vive en `ProcessProvider`; comprobar).
+Tests vitest: desmontar y volver a montar conserva resultados, filtros y selección; limpiar los borra. No tocar otras vistas.
+**Gate:** vitest/build/lint/format:check + QA en vivo: analizar → ir a otra pestaña → volver → lista intacta.
