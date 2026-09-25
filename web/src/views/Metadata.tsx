@@ -11,6 +11,7 @@ import { electron, resolveDroppedFiles } from '@/lib/electron'
 import { useProcess } from '@/lib/process'
 import { useView } from '@/hooks/useView'
 import { appendResults, mergeUnique, pendingItems } from '@/lib/list'
+import { itemsFromPaths } from '@/lib/drop'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
@@ -100,6 +101,15 @@ export function metadataFormValues(row: MetadataRow | null): MetadataFields {
 
 export function metadataNeedsRename(row: MetadataRow): boolean {
   return row.newFilename !== row.name
+}
+
+export function mergeMetadataRows(current: MetadataRow[], incoming: MetadataRow[]) {
+  const existingPaths = new Set(current.map((row) => row.path))
+  return appendResults(
+    current,
+    incoming.filter((row) => !existingPaths.has(row.path)),
+    (row) => row.path,
+  )
 }
 
 export function Metadata() {
@@ -194,14 +204,16 @@ export function Metadata() {
     [progress, setActive, t],
   )
 
-  const loadFiles = async (paths: string[], source?: string) => {
+  const loadFiles = async (paths: string[], source?: string | null) => {
     setError(null)
     try {
       if (!paths.length) throw new Error(t('metadata.noFiles'))
+      const newPaths = paths.filter((path) => !rows.some((row) => row.path === path))
+      if (!newPaths.length) return
       const loaded: MetadataRow[] = []
-      for (let index = 0; index < paths.length; index += 4) {
+      for (let index = 0; index < newPaths.length; index += 4) {
         const batch = await Promise.all(
-          paths.slice(index, index + 4).map(async (path) => {
+          newPaths.slice(index, index + 4).map(async (path) => {
             try {
               const response = await getJson<MetadataResponse>(
                 `/api/metadata?file=${encodeURIComponent(path)}`,
@@ -236,9 +248,9 @@ export function Metadata() {
         )
         loaded.push(...batch)
       }
-      setFolder(source ?? folder)
+      if (source !== undefined) setFolder(source)
       setRows((current) => {
-        const merged = appendResults(current, loaded, (row) => row.path)
+        const merged = mergeMetadataRows(current, loaded)
         setResult('metadata', merged)
         return merged
       })
@@ -253,7 +265,7 @@ export function Metadata() {
   const loadFolder = async (directory: string) => {
     try {
       const listed = await getJson<{ files?: string[] }>(
-        `/api/metadata/list?dir=${encodeURIComponent(directory)}&recursive=false`,
+        `/api/metadata/list?dir=${encodeURIComponent(directory)}&recursive=true`,
       )
       await loadFiles(listed.files ?? [], directory)
     } catch (loadError) {
@@ -271,23 +283,29 @@ export function Metadata() {
   const addFiles = async () => {
     const picked = await electron.openFiles(t('metadata.selectFolder'), true)
     const paths = Array.isArray(picked) ? picked : picked ? [picked] : []
-    if (paths.length) await loadFiles(mergeUnique([], paths, (path) => path))
+    if (paths.length)
+      await loadFiles(
+        mergeUnique([], paths, (path) => path),
+        null,
+      )
   }
 
   const onDrop = async (event: React.DragEvent) => {
     event.preventDefault()
     try {
       const paths = await resolveDroppedFiles(event.dataTransfer.files)
-      if (paths[0]) {
-        try {
-          const listed = await getJson<{ files?: string[] }>(
-            `/api/metadata/list?dir=${encodeURIComponent(paths[0])}&recursive=false`,
-          )
-          await loadFiles(listed.files ?? [], paths[0])
-        } catch {
-          await loadFiles(paths)
-        }
-      }
+      const expanded = await itemsFromPaths(paths, async (path) => {
+        const listed = await getJson<{ files?: string[] }>(
+          `/api/metadata/list?dir=${encodeURIComponent(path)}&recursive=true`,
+        )
+        return listed.files ?? []
+      })
+      const roots = new Set(expanded.flatMap((item) => (item.root ? [item.root] : [])))
+      const singleFolder = roots.size === 1 && expanded.every((item) => item.root)
+      await loadFiles(
+        expanded.map((item) => item.path),
+        singleFolder ? [...roots][0] : null,
+      )
     } catch (dropError) {
       const message = dropError instanceof Error ? dropError.message : String(dropError)
       setError(message)
@@ -452,6 +470,19 @@ export function Metadata() {
           <div className="flex items-center gap-2">
             <SelectionControls selection={selection} t={t} hasRows={rows.length > 0} />
             <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={t('metadata.addFolder')}
+                    onClick={() => void chooseFolder()}
+                  >
+                    <FolderOpen />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('metadata.addFolder')}</TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button

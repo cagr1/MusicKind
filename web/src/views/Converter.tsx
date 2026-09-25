@@ -29,12 +29,12 @@ import { useProcess } from '@/lib/process'
 import { useView } from '@/hooks/useView'
 import { normalizeCamelot } from '@/lib/camelot'
 import { appendResults, mergeUnique } from '@/lib/list'
+import { itemsFromPaths } from '@/lib/drop'
 import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
 import { usePlayer } from '@/lib/player'
 import {
   effectiveFormat,
-  itemsFromPaths,
   overrideFormat,
   shouldSkipConversion,
   type ConversionItem,
@@ -904,12 +904,13 @@ function EmptyState({
 }
 
 async function expandPaths(paths: string[]): Promise<ConversionItem[]> {
-  return itemsFromPaths(paths, async (path) => {
+  const items = await itemsFromPaths(paths, async (path) => {
     const response = await getJson<{ files?: string[] }>(
       `/api/metadata/list?dir=${encodeURIComponent(path)}&recursive=true`,
     )
     return response.files ?? []
   })
+  return items.map((item) => ({ ...item, format: null }))
 }
 
 function DropOverlay({ label }: { label: string }) {

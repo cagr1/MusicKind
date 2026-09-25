@@ -5,26 +5,6 @@ export interface ConversionItem {
   format: ConversionFormat | null
 }
 
-export async function itemsFromPaths(
-  paths: string[],
-  listDir: (path: string) => Promise<string[]>,
-): Promise<ConversionItem[]> {
-  const expanded = await Promise.all(
-    paths.map(async (path) => {
-      try {
-        const files = await listDir(path)
-        if (files.length === 1 && files[0] === path) {
-          return [{ path, root: null, format: null }]
-        }
-        return files.map((file) => ({ path: file, root: path, format: null }))
-      } catch {
-        return [{ path, root: null, format: null }]
-      }
-    }),
-  )
-  return expanded.flat()
-}
-
 export function effectiveFormat(item: ConversionItem, general: ConversionFormat): ConversionFormat {
   return item.format ?? general
 }

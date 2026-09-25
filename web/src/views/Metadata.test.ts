@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { metadataFormValues, metadataNeedsRename, type MetadataRow } from './Metadata'
+import {
+  mergeMetadataRows,
+  metadataFormValues,
+  metadataNeedsRename,
+  type MetadataRow,
+} from './Metadata'
 
 const row: MetadataRow = {
   id: '/music/tone.mp3',
@@ -19,5 +24,13 @@ describe('metadata form helpers', () => {
   it('detects a filename proposal that needs saving', () => {
     expect(metadataNeedsRename(row)).toBe(true)
     expect(metadataNeedsRename({ ...row, newFilename: row.name })).toBe(false)
+  })
+
+  it('adds new paths without replacing an existing row with unsaved edits', () => {
+    const edited = { ...row, metadata: { ...row.metadata, title: 'Unsaved title' } }
+    const duplicate = { ...row, metadata: { ...row.metadata, title: 'Old title' } }
+    const added = { ...row, id: '/music/new.mp3', path: '/music/new.mp3', name: 'new.mp3' }
+
+    expect(mergeMetadataRows([edited], [duplicate, added])).toEqual([edited, added])
   })
 })

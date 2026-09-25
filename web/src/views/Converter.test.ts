@@ -9,11 +9,11 @@ import {
 } from './Converter'
 import {
   effectiveFormat,
-  itemsFromPaths,
   overrideFormat,
   shouldSkipConversion,
   type ConversionItem,
 } from './converter-model'
+import { itemsFromPaths } from '@/lib/drop'
 
 const result = (sizeIn: number, sizeOut: number | null): ConverterResult => ({
   ok: sizeOut !== null,
@@ -96,8 +96,8 @@ describe('converter input paths', () => {
     await expect(
       itemsFromPaths(['/music/set'], async () => ['/music/set/a.mp3', '/music/set/sub/b.wav']),
     ).resolves.toEqual([
-      { path: '/music/set/a.mp3', root: '/music/set', format: null },
-      { path: '/music/set/sub/b.wav', root: '/music/set', format: null },
+      { path: '/music/set/a.mp3', root: '/music/set' },
+      { path: '/music/set/sub/b.wav', root: '/music/set' },
     ])
   })
 
@@ -106,12 +106,12 @@ describe('converter input paths', () => {
       itemsFromPaths(['/music/a.mp3'], async () => {
         throw new Error('not a directory')
       }),
-    ).resolves.toEqual([{ path: '/music/a.mp3', root: null, format: null }])
+    ).resolves.toEqual([{ path: '/music/a.mp3', root: null }])
   })
 
   it('recognizes a metadata-list response containing the same file as a standalone file', async () => {
     await expect(itemsFromPaths(['/music/a.mp3'], async (path) => [path])).resolves.toEqual([
-      { path: '/music/a.mp3', root: null, format: null },
+      { path: '/music/a.mp3', root: null },
     ])
   })
 
@@ -122,8 +122,8 @@ describe('converter input paths', () => {
         throw new Error('not a directory')
       }),
     ).resolves.toEqual([
-      { path: '/music/set/a.mp3', root: '/music/set', format: null },
-      { path: '/music/loose.mp3', root: null, format: null },
+      { path: '/music/set/a.mp3', root: '/music/set' },
+      { path: '/music/loose.mp3', root: null },
     ])
   })
 

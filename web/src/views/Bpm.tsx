@@ -15,7 +15,8 @@ import { useProcess } from '@/lib/process'
 import { useView } from '@/hooks/useView'
 import { Popover } from 'radix-ui'
 import { CAMELOT_MAP } from '@/lib/camelot'
-import { appendResults, mergeUnique, pendingItems } from '@/lib/list'
+import { appendResults, mergeUnique } from '@/lib/list'
+import { itemsFromPaths } from '@/lib/drop'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useRowSelection } from '@/lib/selection'
@@ -29,6 +30,7 @@ interface BpmResult extends InspectorTrack {
   camelot?: string | null
   keySource?: 'tag' | 'analysis' | null
   musicalKey?: string | null
+  pending?: boolean
   index: number
 }
 
@@ -38,10 +40,6 @@ export function isValidBpmInput(value: string): boolean {
 
 function fileName(path: string) {
   return path.split(/[\\/]/).pop() ?? path
-}
-
-export function getBpmInputLabel(folder: string | null, fileCount: number, filesLabel: string) {
-  return folder ? fileName(folder) : `${fileCount} ${filesLabel}`
 }
 
 async function readTrackMetadata(
@@ -75,7 +73,6 @@ export function Bpm() {
     () => (savedResults[view] as BpmResult[] | undefined) ?? [],
   )
   const [selectedId, setSelectedId] = React.useState<string | null>(tracks[0]?.id ?? null)
-  const [folder, setFolder] = React.useState<string | null>(null)
   const [files, setFiles] = React.useState<string[]>([])
   const [seconds, setSeconds] = React.useState(60)
   const [original, setOriginal] = React.useState<
@@ -100,9 +97,10 @@ export function Bpm() {
       ),
     )
     setSelectedId((current) => current ?? stored[0]?.id ?? null)
-    setOriginal(
-      Object.fromEntries(stored.map((track) => [track.id, { bpm: track.bpm, key: track.key }])),
-    )
+    setOriginal((current) => ({
+      ...Object.fromEntries(stored.map((track) => [track.id, { bpm: track.bpm, key: track.key }])),
+      ...current,
+    }))
   }, [savedResults, view])
 
   React.useEffect(() => {
@@ -129,12 +127,24 @@ export function Bpm() {
       analyzedBpm: item.bpm,
       musicalKey: item.key,
       key: item.camelot ?? item.key,
+      pending: false,
       tagBpm: null,
       index: item.index ?? index + 1,
     }))
     let cancelled = false
     setTracks((current) => {
-      const merged = appendResults(current, next, (track) => track.file)
+      const resultsWithMetadata = next.map((track) => {
+        const previous = current.find((item) => item.file === track.file)
+        return previous
+          ? {
+              ...track,
+              title: previous.title,
+              artist: previous.artist,
+              tagBpm: previous.tagBpm ?? null,
+            }
+          : track
+      })
+      const merged = appendResults(current, resultsWithMetadata, (track) => track.file)
       setResult(view, merged)
       return merged
     })
@@ -231,12 +241,7 @@ export function Bpm() {
     const directory = await electron.openDirectory(t('bpm.selectFolder'))
     if (!directory) return
     try {
-      const response = await getJson<{ files: string[] }>(
-        `/api/metadata/list?dir=${encodeURIComponent(directory)}&recursive=false`,
-      )
-      if (!response.files?.length) throw new Error(t('bpm.noFiles'))
-      setFolder(directory)
-      setFiles((current) => mergeUnique(current, response.files, (file) => file))
+      await addPaths([directory])
     } catch (error) {
       setActive({
         status: 'error',
@@ -247,20 +252,62 @@ export function Bpm() {
 
   const addFiles = async () => {
     const picked = await electron.openFiles(t('bpm.selectFolder'), true)
-    const next = Array.isArray(picked) ? picked : picked ? [picked] : []
-    if (next.length) {
-      setFiles((current) => mergeUnique(current, next, (file) => file))
-      setFolder(null)
-    }
+    const paths = Array.isArray(picked) ? picked : picked ? [picked] : []
+    if (paths.length) await addPaths(paths, false)
+  }
+
+  const addPaths = async (paths: string[], expand = true) => {
+    const expanded = expand
+      ? await itemsFromPaths(paths, async (path) => {
+          const response = await getJson<{ files?: string[] }>(
+            `/api/metadata/list?dir=${encodeURIComponent(path)}&recursive=true`,
+          )
+          return response.files ?? []
+        })
+      : paths.map((path) => ({ path, root: null }))
+    const incoming = expanded.map((item) => item.path)
+    if (!incoming.length) throw new Error(t('bpm.noFiles'))
+    const newFiles = incoming.filter((file) => !files.includes(file))
+    setFiles((current) => mergeUnique(current, incoming, (file) => file))
+    const placeholders = newFiles.map((file, index) => ({
+      id: file,
+      file,
+      path: file,
+      title: fileName(file),
+      artist: '—',
+      bpm: null,
+      key: null,
+      ok: false,
+      pending: true,
+      index: tracks.length + index + 1,
+    }))
+    if (!placeholders.length) return
+    setTracks((current) => {
+      const merged = mergeUnique(current, placeholders, (track) => track.file)
+      setResult(view, merged)
+      return merged
+    })
+    setSelectedId((current) => current ?? placeholders[0]?.id ?? null)
+    void readTrackMetadata(placeholders, (id, metadata) => {
+      setTracks((current) => {
+        const updated = current.map((track) =>
+          track.id === id && track.pending
+            ? {
+                ...track,
+                title: metadata.title?.trim() || fileName(track.file),
+                artist: metadata.artist?.trim() || '—',
+                tagBpm: metadata.bpm ?? null,
+              }
+            : track,
+        )
+        setResult(view, updated)
+        return updated
+      })
+    })
   }
 
   const start = async () => {
-    const pending = pendingItems(
-      files,
-      tracks,
-      (file) => file,
-      (track) => track.file,
-    )
+    const pending = files.filter((file) => !tracks.some((track) => track.file === file && track.ok))
     if (!pending.length) return
     await run('/api/bpm/analyze', { files: pending, analysisSeconds: seconds })
   }
@@ -299,11 +346,7 @@ export function Bpm() {
     event.preventDefault()
     try {
       const dropped = await resolveDroppedFiles(event.dataTransfer.files)
-      const expanded = await expandPaths(dropped)
-      if (expanded.files.length) {
-        setFiles((current) => mergeUnique(current, expanded.files, (file) => file))
-        setFolder(expanded.folder)
-      }
+      await addPaths(dropped)
     } catch (error) {
       setActive({
         status: 'error',
@@ -312,12 +355,7 @@ export function Bpm() {
     }
   }
 
-  const pending = pendingItems(
-    files,
-    tracks,
-    (file) => file,
-    (track) => track.file,
-  )
+  const pending = files.filter((file) => !tracks.some((track) => track.file === file && track.ok))
 
   return (
     <div
@@ -347,6 +385,19 @@ export function Bpm() {
           <div className="flex items-center gap-2">
             <SelectionControls selection={selection} t={t} hasRows={tracks.length > 0} />
             <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={t('bpm.addFolder')}
+                    onClick={() => void chooseFolder()}
+                  >
+                    <FolderOpen />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{t('bpm.addFolder')}</TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -385,7 +436,7 @@ export function Bpm() {
             )}
             <Button size="sm" onClick={() => void start()} disabled={isBusy || !pending.length}>
               <Activity />
-              {t('bpm.analyze')}
+              {t('bpm.analyze')} {pending.length}
             </Button>
           </div>
           {isBusy && (
@@ -398,22 +449,11 @@ export function Bpm() {
           )}
         </header>
         <div className="flex h-11 shrink-0 items-center justify-between border-b border-line px-6 text-[11px] text-zinc-500">
-          {folder ? (
-            <button
-              type="button"
-              onClick={chooseFolder}
-              className="flex min-w-0 items-center gap-2 truncate hover:text-zinc-300"
-            >
-              <FolderOpen className="size-3.5" />
-              <span className="truncate font-mono text-zinc-300">
-                {getBpmInputLabel(folder, files.length, t('bpm.files'))}
-              </span>
-            </button>
-          ) : files.length > 0 ? (
+          {files.length > 0 ? (
             <span className="flex min-w-0 items-center gap-2 truncate">
               <FolderOpen className="size-3.5" />
               <span className="truncate font-mono text-zinc-300">
-                {getBpmInputLabel(null, files.length, t('bpm.files'))}
+                {files.length} {t('bpm.files')}
               </span>
             </span>
           ) : (
@@ -534,27 +574,6 @@ export function Bpm() {
   )
 }
 
-async function expandPaths(paths: string[]): Promise<{ files: string[]; folder: string | null }> {
-  const expanded = await Promise.all(
-    paths.map(async (path) => {
-      try {
-        const response = await getJson<{ files?: string[] }>(
-          `/api/metadata/list?dir=${encodeURIComponent(path)}&recursive=false`,
-        )
-        return response.files?.length
-          ? { files: response.files, folder: path }
-          : { files: [path], folder: null }
-      } catch {
-        return { files: [path], folder: null }
-      }
-    }),
-  )
-  return {
-    files: expanded.flatMap((item) => item.files),
-    folder: expanded.find((item) => item.folder)?.folder ?? null,
-  }
-}
-
 function DropOverlay({ label }: { label: string }) {
   return (
     <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded border-2 border-dashed border-brand bg-surface-app/90 text-sm font-semibold text-brand">
@@ -613,7 +632,7 @@ function BpmRow({
   return (
     <tr
       onClick={onSelect}
-      onDoubleClick={onPlay}
+      onDoubleClick={track.pending ? undefined : onPlay}
       className={`h-12 cursor-pointer ${selected ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'}`}
     >
       <td
@@ -623,7 +642,9 @@ function BpmRow({
         <RowCheckbox checked={checked} disabled={disabled} label={track.title} onClick={onCheck} />
       </td>
       <td className="text-center font-mono text-[11px] text-zinc-500">
-        {processing ? (
+        {track.pending ? (
+          '—'
+        ) : processing ? (
           <span className="mx-auto block size-2 rounded-full bg-brand" />
         ) : isPlaying ? (
           <AudioLines className="mx-auto size-4 text-brand" />
@@ -641,65 +662,75 @@ function BpmRow({
           <MiniWaveform path={track.file} isSelected={selected} />
         </div>
       </td>
-      <td onClick={(event) => event.stopPropagation()}>
-        <input
-          className={`w-16 rounded border bg-transparent px-1 font-mono text-[12px]
+      {track.pending ? (
+        <>
+          <td className="font-mono text-[11px] text-zinc-500">{t('bpm.statusPending')}</td>
+          <td className="text-center text-zinc-600">—</td>
+          <td className="pr-2 text-right text-[11px] text-zinc-500">{t('bpm.statusPending')}</td>
+        </>
+      ) : (
+        <>
+          <td onClick={(event) => event.stopPropagation()}>
+            <input
+              className={`w-16 rounded border bg-transparent px-1 font-mono text-[12px]
             text-zinc-100 focus:bg-surface-panel focus:outline-none ${
               valid
                 ? 'border-transparent focus:border-brand'
                 : 'border-red-500/70 focus:border-red-500'
             }`}
-          type="text"
-          inputMode="numeric"
-          value={draft}
-          onChange={(event) => updateBpm(event.target.value)}
-          aria-invalid={!valid}
-        />
-      </td>
-      <td onClick={(event) => event.stopPropagation()}>
-        <Popover.Root>
-          <Popover.Trigger asChild>
-            <button type="button" className="cursor-pointer">
-              <CamelotBadge camelotKey={track.key} keySource={track.keySource} />
-            </button>
-          </Popover.Trigger>
-          <Popover.Portal>
-            <Popover.Content className="rounded border border-line bg-surface-panel p-3 shadow-xl">
-              <p className="mb-2 text-[10px] uppercase tracking-wider text-zinc-500">
-                {t('music.harmonicWheel')}
-              </p>
-              <CamelotWheel
-                currentKey={track.key}
-                size={140}
-                onSelectKey={(key) =>
-                  onUpdate(track.id, {
-                    key,
-                    camelot: key,
-                    musicalKey: CAMELOT_MAP[key].musicalKey,
-                  })
-                }
-              />
-            </Popover.Content>
-          </Popover.Portal>
-        </Popover.Root>
-      </td>
-      <td className="pr-2 text-right">
-        {changed ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(event) => {
-              event.stopPropagation()
-              onSave()
-            }}
-          >
-            <Save />
-            {t('bpm.saveOne')}
-          </Button>
-        ) : (
-          <Check className="ml-auto size-3.5 text-zinc-600" />
-        )}
-      </td>
+              type="text"
+              inputMode="numeric"
+              value={draft}
+              onChange={(event) => updateBpm(event.target.value)}
+              aria-invalid={!valid}
+            />
+          </td>
+          <td onClick={(event) => event.stopPropagation()}>
+            <Popover.Root>
+              <Popover.Trigger asChild>
+                <button type="button" className="cursor-pointer">
+                  <CamelotBadge camelotKey={track.key} keySource={track.keySource} />
+                </button>
+              </Popover.Trigger>
+              <Popover.Portal>
+                <Popover.Content className="rounded border border-line bg-surface-panel p-3 shadow-xl">
+                  <p className="mb-2 text-[10px] uppercase tracking-wider text-zinc-500">
+                    {t('music.harmonicWheel')}
+                  </p>
+                  <CamelotWheel
+                    currentKey={track.key}
+                    size={140}
+                    onSelectKey={(key) =>
+                      onUpdate(track.id, {
+                        key,
+                        camelot: key,
+                        musicalKey: CAMELOT_MAP[key].musicalKey,
+                      })
+                    }
+                  />
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
+          </td>
+          <td className="pr-2 text-right">
+            {changed ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onSave()
+                }}
+              >
+                <Save />
+                {t('bpm.saveOne')}
+              </Button>
+            ) : (
+              <Check className="ml-auto size-3.5 text-zinc-600" />
+            )}
+          </td>
+        </>
+      )}
     </tr>
   )
 }

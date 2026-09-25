@@ -1132,3 +1132,39 @@ No tocar motor de secuencia (S3) ni otras vistas. **Gate (cerebro):** Python (ve
 API devuelve 129.2, UI "—"). Mezclar **solo** `title` y `artist` (y solo si no son vacíos). Test vitest: metadata con `bpm:null`
 no borra el BPM analizado. Además, el motivo de "Por revisar" (celda de sección) va en una línea (`whitespace-nowrap`, texto
 truncado con `title` completo). **Gate:** vitest/build/lint/format + captura con BPM visibles.
+
+### S3a · Medir motores de BPM (solo medición, antes del secuenciador)
+Hallazgo S1: `librosa.beat.beat_track` (hop 512) da tempos cuantizados (129.2, 123, 117.5…); 3 analizadores lo usan
+(`src/bpm_analyzer.py:25`, `src/style_analyzer.py:37`, `src/audio_features.py:8`). Un secuenciador por BPM no sirve así.
+1. `scripts/eval_bpm.py` (venv de la app; mismo estilo/caché que `scripts/eval_key.py`): verdad = BPM del tag (TBPM/`bpm`) de
+   `MUSIC BACKUP/2026` (solo lectura, recursivo); descartar tags ≤ 0 o no numéricos. `--limit`, `--input`.
+2. Motores, sobre ventana centrada de 60 s **y** pista entera:
+   - `librosa-beat` actual (línea base, sr 22050, hop 512).
+   - `librosa-fine`: `librosa.feature.tempo` / tempograma con hop 128 y **interpolación parabólica** del pico (resolución < 0.5 BPM).
+   - `essentia`: `RhythmExtractor2013(method="multifeature")` y `PercivalBpmEstimator` (essentia ya está en el venv).
+   - Opcional si instala sin fricción en el venv: `deeprhythm` o `tempocnn`; si falla, reportar el error y seguir.
+3. Métricas: exacto ±0.5, ±1 y ±2 BPM; **error de octava** (½×, 2×, ⅔×, 3⁄2×) contado aparte; error medio absoluto tras corregir
+   octava; % de pistas en el valor más repetido (detector de cuantización); tiempo medio por pista.
+4. Salida `.cache/eval/bpm-report.md` + `.json`; caché por pista en `.cache/eval/bpm/`. No toca `src/`, `web/` ni escribe en
+   `/Volumes`.
+**Gate (cerebro):** reporte con todos los motores (o su error), segunda corrida idéntica desde caché. Decisión posterior (S3b):
+motor ganador + regla "tag primero" en los 3 analizadores.
+
+### D2 · Soltar/elegir uniforme en BPM y Metadatos (pedido de Carlos, 2026-09-25)
+Reproducido con arrastre simulado (2 archivos y luego una carpeta con subcarpetas, 3 audios):
+Convertidor 2 → 5 filas ✓ · **Metadatos 1 → 2** (`Metadata.tsx:281` usa solo `paths[0]`, `recursive=false` y `loadFiles`
+**reemplaza** la lista) · **BPM 0 → 0 filas** (agrega "3 pistas · 3 pendientes" pero no las muestra hasta analizar; `expandPaths`
+`Bpm.tsx:537` con `recursive=false` y `folder` = primera carpeta como etiqueta única).
+Referencia de comportamiento: Convertidor (C2/C2.1).
+1. Mover `itemsFromPaths` de `web/src/views/converter-model.ts` a `web/src/lib/drop.ts` (genérico: rutas → `{path, root}`;
+   carpeta → sus audios **recursivos** con `root` = carpeta; archivo → `root null`; lista `[path]` = archivo). Converter lo importa
+   de ahí sin cambio de comportamiento. Una función `mergeUnique` para sumar sin duplicar.
+2. **BPM** (`Bpm.tsx`): soltar/elegir archivos (varios) o carpetas **suma** a la lista; la tabla muestra las pistas pendientes
+   **antes** de analizar (nombre, título/artista del tag si lo hay, estado "pendiente"); resultados se integran por ruta; quitar la
+   etiqueta única de carpeta; botón "Analizar N" (N pendientes). Soltar encima de la lista sigue agregando (overlay).
+3. **Metadatos** (`Metadata.tsx`): soltar varios archivos y/o carpetas (recursivo) **suma** a la lista sin reemplazar ni perder
+   ediciones no guardadas de filas existentes; deduplicar por ruta.
+4. Sets (una carpeta por sección) y Stems (un archivo) no cambian: su entrada es única por diseño.
+5. Tests vitest: `itemsFromPaths` (movido), BPM muestra pendientes antes de analizar, BPM/Metadatos suman varios y carpeta
+   recursiva, Metadatos no pierde ediciones. i18n es/en.
+**Gate (cerebro):** vitest/build/lint/format + arrastre simulado: BPM y Metadatos 2 → 5 filas como el Convertidor; captura.
