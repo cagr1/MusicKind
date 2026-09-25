@@ -5,6 +5,10 @@
 
 ## Estado 2026-09-23 — UI "instrumento" (manda sobre todo lo de abajo)
 
+**AL RETOMAR (2026-09-25, requiere conectar el disco `Mac Backup`):**
+1. Re-medir afinidad tras S3b: `"$HOME/Library/Application Support/MusicKind/python-venv/bin/python" scripts/eval_sets.py --cache .cache/eval/sets-s3b --report .cache/eval/sets-report-s3b.md` → comparar con 44,7 % (`.cache/eval/sets-report.md`). Caché nueva obligatoria: la vieja tiene el BPM de librosa.
+2. Pedir a Carlos carpetas reales warmup/peak/closing (≥20 c/u) → medir acierto vs nº de referencias (5/10/20) + escucha a ciegas. Sin esto no hay certeza de que "clone su gusto".
+
 **Plan de producto documentado 2026-09-25:** `plan.md` § «Evolución de producto — preparación de sets» detalla S0–S7 (contrato/muestra, afinidad honesta, datos/caché, secuencia BPM/Camelot, editor/escucha, exportación exacta, persistencia y piloto), E1 energía condicionada a evaluación y D1 distribución aún en pausa. Implementación no iniciada. Siguiente al retomar: cerebro redacta spec S0/S1 con anclas actualizadas y delega S1 a Luna; cerebro solo planifica, observa, revisa y verifica, nunca implementa ni arregla código. El 44,7 % histórico corresponde a separación de carpetas de géneros (`scripts/eval_sets.py:18`), no a calidad de transiciones. Gates y criterios por fase en el plan. Esta sesión solo modificó documentación; no ejecutó tests/build ni QA de audio.
 
 Referencia visual aprobada: `design/prototype/`. Spec completa para Luna: **`design/SPEC.md`**. Una fase por sesión, en orden:
