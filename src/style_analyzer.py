@@ -64,6 +64,45 @@ def cosine_similarity(a, b):
     return float(np.dot(a, b) / (norm_a * norm_b))
 
 
+def fit_scaler(vectors):
+    """Fit per-feature z-score parameters, protecting constant dimensions."""
+    matrix = np.asarray(vectors, dtype=float)
+    if matrix.ndim != 2 or matrix.shape[0] == 0:
+        raise ValueError("vectors must be a non-empty 2D array")
+    mean = np.mean(matrix, axis=0)
+    sd = np.std(matrix, axis=0)
+    sd[sd < 1e-9] = 1.0
+    return mean, sd
+
+
+def score_sections(input_vec, ref_vectors_by_section):
+    """Return calibrated per-section percentile scores and the best section."""
+    nonempty = {
+        name: np.asarray(vectors, dtype=float)
+        for name, vectors in ref_vectors_by_section.items()
+        if len(vectors)
+    }
+    if not nonempty:
+        return {}, None
+    combined = np.concatenate(list(nonempty.values()), axis=0)
+    mean, sd = fit_scaler(combined)
+    standardized = {name: (vectors - mean) / sd for name, vectors in nonempty.items()}
+    query = (np.asarray(input_vec, dtype=float) - mean) / sd
+    centroids = {name: np.mean(vectors, axis=0) for name, vectors in standardized.items()}
+    distances = {
+        name: np.linalg.norm(vectors - centroids[name], axis=1)
+        for name, vectors in standardized.items()
+    }
+    pooled = np.concatenate(list(distances.values()))
+    query_distances = {name: float(np.linalg.norm(query - centroids[name])) for name in nonempty}
+    scores = {}
+    for name, own_distances in distances.items():
+        distribution = own_distances if len(own_distances) >= 5 else pooled
+        scores[name] = round(float(np.mean(distribution >= query_distances[name])) * 100, 1)
+    best = min(scores, key=lambda name: (-scores[name], query_distances[name]))
+    return scores, best
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -80,7 +119,7 @@ if __name__ == "__main__":
     if multi_mode:
         # --- MODO MULTI-REFERENCE ---
         sections = {"warmup": args.warmup, "peak": args.peak, "closing": args.closing}
-        profiles = {}
+        ref_vectors_by_section = {}
         for section, dir_path in sections.items():
             if not dir_path:
                 continue
@@ -92,9 +131,9 @@ if __name__ == "__main__":
                 except Exception:
                     pass
             if vecs:
-                profiles[section] = np.mean(vecs, axis=0)
+                ref_vectors_by_section[section] = np.asarray(vecs)
 
-        if not profiles:
+        if not ref_vectors_by_section:
             print(json.dumps([{"ok": False, "error": "Sin archivos en las carpetas de referencia"}], indent=2))
             sys.exit(1)
 
@@ -111,11 +150,7 @@ if __name__ == "__main__":
             sys.stdout.flush()
             try:
                 vec, tempo, key_info = _extract_audio_features(f, args.analysis_seconds, include_tonal=True)
-                scores = {}
-                for section, profile in profiles.items():
-                    sim = cosine_similarity(vec, profile)
-                    scores[section] = round(max(0.0, min(1.0, sim)) * 100, 1)
-                best = max(scores, key=scores.get) if scores else None
+                scores, best = score_sections(vec, ref_vectors_by_section)
                 results.append({
                     "file": f,
                     "warmup": scores.get("warmup", None),
@@ -148,7 +183,7 @@ if __name__ == "__main__":
             print(json.dumps([{"ok": False, "error": "Sin archivos de audio en la carpeta de input"}], indent=2))
             sys.exit(1)
 
-        # Build reference profile (mean feature vector across all reference files)
+        # Keep each reference vector; the calibrated score needs their distribution.
         ref_vectors = []
         for f in ref_files:
             try:
@@ -160,7 +195,7 @@ if __name__ == "__main__":
             print(json.dumps([{"ok": False, "error": "No se pudieron extraer features de los archivos de referencia"}], indent=2))
             sys.exit(1)
 
-        profile = np.mean(ref_vectors, axis=0)
+        ref_vectors_by_section = {"score": np.asarray(ref_vectors)}
 
         # Score each input file against the profile
         total = len(input_files)
@@ -171,8 +206,8 @@ if __name__ == "__main__":
             sys.stdout.flush()
             try:
                 vec, tempo, key_info = _extract_audio_features(f, args.analysis_seconds, include_tonal=True)
-                sim = cosine_similarity(vec, profile)
-                score = round(max(0.0, min(1.0, sim)) * 100, 1)
+                scores, _ = score_sections(vec, ref_vectors_by_section)
+                score = scores["score"]
                 results.append({
                     "ok": True,
                     "file": f,

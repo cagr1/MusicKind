@@ -851,3 +851,28 @@ P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escri
 `package.json` `build.mac.extraResources` hoy copia solo `keyfinder-cli`; la GPL exige que la licencia viaje con el binario.
 Copiar también `vendor/keyfinder/licenses/*` a `keyfinder/licenses/`, y añadir `LICENSE` y `THIRD_PARTY_NOTICES.md` a `build.files`
 (todas las plataformas). Solo `package.json`. **Gate:** `node -e` que lea el JSON y muestre ambas entradas; node tests sin regresión.
+
+### Back 3 · Puntajes de Sets calibrados (2026-09-24)
+Problema: `src/style_analyzer.py` da 93–100 % a casi todo: coseno sobre features crudas (tempo ~125 y centroide ~2000 dominan
+el vector; todo apunta en la misma dirección). E0 ya mostró que el audio separa géneros de forma débil → el objetivo es que el
+puntaje **discrimine y signifique algo**, no una precisión alta.
+1. **Estandarizar:** con todos los vectores de referencia (todas las secciones juntas en modo multi; la referencia en modo simple)
+   calcular media y desviación por feature (`sd < 1e-9` → 1). Todo vector (referencias e input) se transforma a z-score.
+2. **Puntaje por percentil:** centroide de cada sección = media de sus z-vectores. `d` = distancia euclídea del input al centroide.
+   Puntaje = % de referencias de esa sección cuya distancia a su propio centroide es **≥ d** (0–100, un decimal): "más cerca que el
+   X % de tus propias pistas". Si la sección tiene < 5 referencias, usar como distribución las distancias de todas las referencias
+   a sus propios centroides. `best` = sección con mayor puntaje (empate → menor `d`). Modo simple: una sola sección, mismo cálculo.
+   El coseno desaparece de los puntajes; contrato JSON de salida igual (mismas claves, 0–100).
+3. **Refactor mínimo:** funciones puras `fit_scaler(vectors)`, `score_sections(input_vec, ref_vectors_by_section)` reutilizadas por
+   ambos modos. Features, `extract_features`, progreso y `resolve_key` sin cambios. No tocar `web/` ni `server.js`.
+4. **Tests** `tests/test_style_scoring.py` (unittest, vectores sintéticos, sin audio): una feature con escala 1000× no domina;
+   input idéntico al centroide → 100; input lejano → 0; tres secciones separadas → `best` correcto; < 5 referencias usa distribución
+   combinada; `sd = 0` no divide por cero.
+5. **Medición** `scripts/eval_sets.py` (solo lectura, caché de vectores en `.cache/eval/sets/`, reutiliza `extract_features` con
+   `--analysis-seconds 30`): secciones = carpetas de `MUSIC BACKUP/2026` `deep house`, `Tech house` (muestra fija de 20, seed 42),
+   `minimal : deep tech`; por sección 60 % referencia / 40 % prueba (seed 42), 5 particiones. Reportar para **coseno viejo vs nuevo**:
+   acierto de `best`, puntaje medio en la sección correcta vs en las otras, desviación estándar de los puntajes, % de puntajes ≥ 90.
+   Salida `.cache/eval/sets-report.md`.
+**Gate (cerebro):** tests nuevos + `test_basic` en verde con el venv; en el reporte, % ≥ 90 cae claramente y la desviación sube frente
+al coseno viejo, con acierto de `best` ≥ al viejo; corrida real de `/api/set-analyze` (servidor en 3099, copias) devuelve puntajes
+repartidos.
