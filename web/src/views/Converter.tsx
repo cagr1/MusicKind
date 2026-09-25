@@ -33,6 +33,8 @@ import { itemsFromPaths } from '@/lib/drop'
 import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
 import { usePlayer } from '@/lib/player'
+import { sortRows, useSort } from '@/lib/sort'
+import { SortableHeader } from '@/components/music/SortableHeader'
 import {
   effectiveFormat,
   overrideFormat,
@@ -169,10 +171,25 @@ export function Converter() {
   const [results, setResults] = React.useState<ConverterResult[]>(
     () => (savedResults.converter as ConverterResult[] | undefined) ?? [],
   )
+  const [format, setFormat] = React.useState<ConversionFormat>('wav')
+  const { sort, toggleSort } = useSort()
+  const visibleItems = React.useMemo(
+    () =>
+      sortRows(items, sort, {
+        file: (item) =>
+          results.find((result) => result.input === item.path)?.title || fileName(item.path),
+        origin: (item) => sourceFormat(item.path),
+        outputFormat: (item) => item.format ?? format,
+        size: (item) => results.find((result) => result.input === item.path)?.sizeIn,
+        status: (item) =>
+          results.find((result) => result.input === item.path)?.error ||
+          (results.find((result) => result.input === item.path)?.ok ? 'ok' : 'pending'),
+      }),
+    [items, results, sort, format],
+  )
   const [titles, setTitles] = React.useState<Record<string, { title?: string; artist?: string }>>(
     {},
   )
-  const [format, setFormat] = React.useState<ConversionFormat>('wav')
   const [bitrate, setBitrate] = React.useState('320')
   const [outputDir, setOutputDir] = React.useState<string | null>(null)
   const [ffmpegInstalled, setFfmpegInstalled] = React.useState<boolean | null>(null)
@@ -216,7 +233,9 @@ export function Converter() {
   React.useEffect(
     () =>
       setQueue(
-        results
+        visibleItems
+          .map((item) => results.find((result) => result.input === item.path))
+          .filter((item): item is ConverterResult => Boolean(item))
           .filter((item) => item.ok)
           .map((item) => ({
             path: item.output,
@@ -226,11 +245,11 @@ export function Converter() {
             key: item.key ?? null,
           })),
       ),
-    [setQueue, results],
+    [setQueue, results, visibleItems],
   )
   const summary = summarizeConversionResults(results)
   const selection = useRowSelection({
-    items,
+    items: visibleItems,
     getKey: (item) => item.path,
     isProtected: (item) => isBusy && state.progress?.file === fileName(item.path),
     onRemove: (keys) => {
@@ -385,7 +404,7 @@ export function Converter() {
     (item) =>
       !results.some((result) => result.input === item.path) && !shouldSkipConversion(item, format),
   )
-  const rows = items.map(
+  const rows = visibleItems.map(
     (item) =>
       results.find((result) => result.input === item.path) ??
       pendingConverterResult(
@@ -556,7 +575,9 @@ export function Converter() {
         ) : (
           <ResultsTable
             results={rows}
-            items={items}
+            items={visibleItems}
+            sort={sort}
+            toggleSort={toggleSort}
             generalFormat={format}
             runningPath={isBusy ? (state.progress?.file ?? null) : null}
             onFormat={(path, target) =>
@@ -684,6 +705,8 @@ export function Converter() {
 function ResultsTable({
   results,
   items,
+  sort,
+  toggleSort,
   generalFormat,
   runningPath,
   onFormat,
@@ -696,6 +719,8 @@ function ResultsTable({
 }: {
   results: ConverterResult[]
   items: ConversionItem[]
+  sort: import('@/lib/sort').SortState
+  toggleSort: (key: string) => void
   generalFormat: ConversionFormat
   runningPath: string | null
   onFormat: (path: string, format: ConversionFormat | null) => void
@@ -707,7 +732,7 @@ function ResultsTable({
   selection: ReturnType<typeof useRowSelection<ConversionItem>>
 }) {
   return (
-    <div className="min-h-0 flex-1 overflow-auto px-6 py-2">
+    <div className="min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
       <table className="w-full table-fixed text-left">
         <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
           <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
@@ -715,11 +740,26 @@ function ResultsTable({
               <CheckboxHeader selection={selection} t={t} />
             </th>
             <th className="w-10 text-center">#</th>
-            <th>{t('converter.file')}</th>
-            <th className="w-20">{t('converter.origin')}</th>
-            <th className="w-36">{t('converter.outputFormat')}</th>
-            <th className="w-40">{t('converter.size')}</th>
-            <th className="w-32 text-right">{t('converter.status')}</th>
+            <SortableHeader sort={sort} sortKey="file" onSort={toggleSort}>
+              {t('converter.file')}
+            </SortableHeader>
+            <SortableHeader className="w-20" sort={sort} sortKey="origin" onSort={toggleSort}>
+              {t('converter.origin')}
+            </SortableHeader>
+            <SortableHeader className="w-36" sort={sort} sortKey="outputFormat" onSort={toggleSort}>
+              {t('converter.outputFormat')}
+            </SortableHeader>
+            <SortableHeader className="w-40" sort={sort} sortKey="size" onSort={toggleSort}>
+              {t('converter.size')}
+            </SortableHeader>
+            <SortableHeader
+              className="w-32 text-right"
+              sort={sort}
+              sortKey="status"
+              onSort={toggleSort}
+            >
+              {t('converter.status')}
+            </SortableHeader>
           </tr>
         </thead>
         <tbody>

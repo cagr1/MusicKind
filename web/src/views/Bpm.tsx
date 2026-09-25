@@ -22,6 +22,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
 import { usePlayer } from '@/lib/player'
+import { sortRows, useSort } from '@/lib/sort'
+import { SortableHeader } from '@/components/music/SortableHeader'
 
 interface BpmResult extends InspectorTrack {
   file: string
@@ -71,6 +73,17 @@ export function Bpm() {
   const { results: savedResults, setActive, setResult } = useProcess()
   const [tracks, setTracks] = React.useState<BpmResult[]>(
     () => (savedResults[view] as BpmResult[] | undefined) ?? [],
+  )
+  const { sort, toggleSort } = useSort()
+  const visibleTracks = React.useMemo(
+    () =>
+      sortRows(tracks, sort, {
+        track: (row) => row.title,
+        artist: (row) => row.artist,
+        bpm: (row) => row.bpm,
+        key: (row) => row.key,
+      }),
+    [tracks, sort],
   )
   const [selectedId, setSelectedId] = React.useState<string | null>(tracks[0]?.id ?? null)
   const [files, setFiles] = React.useState<string[]>([])
@@ -183,7 +196,7 @@ export function Bpm() {
   React.useEffect(
     () =>
       setQueue(
-        tracks.map((track) => ({
+        visibleTracks.map((track) => ({
           path: track.file,
           title: track.title,
           artist: track.artist,
@@ -191,7 +204,7 @@ export function Bpm() {
           key: track.key,
         })),
       ),
-    [setQueue, tracks],
+    [setQueue, visibleTracks],
   )
   const changed = tracks.filter(
     (track) =>
@@ -201,7 +214,7 @@ export function Bpm() {
   const isBusy = state.status === 'running' || state.status === 'paused'
   const processingKey = state.progress?.file
   const selection = useRowSelection({
-    items: tracks,
+    items: visibleTracks,
     getKey: (track) => track.id,
     isProtected: (track) => isBusy && track.file === processingKey,
     onRemove: (keys) => {
@@ -493,7 +506,7 @@ export function Bpm() {
             onDrop={onDrop}
           />
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto px-6 py-2">
+          <div className="min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
             <table className="w-full table-fixed text-left">
               <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
                 <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
@@ -507,14 +520,20 @@ export function Bpm() {
                     />
                   </th>
                   <th className="w-10 text-center">#</th>
-                  <th>{t('bpm.tableTrack')}</th>
-                  <th className="w-24">{t('bpm.tableBpm')}</th>
-                  <th className="w-24">{t('bpm.tableKey')}</th>
+                  <SortableHeader sort={sort} sortKey="track" onSort={toggleSort}>
+                    {t('bpm.tableTrack')}
+                  </SortableHeader>
+                  <SortableHeader className="w-24" sort={sort} sortKey="bpm" onSort={toggleSort}>
+                    {t('bpm.tableBpm')}
+                  </SortableHeader>
+                  <SortableHeader className="w-24" sort={sort} sortKey="key" onSort={toggleSort}>
+                    {t('bpm.tableKey')}
+                  </SortableHeader>
                   <th className="w-24 text-right">{t('bpm.tableActions')}</th>
                 </tr>
               </thead>
               <tbody>
-                {tracks.map((track, index) => (
+                {visibleTracks.map((track, index) => (
                   <BpmRow
                     key={track.id}
                     track={track}

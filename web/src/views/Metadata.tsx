@@ -17,6 +17,8 @@ import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
 import { Checkbox } from '@/components/ui/checkbox'
 import { usePlayer } from '@/lib/player'
+import { sortRows, useSort } from '@/lib/sort'
+import { SortableHeader } from '@/components/music/SortableHeader'
 
 interface MetadataFields {
   title: string
@@ -120,6 +122,17 @@ export function Metadata() {
   const savedRows = savedResults.metadata as MetadataRow[] | undefined
   const [folder, setFolder] = React.useState<string | null>(null)
   const [rows, setRows] = React.useState<MetadataRow[]>(() => savedRows ?? [])
+  const { sort, toggleSort } = useSort()
+  const visibleRows = React.useMemo(
+    () =>
+      sortRows(rows, sort, {
+        track: (row) => row.metadata.title || row.name,
+        artist: (row) => row.metadata.artist,
+        album: (row) => row.metadata.album,
+        year: (row) => row.metadata.year,
+      }),
+    [rows, sort],
+  )
   const [selectedId, setSelectedId] = React.useState<string | null>(null)
   const [form, setForm] = React.useState<MetadataFields>(metadataFormValues(null))
   const [error, setError] = React.useState<string | null>(null)
@@ -139,7 +152,7 @@ export function Metadata() {
   React.useEffect(
     () =>
       setQueue(
-        rows.map((row) => ({
+        visibleRows.map((row) => ({
           path: row.path,
           title: display(row.metadata.title) === '—' ? row.name : display(row.metadata.title),
           artist: display(row.metadata.artist),
@@ -147,11 +160,11 @@ export function Metadata() {
           key: row.key ?? null,
         })),
       ),
-    [setQueue, rows],
+    [setQueue, visibleRows],
   )
   const undoSnapshot = React.useRef<{ rows: MetadataRow[]; identified: string[] } | null>(null)
   const selection = useRowSelection({
-    items: rows,
+    items: visibleRows,
     getKey: (row) => row.id,
     isProtected: (row) => busy && progress.file === row.name,
     onRemove: (keys) => {
@@ -560,7 +573,7 @@ export function Metadata() {
             onDrop={onDrop}
           />
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto px-6 py-2">
+          <div className="min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
             <table className="w-full table-fixed text-left">
               <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
                 <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
@@ -574,13 +587,19 @@ export function Metadata() {
                     />
                   </th>
                   <th className="w-10 text-center">#</th>
-                  <th>{t('metadata.tableTrack')}</th>
-                  <th className="w-32">{t('metadata.tableAlbum')}</th>
-                  <th className="w-20">{t('metadata.tableYear')}</th>
+                  <SortableHeader sort={sort} sortKey="track" onSort={toggleSort}>
+                    {t('metadata.tableTrack')}
+                  </SortableHeader>
+                  <SortableHeader className="w-32" sort={sort} sortKey="album" onSort={toggleSort}>
+                    {t('metadata.tableAlbum')}
+                  </SortableHeader>
+                  <SortableHeader className="w-20" sort={sort} sortKey="year" onSort={toggleSort}>
+                    {t('metadata.tableYear')}
+                  </SortableHeader>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, index) => (
+                {visibleRows.map((row, index) => (
                   <MetadataRowView
                     key={row.id}
                     row={row}

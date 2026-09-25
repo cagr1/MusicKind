@@ -1233,3 +1233,22 @@ Objetivo: los grupos que muestra la vista Sets se guardan como playlists `.m3u8`
 **No tocar:** `src/style_analyzer.py`, `src/set-playlists.js` salvo añadir `export` a las dos funciones, Clasificador, `NEXT.md`, `plan.md`, specs. Sin commit.
 
 **Gate:** `node --test tests/*.test.js`, `npm --prefix web test`, `npm --prefix web run build`, `npm --prefix web run lint`, `npm --prefix web run format:check`.
+
+## U1 — Encabezado de tabla sin hueco al hacer scroll (2026-09-25, pedido de Carlos)
+
+Bug: al bajar por la lista, filas asoman por encima del `<thead>` fijo (captura de Carlos: la fila "Amor (Original Mix)" visible arriba de TRACK/ALBUM/YEAR). Causa probable: el contenedor con scroll tiene `py-2`; el `sticky top-0` queda debajo del padding superior y el contenido se ve en esa franja.
+Contenedores: `web/src/views/Metadata.tsx:563`, `Converter.tsx:710`, `Bpm.tsx:496`, `Sets.tsx:408`, `Classifier.tsx:1119` y `:1467` (revisar todos los `overflow-auto` que contienen un `thead sticky`).
+Arreglo: sin padding superior en el contenedor de scroll (mantener `px-*` y, si hace falta aire, `pb-2` o padding dentro de la tabla); el `thead` debe tapar por completo lo que pasa por debajo (fondo opaco). En Sets, las filas de sección `sticky top-8` deben seguir pegadas justo debajo del `thead` sin hueco.
+
+## U2 — Ordenar columnas en todas las tablas (2026-09-25, pedido de Carlos)
+
+- Helper común nuevo `web/src/lib/sort.ts`: `useSort` / funciones puras `compareBy(key)` y `sortRows(rows, sort, accessors)`. Clic en encabezado: ascendente → descendente → sin orden (orden original). Indicador ▲/▼ (icono lucide) en la columna activa; `aria-sort` en el `<th>`. Nulos/vacíos siempre al final en ambos sentidos. Texto con `localeCompare(…, {numeric:true, sensitivity:'base'})`. Tonalidad por Camelot (número, luego A antes de B) usando `web/src/lib/camelot.ts`. Orden estable (desempate por orden original).
+- Columnas ordenables: todas las que muestran un dato (pista/título, artista, álbum, año, BPM, tonalidad, género, estado, formato, puntaje…); no el checkbox, ni `#`, ni columnas de acciones. `#` sigue mostrando la posición en pantalla.
+- Vistas: Clasificador (ambas tablas; la virtualizada `Classifier.tsx:1140` debe virtualizar la lista ordenada), Convertidor, Metadatos, BPM, Sets.
+- **Sets:** ordenar **dentro de cada sección** (Warmup, Peak, Closing, Por revisar); las secciones nunca se mezclan ni cambian de orden. La columna Sección ordena por puntaje de su sección.
+- Lo que se ve manda: la cola del reproductor (`setQueue`), navegación con teclado ↑/↓, selección con rango (shift) de `useRowSelection` y la exportación de Sets (X1, "orden en pantalla") usan el orden mostrado. Ordenar no interrumpe el audio actual ni pierde la selección.
+- El orden es por vista y vive en memoria (se conserva al cambiar de pestaña si la vista ya conserva sus filas; no persistir en disco).
+- Tests vitest para `sort.ts` (asc/desc/none, nulos al final, Camelot, estabilidad, números como texto "10" > "9") y para el orden por sección de Sets (secciones intactas).
+
+**No tocar:** backend (`src/`), `NEXT.md`, `plan.md`, specs. Sin commit. Sin hex en tsx; i18n `es/en` para textos nuevos (p.ej. `common.sortAsc/sortDesc`).
+**Gate:** `npm --prefix web test`, `npm --prefix web run build`, `npm --prefix web run lint`, `npm --prefix web run format:check`.

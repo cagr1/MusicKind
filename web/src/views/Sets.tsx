@@ -15,6 +15,8 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { useRowSelection } from '@/lib/selection'
 import { SelectionControls, RowCheckbox } from '@/components/music/TableSelection'
 import { usePlayer } from '@/lib/player'
+import { sortGroups, useSort } from '@/lib/sort'
+import { SortableHeader } from '@/components/music/SortableHeader'
 
 export interface SetResult {
   file: string
@@ -117,6 +119,24 @@ export function Sets() {
   const [results, setResults] = React.useState<SetResult[]>(
     () => (savedResults[view] as SetResult[] | undefined) ?? [],
   )
+  const { sort, toggleSort } = useSort()
+  const sortAccessors = React.useMemo(
+    () => ({
+      track: (track: SetResult) => track.title || fileName(track.file),
+      bpm: (track: SetResult) => track.bpm,
+      key: (track: SetResult) => track.camelot,
+      section: (track: SetResult) => bestScore(track),
+    }),
+    [],
+  )
+  const visibleGroups = React.useMemo(
+    () => sortGroups(groupSetResults(results), sort, sortAccessors),
+    [results, sort, sortAccessors],
+  )
+  const visibleResults = React.useMemo(
+    () => visibleGroups.flatMap((group) => group.tracks),
+    [visibleGroups],
+  )
   const [selectedId, setSelectedId] = React.useState<string | null>(results[0]?.file ?? null)
   const [folders, setFolders] = React.useState<Record<SectionKey | 'input', string | null>>({
     warmup: null,
@@ -135,7 +155,7 @@ export function Sets() {
   React.useEffect(
     () =>
       setQueue(
-        results.map((track) => ({
+        visibleResults.map((track) => ({
           path: track.file,
           title: track.title || fileName(track.file),
           artist: track.artist || '—',
@@ -143,12 +163,12 @@ export function Sets() {
           key: track.camelot,
         })),
       ),
-    [setQueue, results],
+    [setQueue, visibleResults],
   )
-  const groups = React.useMemo(() => groupSetResults(results), [results])
+  const groups = visibleGroups
   const undoSnapshot = React.useRef<SetResult[] | null>(null)
   const selection = useRowSelection({
-    items: results,
+    items: visibleResults,
     getKey: (track) => track.file,
     isProtected: () => isBusy,
     onRemove: (keys) => {
@@ -405,7 +425,7 @@ export function Sets() {
             onDrop={onDrop}
           />
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto px-6 py-2">
+          <div className="min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
             <table className="w-full table-fixed text-left">
               <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
                 <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
@@ -419,10 +439,23 @@ export function Sets() {
                     />
                   </th>
                   <th className="w-10 text-center">#</th>
-                  <th>{t('sets.track')}</th>
-                  <th className="w-20">{t('sets.bpm')}</th>
-                  <th className="w-20">{t('sets.key')}</th>
-                  <th className="w-36">{t('sets.section')}</th>
+                  <SortableHeader sort={sort} sortKey="track" onSort={toggleSort}>
+                    {t('sets.track')}
+                  </SortableHeader>
+                  <SortableHeader className="w-20" sort={sort} sortKey="bpm" onSort={toggleSort}>
+                    {t('sets.bpm')}
+                  </SortableHeader>
+                  <SortableHeader className="w-20" sort={sort} sortKey="key" onSort={toggleSort}>
+                    {t('sets.key')}
+                  </SortableHeader>
+                  <SortableHeader
+                    className="w-36"
+                    sort={sort}
+                    sortKey="section"
+                    onSort={toggleSort}
+                  >
+                    {t('sets.section')}
+                  </SortableHeader>
                 </tr>
               </thead>
               <tbody>

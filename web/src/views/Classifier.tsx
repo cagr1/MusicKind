@@ -56,6 +56,8 @@ import {
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import { defaultSetPlaylistSections, type SetPlaylistSections } from '@/lib/set-playlists'
+import { sortRows, useSort } from '@/lib/sort'
+import { SortableHeader } from '@/components/music/SortableHeader'
 
 const SOURCE_LABEL_KEYS: Record<string, TranslationKey> = {
   embedded: 'classifier.sourceLabels.embedded',
@@ -168,6 +170,18 @@ function LegacyClassifier({
   const [results, setResults] = React.useState<ClassifierResult[]>(
     () => (savedResults[view] as ClassifierResult[] | undefined) ?? [],
   )
+  const { sort, toggleSort } = useSort()
+  const visibleResults = React.useMemo(
+    () =>
+      sortRows(results, sort, {
+        track: (row) => row.title,
+        artist: (row) => row.artist,
+        genre: (row) => row.genre,
+        bpm: (row) => row.bpm,
+        status: (row) => (row.error ? row.error : row.source || 'ok'),
+      }),
+    [results, sort],
+  )
   const [folder, setFolder] = React.useState<string | null>(null)
   const [selectedId, setSelectedId] = React.useState<string | null>(results[0]?.id ?? null)
   const [genres, setGenres] = React.useState<string[]>([])
@@ -182,7 +196,7 @@ function LegacyClassifier({
   React.useEffect(
     () =>
       setQueue(
-        results.map((track) => ({
+        visibleResults.map((track) => ({
           path: track.path,
           title: track.title,
           artist: track.artist,
@@ -190,12 +204,12 @@ function LegacyClassifier({
           key: track.key,
         })),
       ),
-    [setQueue, results],
+    [setQueue, visibleResults],
   )
   const distribution = React.useMemo(() => genreDistribution(results), [results])
   const undoSnapshot = React.useRef<ClassifierResult[] | null>(null)
   const selection = useRowSelection({
-    items: results,
+    items: visibleResults,
     getKey: (result) => result.id,
     isProtected: () => isBusy,
     onRemove: (keys) => {
@@ -491,7 +505,9 @@ function LegacyClassifier({
           />
         ) : results.length ? (
           <ResultsTable
-            results={results}
+            results={visibleResults}
+            sort={sort}
+            toggleSort={toggleSort}
             selectedId={selected?.id ?? null}
             playingPath={playingPath}
             onSelect={setSelectedId}
@@ -608,9 +624,21 @@ function TagClassifier({
   const progressText =
     processIsActive && active.file ? `${active.current}/${active.total} · ${active.file}` : progress
   const scrollRef = React.useRef<HTMLDivElement>(null)
+  const { sort: tagSort, toggleSort: toggleTagSort } = useSort()
   const filtered = React.useMemo(
     () => filterTagResults(results, statusFilter, genreFilter),
     [results, statusFilter, genreFilter],
+  )
+  const visibleFiltered = React.useMemo(
+    () =>
+      sortRows(filtered, tagSort, {
+        track: (row) => row.title || fileName(row.path),
+        originalTag: (row) => row.tagGenre,
+        genre: (row) => row.genre || row.family,
+        status: (row) => row.status,
+        destination: (row) => row.destination,
+      }),
+    [filtered, tagSort],
   )
   React.useEffect(() => {
     setResult('classifier-tags', {
@@ -646,7 +674,7 @@ function TagClassifier({
   )
   const selected = results.find((item) => item.path === selectedPath) ?? results[0] ?? null
   const virtualizer = useVirtualizer({
-    count: filtered.length,
+    count: visibleFiltered.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => 54,
     overscan: 8,
@@ -665,7 +693,7 @@ function TagClassifier({
   }, [])
   React.useEffect(() => {
     void setQueue(
-      results.map((item) => ({
+      visibleFiltered.map((item) => ({
         path: item.path,
         title: item.title || fileName(item.path),
         artist: item.artist || '—',
@@ -673,7 +701,7 @@ function TagClassifier({
         key: item.key ?? null,
       })),
     )
-  }, [results, setQueue])
+  }, [visibleFiltered, setQueue])
   const choose = async (label: string, setter: (path: string) => void) => {
     const path = await electron.openDirectory(label)
     if (path) setter(path)
@@ -1116,30 +1144,43 @@ function TagClassifier({
                 reviewLabel={t('classifier.review')}
               />
             )}
-            <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto px-5">
+            <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto px-5 pt-0 pb-2">
               <table className="w-full min-w-[980px] text-left text-[11px]">
                 <thead className="sticky top-0 z-10 bg-surface-app text-zinc-500">
                   <tr className="grid h-8 grid-cols-[32px_40px_minmax(260px,1fr)_144px_176px_160px_208px] items-center">
                     <th>
                       <Checkbox
-                        checked={selectedPaths.length === filtered.length && filtered.length > 0}
+                        checked={
+                          selectedPaths.length === visibleFiltered.length &&
+                          visibleFiltered.length > 0
+                        }
                         onCheckedChange={(checked) =>
-                          setSelectedPaths(checked ? filtered.map((row) => row.path) : [])
+                          setSelectedPaths(checked ? visibleFiltered.map((row) => row.path) : [])
                         }
                         aria-label={t('common.selectAll')}
                       />
                     </th>
                     <th>#</th>
-                    <th>{t('classifier.track')}</th>
-                    <th>{t('classifier.originalTag')}</th>
-                    <th>{t('classifier.genre')}</th>
-                    <th>{t('classifier.status')}</th>
-                    <th>{t('classifier.destination')}</th>
+                    <SortableHeader sort={tagSort} sortKey="track" onSort={toggleTagSort}>
+                      {t('classifier.track')}
+                    </SortableHeader>
+                    <SortableHeader sort={tagSort} sortKey="originalTag" onSort={toggleTagSort}>
+                      {t('classifier.originalTag')}
+                    </SortableHeader>
+                    <SortableHeader sort={tagSort} sortKey="genre" onSort={toggleTagSort}>
+                      {t('classifier.genre')}
+                    </SortableHeader>
+                    <SortableHeader sort={tagSort} sortKey="status" onSort={toggleTagSort}>
+                      {t('classifier.status')}
+                    </SortableHeader>
+                    <SortableHeader sort={tagSort} sortKey="destination" onSort={toggleTagSort}>
+                      {t('classifier.destination')}
+                    </SortableHeader>
                   </tr>
                 </thead>
                 <tbody style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
                   {virtualizer.getVirtualItems().map((item) => {
-                    const row = filtered[item.index]
+                    const row = visibleFiltered[item.index]
                     return (
                       <tr
                         key={row.path}
@@ -1442,6 +1483,8 @@ function FolderField({
 
 function ResultsTable({
   results,
+  sort,
+  toggleSort,
   selectedId,
   playingPath,
   onSelect,
@@ -1453,6 +1496,8 @@ function ResultsTable({
   busy,
 }: {
   results: ClassifierResult[]
+  sort: import('@/lib/sort').SortState
+  toggleSort: (key: string) => void
   selectedId: string | null
   playingPath: string | null
   onSelect: (id: string) => void
@@ -1464,7 +1509,7 @@ function ResultsTable({
   busy: boolean
 }) {
   return (
-    <div className="min-h-0 flex-1 overflow-auto px-6 py-2">
+    <div className="min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
       <table className="w-full table-fixed text-left">
         <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
           <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
@@ -1478,10 +1523,23 @@ function ResultsTable({
               />
             </th>
             <th className="w-10 text-center">#</th>
-            <th>{t('classifier.track')}</th>
-            <th className="w-40">{t('classifier.genre')}</th>
-            <th className="w-24">{t('classifier.bpm')}</th>
-            <th className="w-28 text-right">{t('classifier.status')}</th>
+            <SortableHeader sort={sort} sortKey="track" onSort={toggleSort}>
+              {t('classifier.track')}
+            </SortableHeader>
+            <SortableHeader className="w-40" sort={sort} sortKey="genre" onSort={toggleSort}>
+              {t('classifier.genre')}
+            </SortableHeader>
+            <SortableHeader className="w-24" sort={sort} sortKey="bpm" onSort={toggleSort}>
+              {t('classifier.bpm')}
+            </SortableHeader>
+            <SortableHeader
+              className="w-28 text-right"
+              sort={sort}
+              sortKey="status"
+              onSort={toggleSort}
+            >
+              {t('classifier.status')}
+            </SortableHeader>
           </tr>
         </thead>
         <tbody>
