@@ -1,4 +1,52 @@
+# ESTADO REAL Y ORDEN ÚNICO (2026-09-25, conciliado por el cerebro contra código y commits)
+
+> Manda sobre todas las casillas de abajo (las de 13-sep quedaron sin marcar aunque se hicieron en otros lotes). Estado vivo: `NEXT.md`.
+
+## Casillas viejas ya resueltas (evidencia)
+| Ítem viejo | Estado | Dónde |
+|---|---|---|
+| P0 `fpcalc` sin asumir Homebrew | **Resuelto al empaquetar**: fpcalc 1.5.1 va dentro de la app (P1 punto final). El botón "Instalar Chromaprint" (brew/winget) queda solo para desarrollo | `467a33d`, `electron/main.cjs:291` |
+| P1 quitar Spotify | Hecho | `c474104` |
+| P1 género embebido primero + fuente | Hecho (`genreSource`) | E1 `0ee9157` |
+| P1 alias sin lista rígida | Hecho: catálogo Discogs + aprendido | G1 `e490eed` |
+| P1 fuentes externas solo para lo faltante, con trazabilidad | Hecho (Discogs/Last.fm/Deezer) | Back 4, E2.2 |
+| P1 BPM no decide género | Hecho en el método recomendado (etiquetas); solo el método "online" viejo lo usa | E1 |
+| P1 evaluar modelo local | Medido y descartado (audio ≈ azar en subgéneros) | E0 |
+| P1 casos no confiables → Por revisar | Hecho | E1/G1 |
+| P2 analizar sin mover, tabla, filtros, corregir individual/lote, aplicar aprobados, manifiesto, deshacer | Hecho | E2/E3/E3.1 `5b528a1` |
+| P4 rediseño | Hecho (web/ React) | Front 1/2, Lotes 3–5 |
+| F1/F1.1 capa de datos (abort, randomUUID, releaseLock, cancel) | Hecho | `web/src/lib/api.ts` |
+| F1.0 ruta absoluta al arrastrar | Hecho (`getPathForFile`) | `e0c0424` |
+| F2 Convertidor · F4 Stems · F5 Metadata · F6 Sets · F7 Settings · F8 Clasificador | Hechas | Front 2, C2, G1 |
+| F9 servir `web/dist` y MIME | Hecho (F9a) | NEXT punto 5 |
+
+## Abiertos reales de las listas viejas
+- P1 **AcoustID dentro del clasificador** para archivos sin artista/título (caso `track01.mp3` → hoy va a Por revisar).
+- P1 separar género de pista vs de artista (Last.fm por artista se usa como respaldo; falta marcarlo distinto).
+- P2 reanudar trabajos grandes / no reclasificar lo ya procesado.
+- P0 fijar versiones de dependencias Python → se resuelve en D1 (Python propio).
+- F3 BPM: "Guardar seleccionados / Guardar todos" y escritura por formato con relectura (hoy se guarda de a una desde el Inspector).
+- F9 borrar `ui/` tras QA manual de Carlos en Electron.
+- P3 QA manual en Electron (Carlos) y medición en bibliotecas grandes (señales: 980 pistas en 2–3 min; vista previa de 884 en 35 s).
+- Informativo, sin acción: BPM Serato vs MusicKind.
+
+## Orden único de trabajo
+1. **Creador de sets (la estrella)** — secciones de abajo, versión mínima útil:
+   S1 afinidad honesta → S3 motor de secuencia (BPM + Camelot + fijar/excluir + duración + **recorrido**: suave, ascendente,
+   intenso, cierre, expresado por progresión de BPM mientras no exista energía validada) → S4 editor y escucha → S5 exportar
+   el orden exacto → **validación de Carlos escuchando 2–3 sets** (sustituye al S0 formal; S0 completo solo si hay dudas).
+2. Abiertos cortos: AcoustID en el clasificador · BPM guardar en lote (F3) · G2 Configuración → Géneros.
+3. Continuidad: S2 caché de análisis (si 1.000 pistas tarda) · S6 sesión que sobrevive al cierre · "Preparar set" desde el Clasificador.
+4. Entrega: D1 = P2/P3 del punto final (Python propio, .dmg arm64/x64, release **con OK de Carlos**) · QA en la MacBook Pro 2017 (Ventura) · borrar `ui/`.
+5. Cuando haya usuarios: S7 piloto 3–5 DJs · E1 energía estimada (experimento, no bloquea).
+
+Descartado (costo > aporte): E0b sugerir género con modelo entrenado; S0 formal con 30–60 pistas antes de construir.
+
+---
+
 # MusicKind — Plan de corrección
+
+> Plan de producto añadido el 2026-09-25: ver **«Evolución de producto — preparación de sets»** al final. Para este trabajo manda esa sección; las listas de septiembre 13 se conservan como historial y no deben interpretarse como tareas aún pendientes. `NEXT.md` sigue siendo la fuente de estado.
 
 > Actualizado: 2026-09-13
 > Objetivo principal: ordenar una biblioteca grande de música por género desde la interfaz, sin exigir conocimientos técnicos y sin mover archivos incorrectamente.
@@ -259,3 +307,183 @@ Revisión cruda: `/private/tmp/claude-501/-Users-carlosgallardo-Documents-projec
 - [ ] Borrar `ui/` tras QA manual en Electron. **Solo cuando Codex haya terminado con `src/server.js` y `electron/`.**
 
 **Gate:** app empaquetada abre la UI nueva offline; tests raíz pasan.
+
+---
+
+# Evolución de producto — preparación de sets (2026-09-25)
+
+**Estado: plan documentado, implementación no iniciada.** Carlos pidió detallar cómo llegar a las mejoras propuestas. Esta petición autoriza la documentación; no reanuda P2/P3 de distribución ni autoriza publicar. Una fase por unidad de trabajo.
+
+## Objetivo y primera entrega útil
+
+Preparar una selección musical desde una biblioteca propia: importar → revisar → clasificar → construir un set editable → escuchar → exportar. El DJ conserva la decisión sobre selección, orden y carácter musical.
+
+Primera entrega completa: escoger canciones, indicar duración aproximada, obtener una secuencia propuesta por BPM/Camelot, fijar canciones, reordenar, escuchar y exportar exactamente ese orden. La energía automática se incorpora solo después de validarla; no bloquea una primera versión útil con energía asignada por el DJ o sin ese criterio.
+
+No se incluye en este ciclo: mezcla automática, beatgrids, puntos de mezcla/cues automáticos, nuevos modelos de género, entrenamiento de redes, streaming, sincronización cloud, nuevas funciones de stems ni formatos propietarios de bibliotecas DJ. La compatibilidad M3U8 se comprobará en la aplicación de destino elegida para QA antes de prometerla.
+
+## Responsabilidades: el modelo fuerte dirige y verifica
+
+Se aplica el protocolo de delegación existente en `CLAUDE.md` y el pedido explícito de Carlos; no se añaden hooks ni skills.
+
+1. **Cerebro:** leer el código, delimitar una fase, redactar su spec con archivos/líneas vigentes, contratos, exclusiones y gates. Puede editar documentación, observar la app y ejecutar comandos de inspección/verificación. No escribe código de producto, pruebas, scripts ni arreglos.
+2. **Ejecutor Luna:** implementar únicamente la fase delegada, incluidas sus pruebas. No modificar `NEXT.md`, `plan.md`, specs ni hacer commits. Comando de referencia del proyecto: `codex exec -m gpt-6-luna --approve-for-me "Implementa únicamente la fase indicada de design/SPEC.md; respeta exclusiones y entrega diff y resultados" < /dev/null`. El cerebro debe sustituir «fase indicada» por el identificador exacto y comprobar que la CLI admite los argumentos antes de usarla.
+3. **Cerebro:** leer todos los hunks y archivos nuevos; correr los gates con sus propios comandos. El resumen del ejecutor y su exit 0 no constituyen evidencia. Revisar contra la spec, probar el flujo real sobre copias y guardar resultados.
+4. **Si falla:** registrar caso reproducible y salida real, ajustar la spec y re-delegar a Luna; escalar a Terra si el fallo persiste. El cerebro no teclea el arreglo.
+5. **Cierre:** review del diff de la fase, anotar evidencia y pendientes en `NEXT.md`; commit solo si Carlos lo pide. No adjudicar a la fase cambios previos del working tree.
+
+Antes de cada delegación registrar `git status --short` y diff base. Hay cambios previos en clasificador, proveedores, servidor, traducciones y spec. Si la fase necesita alguno de esos archivos, describir los hunks que puede modificar y revisar que conserve el resto. Las líneas de este plan son anclas leídas el 2026-09-25: actualizar las anclas en la spec de cada fase.
+
+## Evidencia de partida y límites
+
+| Evidencia | Implicación para la implementación |
+|---|---|
+| `src/style_analyzer.py:78` calcula percentiles de distancia y siempre elige una sección si hay referencias, incluso con puntuaciones cero. | Afinidad no equivale a probabilidad de acierto; admitir abstención y conservar las razones. |
+| `src/style_analyzer.py:171` ordena por afinidad. `web/src/views/Sets.tsx:40` agrupa por sección. | Falta un motor de secuencias que evalúe relaciones entre canciones. |
+| `web/src/views/Sets.tsx:54` y `:508` representan afinidad bajo la etiqueta energía. | Corregir el significado antes de presentar una curva de energía musical. |
+| `src/set-playlists.js:45`, `:61`, `:87` ya ordenan por BPM y exportan tres playlists por carpetas/géneros. | Reutilizar formato/validación donde convenga, pero ofrecer exportación de una lista ordenada explícita que no se vuelva a ordenar. |
+| `web/src/lib/process.tsx:32` mantiene resultados en memoria. | Para continuar tras cerrar la app hace falta persistencia de la sesión, con versión de esquema. |
+| `scripts/eval_sets.py:18` usa carpetas deep house, Tech house y minimal/deep tech. | El 44,7 % registrado en NEXT mide separación de esas colecciones; no mide calidad de transiciones ni acierto warmup/peak/closing. No usarlo como precisión de un set. |
+| NEXT registra 980 canciones clasificadas en 2–3 min por Carlos. | Señal de utilidad en su biblioteca; falta validación independiente. No es un benchmark reproducido en esta sesión. |
+
+Esta planificación verificó código, no ejecutó benchmarks ni QA de audio. No presupone que las métricas históricas se reproduzcan en otro equipo o colección.
+
+## Orden y dependencias
+
+`S0 contrato y muestra → S1 semántica → S2 datos → S3 secuencias → S4 edición/escucha → S5 exportación → S6 continuidad → S7 piloto`.
+
+`E1 energía estimada` es una rama opcional después de S2 y de obtener etiquetas humanas en S0; solo entra en el motor si supera su gate. `D1 distribución` depende de autorización posterior para reanudar P2/P3; un piloto externo sin entorno preparado requiere D1. La evaluación local supervisada puede precederla.
+
+## S0 — Contrato musical y conjunto de evaluación
+
+**Cerebro prepara:** spec de primera entrega en `design/SPEC.md`, partiendo de `web/src/views/Sets.tsx:18`, `src/server.js:705`, `src/style_analyzer.py:78` y `scripts/eval_sets.py:18`. No cambiar aún el motor.
+
+- Definir dos entradas: carpeta o selección explícita de pistas. Referencias personales opcionales para la futura secuencia; el análisis de afinidad existente conserva su contrato.
+- Definir duración objetivo como suma de duraciones completas, rotulada «duración de pistas». No prometer duración real de actuación: depende de solapes y puntos de mezcla que esta versión no conoce.
+- Fijar semántica: «imprescindible» obliga a incluir; «posición fijada» impide mover; «excluida» no puede regresar; cambio manual de sección/energía prevalece sobre sugerencias.
+- Preparar 30–60 pistas diversas y 20–30 pares para escucha, con identidad de versiones/remixes y grupo de duplicados. Anotar BPM/key disponibles, decisiones de DJ, pares aceptables y motivo del rechazo. No inferir warmup o peak directamente del género.
+- Separar pistas/grabaciones de ajuste y evaluación para que versiones de la misma canción no aparezcan en ambos grupos. Las referencias tampoco pueden incluir la pista evaluada.
+- Registrar propuestas de éxito antes de ajustar pesos: cero restricciones duras violadas; exportación fiel; comparar aceptación por escucha frente a orden BPM. El umbral musical se fija con el piloto, no se inventa una precisión garantizada.
+
+**Gate:** contratos sin ambigüedad, fixtures definidos y protocolo reproducible. Si faltan juicios humanos, documentar ese pendiente: los tests técnicos no lo sustituyen. La implementación técnica puede continuar con fixtures, pero no se declara validación musical.
+
+## S1 — Afinidad honesta y estados por revisar
+
+**Delegar:** `src/style_analyzer.py:78`, `web/src/views/Sets.tsx:35`, `:54`, `:508`, `tests/test_style_scoring.py`, `web/src/views/Sets.test.ts`, traducciones `web/src/i18n/{es,en}.json`.
+
+- Presentar los puntajes como afinidad relativa a las referencias; quitar el símbolo de probabilidad o explicar la escala en el Inspector. La curva actual se etiqueta afinidad o se retira de la zona de energía hasta E1.
+- Añadir estado de revisión con motivos: ausencia de datos, referencias insuficientes, puntuaciones todas cero o empate ambiguo. Mantener visibles esas pistas aunque `best` sea null; hoy agrupar solo tres secciones puede ocultarlas.
+- Umbrales adicionales se calibran con S0; no colocar un corte arbitrario como supuesto nivel de confianza. Conservar puntajes y tamaño de muestra para diagnóstico.
+- Mantener diferenciadas fuentes: tag, análisis y corrección manual. No sobrescribir tags al analizar.
+
+**Gate:** cero y empate no fuerzan una clasificación presentada como fiable; ninguna fila desaparece; labels ES/EN coherentes; tests de scoring y vista más gates web. QA del cerebro sobre entradas con y sin referencias suficientes.
+
+## S2 — Datos de pistas reutilizables
+
+**Delegar:** integrar desde `src/server.js:705`, `src/style_analyzer.py:27`, `src/services/audio-discovery.js`, `src/python-env.js:7`; crear módulos acotados `src/set-track-data.js` y `web/src/lib/set-session.ts` (nuevos, línea 1). Revisar lectores actuales antes de duplicar extracción.
+
+- Contrato versionado por pista: id, ruta, título/artista, duración, BPM original, BPM usado para comparar, Camelot, fuente por campo, afinidades y estado; energía nullable con fuente/manual. Ausencia se representa con null, nunca cero inventado.
+- Descubrimiento de carpeta desde el servicio canónico; una selección explícita no debe expandirse a toda su carpeta ni exigir mover música.
+- Cachear análisis por ruta canónica, tamaño, mtime, versión del algoritmo y parámetros/ventana. Invalidar al cambiar archivo o algoritmo. No reutilizar una puntuación de afinidad si cambió el conjunto de referencias.
+- Almacenar caché dentro del directorio de datos de la app, usando su resolución existente. Registrar fallos por pista; cancelación conserva resultados completos y no los marca todos como terminados.
+- Evitar decodificar de nuevo solo para obtener datos que ya produjo el análisis. Medir primero y decidir después cualquier paralelismo para no saturar memoria.
+
+**Gate:** segunda lectura sin cambios usa caché; cambio de archivo/parámetro la invalida; selección respeta exactamente las rutas; corruptos/faltantes tienen resultado visible; analizar no altera originales. Registrar tiempo frío/caliente y memoria con 100 y 1.000 pistas, equipo y parámetros.
+
+## S3 — Motor determinista de selección y secuencia
+
+**Delegar:** nuevos `src/set-sequencer.js`, `tests/set-sequencer.test.js`; integración en `src/server.js` junto a `:705` mediante un endpoint separado propuesto `/api/set-sequence`. Entrada: datos analizados, duración objetivo, restricciones y preferencias. Salida: ids ordenados, duración, razones por transición y restricciones no satisfechas.
+
+1. Validar candidatos y restricciones: ids únicos, duración positiva, pistas excluidas, obligatorias, posiciones fijadas. Si son incompatibles, devolver explicación concreta; no relajar silenciosamente.
+2. Separar restricciones duras de preferencias. Obligaciones/exclusiones/fijaciones son duras. Proximidad BPM, Camelot, afinidad, variedad de artistas y trayectoria de energía son preferencias; los datos ausentes se reportan como desconocidos.
+3. Comparar tempos relativos contemplando mitad/doble solo como hipótesis registrada. No reescribir el BPM del tag ni equiparar automáticamente canciones por normalizarlas al mismo rango.
+4. Compatibilidad armónica inicial explícita: misma clave, vecinas de número en la misma letra con vuelta 12↔1, y A↔B del mismo número. Tratarla como heurística de selección, no como garantía audible.
+5. Construir coste de transición desglosado y versionado; las razones que muestra la UI salen de los mismos componentes que decidió el motor. No asignar ventajas a datos desconocidos.
+6. Crear primero baseline por BPM. Delegar después búsqueda con haz acotado que conserva varias secuencias parciales; reducir candidatos por proximidad sin perder obligatorias/fijadas. Evitar explorar todas las permutaciones. Fijar orden de desempate y límite de trabajo para reproducibilidad.
+7. Elegir una secuencia cercana a la duración pedida, con tolerancia inicial propuesta de ±10 %; si no existe, devolver la mejor alternativa y la desviación visible. Sin duración suficiente o con obligatorias que exceden el objetivo, explicar la causa.
+8. La fase musical puede usar secciones asignadas manualmente; no imponer que el cierre tenga menos BPM. La energía se usa solo si hay valores manuales o E1 aprobado.
+
+**Gate:** sin duplicados ni excluidas, todas las obligatorias y fijaciones respetadas, mismo input produce mismo resultado; casos de una pista, claves nulas, 12A→1A, medio/doble tempo, conflictos y duración imposible. Medir planificación con 100/1.000 candidatos ya analizados; objetivo inicial ≤2 s/≤5 s en el equipo documentado, separado del coste de audio. Si falla, perfilar y re-delegar. La escucha compara motor y baseline sin revelar cuál es cuál.
+
+## S4 — Editor y escucha del set
+
+**Delegar:** `web/src/views/Sets.tsx:94`, `web/src/lib/player.tsx:34`, `web/src/lib/api.ts`, `web/src/lib/set-session.ts` nuevo y tests relacionados. Reutilizar componentes visuales existentes; no rediseñar el shell.
+
+- Añadir duración, preferencias mínimas y acción de proponer. La tabla muestra un único orden explícito, número de pista, duración acumulada, BPM/key y revisión pendiente.
+- Incluir/excluir, fijar, reordenar por arrastre y teclado, sustituir una pista por alternativas explicadas y deshacer edición. Regenerar respeta decisiones manuales.
+- Inspector muestra motivos concretos entre pista anterior y actual, y datos desconocidos. Explicaciones extensas en detalle; datos/acciones principales compactos.
+- Cola del reproductor, tabla y exportación consumen la misma lista ordenada. Reordenar no debe interrumpir el audio actual. Escucha secuencial; no simular una mezcla sin implementarla.
+- Duración recalculada tras cada edición; estado vacío, error, cancelación y falta de candidatas visibles. Estado conservado al cambiar de pestaña.
+
+**Gate:** crear → fijar → regenerar → reordenar → escuchar → deshacer en Electron; posición y cola coinciden; reproducción no se corta al editar; teclado y labels ES/EN revisados. El cerebro observa el flujo real y captura estados relevantes; un mock del reproductor no demuestra audio audible.
+
+## S5 — Exportación exacta y recuperable
+
+**Delegar:** `src/set-playlists.js:61`, `:87`, `src/server.js:227`, `tests/set-playlists.test.js`, `web/src/views/Sets.tsx`; módulo nuevo `src/set-export.js` si aislarlo simplifica el contrato.
+
+- Crear operación separada para lista ordenada, propuesta `/api/set-export`, sin modificar el significado del endpoint existente de playlists por género. Reutilizar serialización M3U8 cuando sea compatible, sin llamar al sort por BPM.
+- Vista previa de nombre/destino, orden, duración y archivos ausentes. Salida en la carpeta configurada; confirmar sustitución de archivos existentes desde la app o elegir nombre nuevo.
+- Resolver rutas relativas desde la carpeta que contiene el M3U8; si el volumen/plataforma impide una ruta relativa válida, usar ruta absoluta y advertir falta de portabilidad. No copiar/mover audio automáticamente.
+- Validar nombres y saltos de línea en rutas/títulos; nombre de salida no puede escapar del destino. Escritura temporal + reemplazo recuperable; no dejar playlists parciales.
+- Si desaparece una pista tras la vista previa, detener exportación y ofrecer actualizarla; no omitirla silenciosamente. Preservar exactamente el orden confirmado.
+
+**Gate:** relectura del M3U8 verifica cada ruta y orden; espacios, Unicode, archivo faltante y salida existente cubiertos. Importar en el software DJ usado para QA y comparar selección/orden. Originales intactos. Las playlists actuales del clasificador siguen pasando sus pruebas.
+
+## S6 — Continuidad entre herramientas y sesiones
+
+**Delegar:** `web/src/views/Classifier.tsx:572`, `web/src/lib/process.tsx:32`, `web/src/lib/set-session.ts` nuevo, servidor y módulo nuevo `src/set-session-store.js`; usar directorio de datos de `src/python-env.js:7`.
+
+- Acción «Preparar set» sobre seleccionadas entrega ids/rutas y datos conocidos a Sets; no vuelve a clasificar ni pierde correcciones manuales. Verificar ruta actual si la clasificación movió el archivo, usando el resultado/manifiesto real de `src/classify-apply.js:77`.
+- Persistir sesión con versión de esquema: candidatas, orden, exclusiones/fijaciones, preferencias, correcciones y revisión. Guardado atómico y copia recuperable; no guardar credenciales ni estado de audio en reproducción.
+- Al abrir, verificar archivos disponibles y marcar los ausentes; nunca sustituir por otra canción con igual nombre. Recuperar mediante selección explícita de archivo/carpeta y nueva validación.
+- No simular la reanudación de un proceso que murió: restaurar lo ya completado y ofrecer analizar pendientes. Caché válida evita recalcular.
+
+**Gate:** seleccionar en Clasificador → preparar → editar → cerrar → abrir conserva orden y decisiones. Archivo movido/corrupto y sesión con versión no soportada generan recuperación clara. Escritura interrumpida mantiene una versión utilizable.
+
+## E1 — Energía estimada, condicionada a evidencia
+
+**Delegar tras S2:** experimento acotado en `src/audio_features.py:5`, `src/style_analyzer.py:27`, script nuevo `scripts/eval_set_energy.py` y pruebas. Separar experimento de la activación en UI.
+
+- Primero recoger energía manual ordinal y comparaciones por pares de S0. Energía percibida no equivale a loudness ni BPM; RMS solo no es suficiente. El campo actual `vocal_presence` es una proporción armónica, no un detector validado de voces: no usarlo para prometer compatibilidad vocal.
+- Comparar baseline BPM/RMS con combinación de densidad de ataques, componente percusivo y rasgos espectrales. Muestrear ventanas de inicio/centro/final para evitar que una intro determine toda la pista; documentar duración/coste.
+- Normalizar con conjunto de ajuste fijo, versionado; conjunto de evaluación separado. Medir correlación ordinal y aciertos por pares frente a baseline, por género y por DJ, con tamaño de muestra y desacuerdos.
+- Activar únicamente si mejora la evaluación reservada y la escucha lo respalda; mostrar «energía estimada» y permitir corregirla. Si no mejora, conservar energía manual y documentar resultado. No añadir modelos grandes sin una nueva decisión de alcance.
+
+**Gate:** informe reproducible con resultados favorables o desfavorables y coste de análisis; ninguna curva usa afinidad como energía. La falta de validación bloquea activar estimación, no bloquea S3–S7.
+
+## D1 — Distribución autosuficiente (sigue en pausa)
+
+**Solo cuando Carlos reanude P2/P3:** partir de `electron/main.cjs:157`, `electron/runtime-path.cjs`, `src/python-env.js:7`, `src/python-install.js`, `requirements.txt`, `package.json` y la spec P1/P2/P3 vigente. Reutilizar P1 ya realizado.
+
+- Delegar runtime Python privado, versiones reproducibles y resolución de recursos del paquete. Herramientas necesarias disponibles sin terminal; stems puede conservar descarga opcional con progreso y error recuperable.
+- Evitar incluir configuración personal/secretos en el paquete; comprobar el contenido efectivo del artefacto, no solo patrones de configuración.
+- Probar apertura desde Finder en macOS ARM e Intel con entorno limpio, sin depender del PATH del desarrollador. Probar primero set/análisis/conversión; registrar tamaño, primer arranque y funcionamiento offline tras instalar recursos.
+- La MacBook Pro 2017 tras actualización sigue siendo el dispositivo Intel previsto. No declarar soporte de Windows/Linux por tener targets configurados sin probar artefactos allí.
+
+**Gate:** instalar y completar el recorrido de S4/S5 en máquina limpia sin terminal; errores de instalación recuperables y logs. Publicar sigue siendo una acción separada que requiere autorización.
+
+## S7 — Piloto de utilidad real
+
+El cerebro diseña y observa; Carlos coordina participantes. No contactar a terceros ni enviar música sin autorización.
+
+- 3–5 DJs, sus bibliotecas y dos sesiones comparables: preparar como acostumbran y preparar con MusicKind. Alternar orden cuando sea posible para reducir el efecto de aprendizaje.
+- Tarea común: selección de duración objetivo, revisión, escucha y exportación. Observar sin guiar cada clic; registrar bloqueos, correcciones, tiempo activo y tiempo esperando análisis por separado.
+- Medir canciones conservadas, transiciones aceptadas por escucha, reordenamientos, fallos de exportación, necesidad de ayuda y uso voluntario en una segunda sesión. Guardar conteos/denominadores y comentarios; no publicar porcentajes sin contexto.
+- Criterio orientativo para decidir el siguiente ciclo: al menos 3 personas completan sin ayuda técnica, mayoría reduce tiempo activo, cero pérdida de archivos y mayoría vuelve a usarla. Con una muestra pequeña son señales cualitativas, no validación de mercado.
+- Convertir los problemas observados en siguiente spec priorizada. No ampliar catálogo de funciones para compensar un recorrido que todavía falla.
+
+**Gate:** informe con evidencia, limitaciones y decisión: pulir, ajustar motor o ampliar distribución. Sin usuarios/escucha real, esta fase queda pendiente.
+
+## Verificación propia del cerebro y cierre por fase
+
+Antes de implementar, medir el estado base; si ya falla un gate, conservar salida y distinguir fallo previo de regresión. Los siguientes comandos son el protocolo futuro; no se ejecutaron al escribir este plan:
+
+- Node: `node --test tests/*.test.js tests/runtime-path.test.cjs` (el glob JS solo no incluye el test CJS de runtime).
+- Web: `npm --prefix web run test`, `npm --prefix web run build`, `npm --prefix web run lint`, `npm --prefix web run format:check`.
+- Python al tocar análisis: localizar el Python del venv real de la app; ejecutar con él `-m unittest discover -s tests -p 'test_style_scoring.py'` y `tests/test_basic.py`; agregar suite de secuencia/energía si la fase incorpora lógica Python. No usar el Python global suponiendo que tiene las dependencias.
+- Al tocar metadatos/ingestión: `npm run test:metadata-editor`, `npm run test:audio-ingestion`, `npm run test:metadata-endpoint`.
+- Revisión: `git diff --check`, lectura del diff y de nuevos archivos, revisión de contratos y QA real aplicable. No cerrar audio, importación externa ni máquina limpia solo con tests simulados.
+
+Por fase conservar: comandos y salida/código de retorno, equipo/parámetros del benchmark, casos manuales y resultado, errores conocidos y diff revisado. La evidencia local con rutas privadas no se publica; el resumen en NEXT puede enlazarla y debe distinguir «implementado», «verificado técnicamente» y «validado por escucha».
+
+**Siguiente acción al comenzar implementación:** el cerebro prepara únicamente la spec S0/S1 con las líneas actualizadas, después delega S1. Esta sesión termina con documentación; no se inicia código, no se instala nada, no se publica ni se hace commit.
