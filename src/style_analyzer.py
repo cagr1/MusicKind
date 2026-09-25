@@ -76,14 +76,14 @@ def fit_scaler(vectors):
 
 
 def score_sections(input_vec, ref_vectors_by_section):
-    """Return calibrated per-section percentile scores and the best section."""
+    """Return calibrated per-section percentile scores and review metadata."""
     nonempty = {
         name: np.asarray(vectors, dtype=float)
         for name, vectors in ref_vectors_by_section.items()
         if len(vectors)
     }
     if not nonempty:
-        return {}, None
+        return {}, None, "all-zero", {}
     combined = np.concatenate(list(nonempty.values()), axis=0)
     mean, sd = fit_scaler(combined)
     standardized = {name: (vectors - mean) / sd for name, vectors in nonempty.items()}
@@ -99,8 +99,14 @@ def score_sections(input_vec, ref_vectors_by_section):
     for name, own_distances in distances.items():
         distribution = own_distances if len(own_distances) >= 5 else pooled
         scores[name] = round(float(np.mean(distribution >= query_distances[name])) * 100, 1)
-    best = min(scores, key=lambda name: (-scores[name], query_distances[name]))
-    return scores, best
+    ref_counts = {name: int(len(vectors)) for name, vectors in nonempty.items()}
+    highest = max(scores.values())
+    if highest == 0:
+        return scores, None, "all-zero", ref_counts
+    leaders = [name for name, score in scores.items() if score == highest]
+    if len(leaders) > 1:
+        return scores, None, "tie", ref_counts
+    return scores, leaders[0], None, ref_counts
 
 
 if __name__ == "__main__":
@@ -150,13 +156,15 @@ if __name__ == "__main__":
             sys.stdout.flush()
             try:
                 vec, tempo, key_info = _extract_audio_features(f, args.analysis_seconds, include_tonal=True)
-                scores, best = score_sections(vec, ref_vectors_by_section)
+                scores, best, review, ref_counts = score_sections(vec, ref_vectors_by_section)
                 results.append({
                     "file": f,
                     "warmup": scores.get("warmup", None),
                     "peak": scores.get("peak", None),
                     "closing": scores.get("closing", None),
                     "best": best,
+                    "review": review,
+                    "refCounts": ref_counts,
                     "bpm": round(tempo, 1),
                     "camelot": key_info["camelot"],
                     "keySource": key_info["keySource"]
@@ -165,7 +173,9 @@ if __name__ == "__main__":
                 results.append({
                     "file": f,
                     "warmup": None, "peak": None, "closing": None,
-                    "best": None, "error": str(e)
+                    "best": None, "review": None,
+                    "refCounts": {name: int(len(vectors)) for name, vectors in ref_vectors_by_section.items()},
+                    "error": str(e)
                 })
 
         results.sort(key=lambda x: (x.get(x["best"], 0) or 0) if x["best"] else 0, reverse=True)
@@ -206,7 +216,7 @@ if __name__ == "__main__":
             sys.stdout.flush()
             try:
                 vec, tempo, key_info = _extract_audio_features(f, args.analysis_seconds, include_tonal=True)
-                scores, _ = score_sections(vec, ref_vectors_by_section)
+                scores, _, _, _ = score_sections(vec, ref_vectors_by_section)
                 score = scores["score"]
                 results.append({
                     "ok": True,

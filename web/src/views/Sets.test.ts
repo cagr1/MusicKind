@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { energyPath, groupSetResults, type SetResult } from './Sets'
+import { groupSetResults, mergeTrackMetadata, type SetResult } from './Sets'
 
 const result = (best: SetResult['best'], bpm: number | null): SetResult => ({
   file: `/music/${best ?? 'unknown'}.wav`,
@@ -12,14 +12,28 @@ const result = (best: SetResult['best'], bpm: number | null): SetResult => ({
 })
 
 describe('set analysis helpers', () => {
-  it('groups only tracks with a best section and calculates BPM bounds', () => {
-    expect(
-      groupSetResults([result('warmup', 121), result('warmup', 124), result(null, null)]),
-    ).toEqual([{ key: 'warmup', tracks: expect.any(Array), minBpm: 121, maxBpm: 124 }])
+  it('keeps analyzed BPM and does not replace track metadata with empty values', () => {
+    const track = {
+      ...result('warmup', 129.2),
+      camelot: '8A',
+      title: 'Analyzed title',
+      artist: 'Analyzed artist',
+    }
+
+    expect(mergeTrackMetadata(track, { title: '', artist: '   ', bpm: null, key: null })).toEqual(
+      track,
+    )
   })
 
-  it('builds an energy path without inventing a score for null sections', () => {
-    expect(energyPath([result('warmup', 120), result(null, null)])).toBe('M 24 20 L 616 52')
-    expect(energyPath([])).toBe('')
+  it('groups assigned sections and keeps unmatched, ties, and errors for review', () => {
+    const unmatched = { ...result(null, null), review: 'all-zero' as const }
+    const tied = { ...result(null, 128), review: 'tie' as const }
+    const failed = { ...result(null, null), error: 'decode failed' }
+    expect(
+      groupSetResults([result('warmup', 121), result('warmup', 124), unmatched, tied, failed]),
+    ).toEqual([
+      { key: 'warmup', tracks: expect.any(Array), minBpm: 121, maxBpm: 124 },
+      { key: 'review', tracks: [unmatched, tied, failed], minBpm: null, maxBpm: null },
+    ])
   })
 })

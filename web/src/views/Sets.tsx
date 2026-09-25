@@ -21,6 +21,8 @@ export interface SetResult {
   peak: number | null
   closing: number | null
   best: 'warmup' | 'peak' | 'closing' | null
+  review?: 'all-zero' | 'tie' | null
+  refCounts?: Partial<Record<'warmup' | 'peak' | 'closing', number>>
   bpm: number | null
   camelot: string | null
   keySource?: 'tag' | 'analysis' | null
@@ -36,10 +38,31 @@ export function bestScore(track: SetResult): number | null {
   return track.best ? track[track.best] : null
 }
 
+export function mergeTrackMetadata(
+  track: SetResult,
+  metadata: {
+    title?: string | null
+    artist?: string | null
+    bpm?: number | null
+    key?: string | null
+  },
+): SetResult {
+  return {
+    ...track,
+    ...(metadata.title?.trim() ? { title: metadata.title } : {}),
+    ...(metadata.artist?.trim() ? { artist: metadata.artist } : {}),
+  }
+}
+
 export function groupSetResults(results: SetResult[]) {
-  return (['warmup', 'peak', 'closing'] as SectionKey[])
+  const sections: Array<{
+    key: SectionKey | 'review'
+    tracks: SetResult[]
+    minBpm: number | null
+    maxBpm: number | null
+  }> = (['warmup', 'peak', 'closing'] as SectionKey[])
     .map((key) => {
-      const tracks = results.filter((track) => track.best === key)
+      const tracks = results.filter((track) => track.best === key && !track.review && !track.error)
       const bpms = tracks.map((track) => track.bpm).filter((bpm): bpm is number => bpm !== null)
       return {
         key,
@@ -49,21 +72,10 @@ export function groupSetResults(results: SetResult[]) {
       }
     })
     .filter((section) => section.tracks.length > 0)
-}
-
-export function energyPath(results: SetResult[], width = 640, height = 64) {
-  if (!results.length) return ''
-  const paddingX = 24
-  const paddingY = 12
-  const usableWidth = width - paddingX * 2
-  const usableHeight = height - paddingY * 2
-  return results
-    .map((track, index) => {
-      const x = paddingX + (index / Math.max(1, results.length - 1)) * usableWidth
-      const y = height - paddingY - ((bestScore(track) ?? 0) / 100) * usableHeight
-      return `${index === 0 ? 'M' : 'L'} ${x} ${y}`
-    })
-    .join(' ')
+  const reviewTracks = results.filter((track) => track.best === null || track.review || track.error)
+  if (reviewTracks.length)
+    sections.push({ key: 'review', tracks: reviewTracks, minBpm: null, maxBpm: null })
+  return sections
 }
 
 function fileName(path: string) {
@@ -128,7 +140,6 @@ export function Sets() {
     [setQueue, results],
   )
   const groups = React.useMemo(() => groupSetResults(results), [results])
-  const ordered = React.useMemo(() => groups.flatMap((group) => group.tracks), [groups])
   const undoSnapshot = React.useRef<SetResult[] | null>(null)
   const selection = useRowSelection({
     items: results,
@@ -200,7 +211,9 @@ export function Sets() {
       setSelectedId(next[0]?.file ?? null)
       void readMetadata(next, (file, metadata) =>
         setResults((current) =>
-          current.map((track) => (track.file === file ? { ...track, ...metadata } : track)),
+          current.map((track) =>
+            track.file === file ? mergeTrackMetadata(track, metadata) : track,
+          ),
         ),
       )
     })
@@ -322,7 +335,6 @@ export function Sets() {
           />
         ) : (
           <div className="min-h-0 flex-1 overflow-auto px-6 py-2">
-            <EnergyCurve results={ordered} selectedId={selectedId} onSelect={setSelectedId} t={t} />
             <table className="w-full table-fixed text-left">
               <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
                 <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
@@ -347,8 +359,13 @@ export function Sets() {
                   <React.Fragment key={group.key}>
                     <tr className="sticky top-8 z-[1] h-7 border-y border-line bg-surface-panel text-[10px] font-mono uppercase text-zinc-300">
                       <td colSpan={6} className="px-3">
-                        {t(`sets.${group.key}`)} {group.tracks.length} · {group.minBpm ?? '—'}–
-                        {group.maxBpm ?? '—'} BPM
+                        {t(`sets.${group.key}`)} {group.tracks.length}
+                        {group.key !== 'review' && (
+                          <>
+                            {' '}
+                            · {group.minBpm ?? '—'}–{group.maxBpm ?? '—'} BPM
+                          </>
+                        )}
                       </td>
                     </tr>
                     {group.tracks.map((track, index) => (
@@ -377,7 +394,12 @@ export function Sets() {
         )}
       </section>
       <TrackInspector track={selectedTrack}>
-        {selected && <ScoreInspector track={selected} t={t} />}
+        {selected &&
+          (selected.best ? (
+            <ScoreInspector track={selected} t={t} />
+          ) : (
+            <ReviewInspector track={selected} t={t} />
+          ))}
       </TrackInspector>
     </div>
   )
@@ -436,6 +458,10 @@ function SetRow({
   onCheck: (shiftKey: boolean) => void
 }) {
   const score = bestScore(track)
+  const reviewReason =
+    score === null
+      ? track.error || (track.review === 'tie' ? t('sets.reviewTie') : t('sets.reviewNoSimilarity'))
+      : null
   return (
     <tr
       onClick={onSelect}
@@ -482,67 +508,15 @@ function SetRow({
               />
             ))}
           </div>
-          <span className="font-mono text-[11px] tabular-nums text-zinc-300">
-            {score === null ? '—' : `${score}%`}
+          <span
+            className={`min-w-0 truncate font-mono text-[11px] tabular-nums text-zinc-300 ${reviewReason ? 'whitespace-nowrap' : ''}`}
+            title={reviewReason ?? undefined}
+          >
+            {reviewReason ?? score}
           </span>
         </div>
       </td>
     </tr>
-  )
-}
-
-function EnergyCurve({
-  results,
-  selectedId,
-  onSelect,
-  t,
-}: {
-  results: SetResult[]
-  selectedId: string | null
-  onSelect: (id: string) => void
-  t: ReturnType<typeof useT>
-}) {
-  return (
-    <div className="border-b border-line py-2">
-      <div className="mb-1 flex justify-between text-[10px] uppercase tracking-wider text-zinc-500">
-        <span>{t('sets.energy')}</span>
-        <span>
-          {results.length} {t('sets.tracks')}
-        </span>
-      </div>
-      <svg
-        className="h-16 w-full rounded border border-line bg-surface-panel"
-        viewBox="0 0 640 64"
-        preserveAspectRatio="none"
-        role="img"
-        aria-label={t('sets.energy')}
-      >
-        <path
-          d={energyPath(results)}
-          fill="none"
-          stroke="currentColor"
-          className="text-brand"
-          strokeWidth="1"
-        />
-        {results.map((track, index) => {
-          const x = 24 + (index / Math.max(1, results.length - 1)) * 592
-          const y = 52 - ((bestScore(track) ?? 0) / 100) * 40
-          return (
-            <circle
-              key={track.file}
-              cx={x}
-              cy={y}
-              r={track.file === selectedId ? 4 : 2}
-              className="cursor-pointer fill-surface-panel stroke-brand"
-              strokeWidth="1"
-              onClick={() => onSelect(track.file)}
-            >
-              <title>{fileName(track.file)}</title>
-            </circle>
-          )
-        })}
-      </svg>
-    </div>
   )
 }
 
@@ -553,14 +527,23 @@ function ScoreInspector({ track, t }: { track: SetResult; t: ReturnType<typeof u
         <Sparkles className="size-3.5 text-brand" />
         {t('sets.scores')}
       </div>
+      <p className="text-[10px] text-zinc-500">{t('sets.affinityScale')}</p>
       {(['warmup', 'peak', 'closing'] as SectionKey[]).map((section) => {
         const value = track[section]
+        const count = track.refCounts?.[section] ?? 0
         return (
           <div key={section} className="space-y-1">
             <div className="flex justify-between text-[11px]">
               <span className="text-zinc-400">{t(`sets.${section}`)}</span>
-              <span className="font-mono text-zinc-200">{value === null ? '—' : `${value}%`}</span>
+              <span className="font-mono text-zinc-200">{value === null ? '—' : value}</span>
             </div>
+            {value !== null && track.best === section && (
+              <p className="text-[10px] text-zinc-500">
+                {t('sets.affinityExplanation')} {value}% {t('sets.ofYour')} {count}{' '}
+                {t('sets.references')} {t(`sets.${section}`)}
+                {count < 5 ? ` · ${t('sets.fewReferences')}` : ''}
+              </p>
+            )}
             <div className="h-1.5 overflow-hidden rounded bg-zinc-800">
               <div
                 className={`h-full ${track.best === section ? 'bg-brand' : 'bg-zinc-600'}`}
@@ -570,6 +553,14 @@ function ScoreInspector({ track, t }: { track: SetResult; t: ReturnType<typeof u
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function ReviewInspector({ track, t }: { track: SetResult; t: ReturnType<typeof useT> }) {
+  return (
+    <div className="rounded border border-line bg-surface-panel p-3 text-[11px] text-zinc-400">
+      {track.error || (track.review === 'tie' ? t('sets.reviewTie') : t('sets.reviewNoSimilarity'))}
     </div>
   )
 }

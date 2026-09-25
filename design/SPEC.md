@@ -1104,3 +1104,31 @@ Solo `web/src/views/Classifier.tsx` + i18n.
 **Gate:** vitest/build/lint/format:check + captura.
 **G1.2.1:** el punto 3 sigue fallando con 7 elementos: cada elemento de la leyenda debe ser `whitespace-nowrap` y el contenedor
 `flex-wrap` (varias filas de elementos completos), nunca partir "etiqueta · N". Gate: captura.
+
+## Creador de sets (orden en `plan.md` § "Orden único")
+
+### S1 · Afinidad honesta y "por revisar"
+Hoy: `src/style_analyzer.py` `score_sections` siempre elige `best` aunque todo sea 0 o haya empate; `web/src/views/Sets.tsx:54`
+`energyPath` dibuja la **afinidad** bajo la etiqueta "Curva de energía" (`sets.energy`); los puntajes se muestran como `72%`
+(`:486`, `:562`), que se lee como probabilidad; `groupSetResults` (`:39`) solo agrupa las 3 secciones → filas con `best:null` o
+`error` desaparecen de la lista.
+1. **Back** `score_sections` → además de `scores` y `best`, devuelve `review: null | "all-zero" | "tie"` (`best = None` en ambos
+   casos; empate = los dos mayores puntajes idénticos) y `refCounts: {sección: n}`. JSON por pista añade `review` y `refCounts`
+   (modo multi) sin quitar claves existentes. Sin umbrales nuevos inventados. Tests en `tests/test_style_scoring.py`.
+2. **UI Sets**: grupo adicional **"Por revisar"** al final (pistas con `best:null`, `review` o `error`), con el motivo en la fila
+   (`Sin parecido con ninguna sección` / `Empate entre secciones` / mensaje de error). Ninguna fila desaparece.
+3. **Lenguaje**: "Puntaje" → **"Afinidad"**; valores sin `%` (`72`), medidor igual. Inspector por sección: "Afinidad 72 · más
+   cercana que el 72 % de tus N pistas de Warmup" (N = `refCounts`); si N < 5, nota "pocas referencias". Explicación de la escala
+   una sola vez en el Inspector, breve.
+4. **Quitar la curva de "energía"** (`energyPath`, el SVG y `sets.energy`) hasta que exista energía real (E1). No reemplazarla por
+   otra curva de afinidad.
+5. i18n es/en. Tests vitest: agrupación con por revisar/errores, sin `%`, Inspector con N, ya no existe la curva.
+No tocar motor de secuencia (S3) ni otras vistas. **Gate (cerebro):** Python (venv) + vitest/build/lint/format; en vivo
+`/api/set-analyze` con referencias reales (copias) incluyendo una pista sin parecido y un caso de empate forzado; captura.
+
+### S1.1 · BPM analizado pisado por metadata (QA del cerebro)
+`web/src/views/Sets.tsx:196-198` hace `{ ...track, ...metadata }` con la respuesta de `/api/metadata`, que desde Back 2 trae
+`bpm`/`key` (null si el tag no los tiene) → el BPM analizado se pierde y toda la columna/encabezado muestran "—" (reproducido:
+API devuelve 129.2, UI "—"). Mezclar **solo** `title` y `artist` (y solo si no son vacíos). Test vitest: metadata con `bpm:null`
+no borra el BPM analizado. Además, el motivo de "Por revisar" (celda de sección) va en una línea (`whitespace-nowrap`, texto
+truncado con `title` completo). **Gate:** vitest/build/lint/format + captura con BPM visibles.
