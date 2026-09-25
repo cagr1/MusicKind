@@ -1266,3 +1266,26 @@ Gate: `"$HOME/Library/Application Support/MusicKind/python-venv/bin/python" -m u
 S1.2 medido por el cerebro: la escala común arregla peak pero dispara «Por revisar» (empates y ceros): `2026` 30,6 % por revisar, acierto 31,8 % (antes 43,5 %). Variante medida (scratchpad, mismas cachés): **ganador = sección con menor `query_distances` (distancia z al centro)**; `review='all-zero'` y `best=None` solo si todos los puntajes (escala común de S1.2) son 0; `tie` solo si las dos menores distancias son exactamente iguales. Resultado: Carlos CV 51,3 % (vs 31,3 %), `2026` 43,5 % con 11,8 % por revisar.
 Cambio en `score_sections` (`src/style_analyzer.py:80`): conservar los `scores` de S1.2 (lo que muestra la UI) y el contrato de 4 valores; cambiar solo cómo se eligen `best`/`review`. Ajustar/añadir tests en `tests/test_style_scoring.py`: el ganador es el centro más cercano aunque dos puntajes empaten; todo 0 → `all-zero`; distancias idénticas → `tie`.
 No tocar: resto de `src/`, `web/`, `NEXT.md`, `plan.md`, specs. Sin commit. Gate: igual que S1.2.
+
+## S3a — «Ordenar set» por BPM y Camelot (2026-09-25, pedido de Carlos; subconjunto de `plan.md` § S3)
+
+Objetivo: tras analizar, un botón propone el orden de mezcla dentro de cada sección con reglas explícitas y muestra el porqué de cada transición. Sin caché S2, sin duración objetivo, sin energía (E1), sin fijar/arrastrar (S4). Trabaja sobre los resultados ya en memoria.
+
+**Back** — nuevo `src/set-sequencer.js` (puro, sin E/S) + `POST /api/set-sequence` en `src/server.js` junto a `/api/set-export`.
+- Entrada: `{ sections: [{ key, tracks: [{ id, bpm|null, camelot|null, artist|null }] }] }` en orden de sección (warmup→peak→closing; la UI no manda «por revisar»). Salida: `{ ok, version: 1, sections: [{ key, order: [id…], transitions: [{ from, to, bpmDelta|null, tempoRelation: 'same'|'half'|'double'|'unknown', harmonic: 'same'|'adjacent'|'relative'|'clash'|'unknown', cost }] }] }`. La primera transición de una sección enlaza con la última pista de la anterior (`from` = id de la sección previa); la primera pista del set tiene `from: null`.
+- Tempo: comparar BPM crudos; `half/double` solo si |a·2−b| o |a−b·2| ≤ 3 y está más cerca que el directo (se reporta, no se reescribe el BPM). `bpmDelta` = diferencia con la relación elegida.
+- Camelot (normalizar `8A`, `08a`…): same; adjacent = ±1 misma letra con 12↔1; relative = mismo número A↔B; resto clash; nulo → unknown.
+- Coste por transición (constantes exportadas y versionadas): BPM `|Δ|` (0 si ≤1; bajar BPM cuesta ×1.5 — el set tiende a subir, sin imponerlo); armónico same 0 / adjacent 0.5 / relative 1 / clash 4 / unknown 2 (desconocido nunca gana a conocido compatible); mismo artista consecutivo +1.
+- Búsqueda: haz (beam) determinista ancho 16 dentro de cada sección, arrancando por la pista de menor BPM (o la de menor coste desde la última de la sección previa); desempate estable por id. Nulos de BPM al final de su sección en su orden original. Nunca duplica ni pierde pistas.
+- Rendimiento: 1.000 pistas en una sección ≤2 s en este Mac (test con tiempo medido, umbral holgado 5 s para CI).
+
+**Front** — `web/src/views/Sets.tsx`:
+- Botón «Ordenar set» junto a «Exportar playlists» (visible con resultados y sin proceso activo). Llama a `/api/set-sequence` con las secciones visibles (sin «Por revisar», que queda al final sin ordenar).
+- Modo secuencia: las secciones muestran el orden devuelto; clic en un encabezado de columna (U2) sale del modo secuencia; botón «Orden original» también. Mientras está activo, una columna estrecha/insignia por fila muestra la transición desde la anterior: `+2 BPM · 8A→9A` con color por `harmonic` (tokens existentes; clash en tono de aviso; unknown atenuado), y `½×`/`2×` si aplica. Tooltip con el desglose de coste.
+- Cola del reproductor, selección y exportación (X1) siguen el orden mostrado (ya lo hacen con `visibleGroups`; mantenerlo). Si cambian los resultados (quitar filas, nuevo análisis) se sale del modo secuencia.
+- i18n es/en (`sets.sequence*`). Sin hex.
+
+**Tests** — `tests/set-sequencer.test.js`: sin duplicados ni pérdidas; determinista (misma entrada → misma salida, también con orden de entrada permutado); 12A→1A adjacent; 8A↔8B relative; nulos (BPM/clave) al final/unknown; half/double 64↔128; enlace entre secciones; 1 pista; sección vacía; 1.000 pistas en tiempo. Vitest: modo secuencia (entrar, salir por clic en columna, secciones intactas).
+
+**No tocar:** `src/style_analyzer.py`, `src/set-export.js`, otras vistas, `NEXT.md`, `plan.md`, specs. Sin commit.
+**Gate:** `node --test tests/*.test.js`, `npm --prefix web test`, `npm --prefix web run build`, `npm --prefix web run lint`, `npm --prefix web run format:check`.

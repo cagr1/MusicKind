@@ -254,7 +254,19 @@
     "exportChooseFolder": "Playlist destination folder",
     "exportOverwrite": "These files already exist: {{names}}. Overwrite them?",
     "exportDone": "{{count}} playlists exported",
-    "exportShow": "Show in Finder"
+    "exportShow": "Show in Finder",
+    "sequence": "Order set",
+    "originalOrder": "Original order",
+    "transition": "Transition",
+    "transitionCost": "Cost",
+    "transitionArtist": "artist",
+    "harmonic": {
+      "same": "same key",
+      "adjacent": "adjacent",
+      "relative": "relative",
+      "clash": "clash",
+      "unknown": "unknown"
+    }
   },
   "converter": {
     "title": "Converter",

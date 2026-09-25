@@ -254,7 +254,19 @@
     "exportChooseFolder": "Carpeta para las playlists",
     "exportOverwrite": "Ya existen estos archivos: {{names}}. ¿Sobrescribirlos?",
     "exportDone": "{{count}} playlists exportadas",
-    "exportShow": "Mostrar en Finder"
+    "exportShow": "Mostrar en Finder",
+    "sequence": "Ordenar set",
+    "originalOrder": "Orden original",
+    "transition": "Transición",
+    "transitionCost": "Coste",
+    "transitionArtist": "artista",
+    "harmonic": {
+      "same": "misma",
+      "adjacent": "adyacente",
+      "relative": "relativa",
+      "clash": "choque",
+      "unknown": "desconocida"
+    }
   },
   "converter": {
     "title": "Convertidor",

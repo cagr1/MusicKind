@@ -1,5 +1,15 @@
 import * as React from 'react'
-import { Activity, AudioLines, Download, FolderOpen, Pause, Play, Sparkles, X } from 'lucide-react'
+import {
+  Activity,
+  AudioLines,
+  ArrowDownUp,
+  Download,
+  FolderOpen,
+  Pause,
+  Play,
+  Sparkles,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
@@ -17,6 +27,7 @@ import { SelectionControls, RowCheckbox } from '@/components/music/TableSelectio
 import { usePlayer } from '@/lib/player'
 import { sortGroups, useSort } from '@/lib/sort'
 import { SortableHeader } from '@/components/music/SortableHeader'
+import { normalizeCamelot } from '@/lib/camelot'
 
 export interface SetResult {
   file: string
@@ -86,6 +97,22 @@ export function groupSetResults(results: SetResult[]) {
   return sections
 }
 
+export function applySequenceOrder<T extends { key: string; tracks: SetResult[] }>(
+  groups: T[],
+  orders: Record<string, string[]> | null,
+): T[] {
+  if (!orders) return groups
+  return groups.map((group) => {
+    const ids = orders[group.key]
+    if (!ids) return group
+    const byId = new Map(group.tracks.map((track) => [track.file, track]))
+    return {
+      ...group,
+      tracks: ids.map((id) => byId.get(id)).filter((track): track is SetResult => Boolean(track)),
+    }
+  })
+}
+
 function fileName(path: string) {
   return path.split(/[\\/]/).pop() ?? path
 }
@@ -119,6 +146,10 @@ export function Sets() {
   const [results, setResults] = React.useState<SetResult[]>(
     () => (savedResults[view] as SetResult[] | undefined) ?? [],
   )
+  const [sequence, setSequence] = React.useState<{
+    orders: Record<string, string[]>
+    transitions: Record<string, SequenceTransition>
+  } | null>(null)
   const { sort, toggleSort } = useSort()
   const sortAccessors = React.useMemo(
     () => ({
@@ -129,10 +160,10 @@ export function Sets() {
     }),
     [],
   )
-  const visibleGroups = React.useMemo(
-    () => sortGroups(groupSetResults(results), sort, sortAccessors),
-    [results, sort, sortAccessors],
-  )
+  const visibleGroups = React.useMemo(() => {
+    const sorted = sortGroups(groupSetResults(results), sort, sortAccessors)
+    return applySequenceOrder(sorted, sequence?.orders ?? null)
+  }, [results, sort, sortAccessors, sequence])
   const visibleResults = React.useMemo(
     () => visibleGroups.flatMap((group) => group.tracks),
     [visibleGroups],
@@ -176,17 +207,20 @@ export function Sets() {
       const removed = new Set(keys)
       const next = results.filter((track) => !removed.has(track.file))
       setResults(next)
+      setSequence(null)
       setResult(view, next)
       setSelectedId((current) => (removed.has(current ?? '') ? (next[0]?.file ?? null) : current))
     },
     onClear: () => {
       undoSnapshot.current = results
+      setSequence(null)
       setResults([])
       setResult(view, [])
       setSelectedId(null)
     },
     onRestore: () => {
       if (undoSnapshot.current) {
+        setSequence(null)
         setResults(undoSnapshot.current)
         setResult(view, undoSnapshot.current)
         setSelectedId(undoSnapshot.current[0]?.file ?? null)
@@ -216,6 +250,42 @@ export function Sets() {
   const chooseFolder = async (kind: SectionKey | 'input') => {
     const directory = await electron.openDirectory(t(`sets.${kind}Folder`))
     if (directory) setFolders((current) => ({ ...current, [kind]: directory }))
+  }
+  const orderSet = async () => {
+    const sections = groupSetResults(results)
+      .filter((group): group is typeof group & { key: SectionKey } => group.key !== 'review')
+      .map((group) => ({
+        key: group.key,
+        tracks: group.tracks.map((track) => ({
+          id: track.file,
+          bpm: track.bpm,
+          camelot: track.camelot,
+          artist: track.artist,
+        })),
+      }))
+    try {
+      const response = await fetch('/api/set-sequence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sections }),
+      })
+      const data = (await response.json()) as {
+        ok: boolean
+        sections?: Array<{ key: string; order: string[]; transitions: SequenceTransition[] }>
+        error?: string
+      }
+      if (!response.ok || !data.ok || !data.sections)
+        throw new Error(data.error || `Sequence failed: ${response.status}`)
+      const orders: Record<string, string[]> = {}
+      const transitions: Record<string, SequenceTransition> = {}
+      for (const section of data.sections) {
+        orders[section.key] = section.order
+        for (const item of section.transitions) if (item.to) transitions[item.to] = item
+      }
+      setSequence({ orders, transitions })
+    } catch (sequenceError) {
+      setError(sequenceError instanceof Error ? sequenceError.message : String(sequenceError))
+    }
   }
   const onDrop = async (event: React.DragEvent) => {
     event.preventDefault()
@@ -330,10 +400,22 @@ export function Sets() {
           <div className="flex items-center gap-2">
             <SelectionControls selection={selection} t={t} hasRows={results.length > 0} />
             {results.length > 0 && !isBusy && (
-              <Button variant="outline" size="sm" onClick={() => void exportPlaylists()}>
-                <Download />
-                {t('sets.export')}
-              </Button>
+              <>
+                {sequence ? (
+                  <Button variant="outline" size="sm" onClick={() => setSequence(null)}>
+                    {t('sets.originalOrder')}
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={() => void orderSet()}>
+                    <ArrowDownUp />
+                    {t('sets.sequence')}
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => void exportPlaylists()}>
+                  <Download />
+                  {t('sets.export')}
+                </Button>
+              </>
             )}
             {isBusy && (
               <>
@@ -439,30 +521,57 @@ export function Sets() {
                     />
                   </th>
                   <th className="w-10 text-center">#</th>
-                  <SortableHeader sort={sort} sortKey="track" onSort={toggleSort}>
+                  <SortableHeader
+                    sort={sort}
+                    sortKey="track"
+                    onSort={(key) => {
+                      setSequence(null)
+                      toggleSort(key)
+                    }}
+                  >
                     {t('sets.track')}
                   </SortableHeader>
-                  <SortableHeader className="w-20" sort={sort} sortKey="bpm" onSort={toggleSort}>
+                  <SortableHeader
+                    className="w-20"
+                    sort={sort}
+                    sortKey="bpm"
+                    onSort={(key) => {
+                      setSequence(null)
+                      toggleSort(key)
+                    }}
+                  >
                     {t('sets.bpm')}
                   </SortableHeader>
-                  <SortableHeader className="w-20" sort={sort} sortKey="key" onSort={toggleSort}>
+                  <SortableHeader
+                    className="w-20"
+                    sort={sort}
+                    sortKey="key"
+                    onSort={(key) => {
+                      setSequence(null)
+                      toggleSort(key)
+                    }}
+                  >
                     {t('sets.key')}
                   </SortableHeader>
                   <SortableHeader
                     className="w-36"
                     sort={sort}
                     sortKey="section"
-                    onSort={toggleSort}
+                    onSort={(key) => {
+                      setSequence(null)
+                      toggleSort(key)
+                    }}
                   >
                     {t('sets.section')}
                   </SortableHeader>
+                  {sequence && <th className="w-28 text-center">{t('sets.transition')}</th>}
                 </tr>
               </thead>
               <tbody>
                 {groups.map((group) => (
                   <React.Fragment key={group.key}>
                     <tr className="sticky top-8 z-[1] h-7 border-y border-line bg-surface-panel text-[10px] font-mono uppercase text-zinc-300">
-                      <td colSpan={6} className="px-3">
+                      <td colSpan={sequence ? 7 : 6} className="px-3">
                         {t(`sets.${group.key}`)} {group.tracks.length}
                         {group.key !== 'review' && (
                           <>
@@ -488,6 +597,18 @@ export function Sets() {
                         disabled={isBusy}
                         onCheck={(shiftKey) => selection.toggle(track.file, shiftKey)}
                         t={t}
+                        {...(sequence
+                          ? { transition: sequence.transitions[track.file] ?? null }
+                          : {})}
+                        {...(sequence
+                          ? {
+                              fromTrack:
+                                results.find(
+                                  (candidate) =>
+                                    candidate.file === sequence.transitions[track.file]?.from,
+                                ) ?? null,
+                            }
+                          : {})}
                       />
                     ))}
                   </React.Fragment>
@@ -549,6 +670,8 @@ function SetRow({
   checked,
   disabled,
   onCheck,
+  transition,
+  fromTrack,
 }: {
   track: SetResult
   index: number
@@ -560,6 +683,8 @@ function SetRow({
   checked: boolean
   disabled: boolean
   onCheck: (shiftKey: boolean) => void
+  transition?: SequenceTransition | null
+  fromTrack?: SetResult | null
 }) {
   const score = bestScore(track)
   const reviewReason =
@@ -620,7 +745,70 @@ function SetRow({
           </span>
         </div>
       </td>
+      {transition !== undefined && (
+        <td className="text-center">
+          <TransitionBadge
+            transition={transition}
+            fromTrack={fromTrack ?? null}
+            toTrack={track}
+            t={t}
+          />
+        </td>
+      )}
     </tr>
+  )
+}
+
+interface SequenceTransition {
+  from: string | null
+  to: string | null
+  bpmDelta: number | null
+  tempoRelation: 'same' | 'half' | 'double' | 'unknown'
+  harmonic: 'same' | 'adjacent' | 'relative' | 'clash' | 'unknown'
+  costBreakdown: { bpm: number; harmonic: number; artist: number }
+  cost: number
+}
+
+function TransitionBadge({
+  transition,
+  fromTrack,
+  toTrack,
+  t,
+}: {
+  transition: SequenceTransition | null
+  fromTrack: SetResult | null
+  toTrack: SetResult
+  t: ReturnType<typeof useT>
+}) {
+  if (!transition?.from) return <span className="text-zinc-600">—</span>
+  const tone =
+    transition.harmonic === 'clash'
+      ? 'text-amber-300'
+      : transition.harmonic === 'unknown'
+        ? 'text-zinc-500'
+        : transition.harmonic === 'same' || transition.harmonic === 'adjacent'
+          ? 'text-emerald-300'
+          : 'text-cyan-300'
+  const delta =
+    transition.bpmDelta === null
+      ? '— BPM'
+      : `${transition.bpmDelta > 0 ? '+' : ''}${Number(transition.bpmDelta.toFixed(1))} BPM`
+  const multiplier =
+    transition.tempoRelation === 'half'
+      ? ' · ½×'
+      : transition.tempoRelation === 'double'
+        ? ' · 2×'
+        : ''
+  return (
+    <span
+      className={`font-mono text-[10px] ${tone}`}
+      title={`${t('sets.transitionCost')}: ${transition.cost.toFixed(1)} (BPM ${transition.costBreakdown.bpm.toFixed(1)} + ${t(`sets.harmonic.${transition.harmonic}`)} ${transition.costBreakdown.harmonic.toFixed(1)} + ${t('sets.transitionArtist')} ${transition.costBreakdown.artist.toFixed(1)})`}
+    >
+      {delta}
+      {' · '}
+      {normalizeCamelot(fromTrack?.camelot) ?? '—'}→{normalizeCamelot(toTrack.camelot) ?? '—'}
+      {multiplier}
+    </span>
   )
 }
 

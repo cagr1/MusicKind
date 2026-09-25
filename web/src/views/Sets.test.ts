@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { exportConflictAction, groupSetResults, mergeTrackMetadata, type SetResult } from './Sets'
+import {
+  applySequenceOrder,
+  exportConflictAction,
+  groupSetResults,
+  mergeTrackMetadata,
+  type SetResult,
+} from './Sets'
 
 const result = (best: SetResult['best'], bpm: number | null): SetResult => ({
   file: `/music/${best ?? 'unknown'}.wav`,
@@ -41,5 +47,23 @@ describe('set analysis helpers', () => {
       { key: 'warmup', tracks: expect.any(Array), minBpm: 121, maxBpm: 124 },
       { key: 'review', tracks: [unmatched, tied, failed], minBpm: null, maxBpm: null },
     ])
+  })
+
+  it('enters sequence order, keeps other sections intact, and restores source order when disabled', () => {
+    const groups = groupSetResults([
+      result('warmup', 120),
+      { ...result('warmup', 124), file: '/music/second.wav' },
+      result('peak', 128),
+    ])
+    const ordered = applySequenceOrder(groups, {
+      warmup: ['/music/second.wav', '/music/warmup.wav'],
+    })
+    expect(ordered[0].tracks.map((track) => track.file)).toEqual([
+      '/music/second.wav',
+      '/music/warmup.wav',
+    ])
+    expect(ordered[1]).toEqual(groups[1])
+    expect(applySequenceOrder(ordered, null)).toEqual(ordered)
+    expect(applySequenceOrder(groups, null)).toEqual(groups)
   })
 })

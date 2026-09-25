@@ -24,6 +24,7 @@ import { parseFile } from "music-metadata";
 import { applyClassifyMoves, listClassifyManifests, undoClassifyManifest, validateMoves } from "./classify-apply.js";
 import { createSetPlaylists, listSetPlaylistGenres } from "./set-playlists.js";
 import { exportSetResults } from "./set-export.js";
+import { createSetSequence } from "./set-sequencer.js";
 import { getDataDir } from "./python-env.js";
 import { loadLearnedCatalog } from "./tag-classifier.js";
 
@@ -239,6 +240,14 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
       const result = exportSetResults(await readJsonBody(req));
       if (result.conflict) return sendJson(res, { ok: false, existing: result.existing }, 409);
       return sendJson(res, { ok: true, written: result.written });
+    } catch (error) {
+      return sendJson(res, { ok: false, error: error.message }, 400);
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/set-sequence") {
+    try {
+      return sendJson(res, createSetSequence(await readJsonBody(req)));
     } catch (error) {
       return sendJson(res, { ok: false, error: error.message }, 400);
     }
