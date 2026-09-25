@@ -633,6 +633,7 @@ function TagClassifier({
     () =>
       sortRows(filtered, tagSort, {
         track: (row) => row.title || fileName(row.path),
+        artist: (row) => row.artist,
         originalTag: (row) => row.tagGenre,
         genre: (row) => row.genre || row.family,
         status: (row) => row.status,
@@ -1147,7 +1148,7 @@ function TagClassifier({
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto px-5 pt-0 pb-2">
               <table className="w-full min-w-[980px] text-left text-[11px]">
                 <thead className="sticky top-0 z-10 bg-surface-app text-zinc-500">
-                  <tr className="grid h-8 grid-cols-[32px_40px_minmax(260px,1fr)_144px_176px_160px_208px] items-center">
+                  <tr className="grid h-8 grid-cols-[32px_40px_minmax(200px,2fr)_minmax(130px,1fr)_140px_150px_130px_150px] items-center">
                     <th>
                       <Checkbox
                         checked={
@@ -1163,6 +1164,9 @@ function TagClassifier({
                     <th>#</th>
                     <SortableHeader sort={tagSort} sortKey="track" onSort={toggleTagSort}>
                       {t('classifier.track')}
+                    </SortableHeader>
+                    <SortableHeader sort={tagSort} sortKey="artist" onSort={toggleTagSort}>
+                      {t('common.artist')}
                     </SortableHeader>
                     <SortableHeader sort={tagSort} sortKey="originalTag" onSort={toggleTagSort}>
                       {t('classifier.originalTag')}
@@ -1186,7 +1190,7 @@ function TagClassifier({
                         key={row.path}
                         onClick={() => setSelectedPath(row.path)}
                         onDoubleClick={() => toggle(row.path)}
-                        className={`absolute left-0 grid h-[54px] w-full cursor-pointer grid-cols-[32px_40px_minmax(260px,1fr)_144px_176px_160px_208px] items-center border-b border-line/60 ${selected?.path === row.path ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'}`}
+                        className={`absolute left-0 grid h-[54px] w-full cursor-pointer grid-cols-[32px_40px_minmax(200px,2fr)_minmax(130px,1fr)_140px_150px_130px_150px] items-center border-b border-line/60 ${selected?.path === row.path ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'}`}
                         style={{ transform: `translateY(${item.start}px)` }}
                       >
                         <td>
@@ -1214,9 +1218,14 @@ function TagClassifier({
                               <p className="truncate text-zinc-200">
                                 {row.title || fileName(row.path)}
                               </p>
-                              <p className="truncate text-zinc-500">{row.artist || '—'}</p>
                             </div>
                           </div>
+                        </td>
+                        <td
+                          className={`truncate pr-2 ${row.artist?.trim() && row.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
+                          title={row.artist?.trim() && row.artist !== '—' ? row.artist : undefined}
+                        >
+                          {row.artist?.trim() || '—'}
                         </td>
                         <td className="truncate pr-2" title={row.tagGenre ?? undefined}>
                           {row.tagGenre || '—'}
@@ -1526,6 +1535,9 @@ function ResultsTable({
             <SortableHeader sort={sort} sortKey="track" onSort={toggleSort}>
               {t('classifier.track')}
             </SortableHeader>
+            <SortableHeader className="w-40" sort={sort} sortKey="artist" onSort={toggleSort}>
+              {t('common.artist')}
+            </SortableHeader>
             <SortableHeader className="w-40" sort={sort} sortKey="genre" onSort={toggleSort}>
               {t('classifier.genre')}
             </SortableHeader>
@@ -1570,10 +1582,15 @@ function ResultsTable({
                   <TrackArtwork camelotKey={result.key} path={result.path} size={30} />
                   <div className="min-w-0">
                     <p className="truncate text-[12px] text-zinc-200">{result.title}</p>
-                    <p className="truncate text-[11px] text-zinc-500">{result.artist}</p>
                   </div>
                   <CamelotBadge camelotKey={result.key} className="ml-auto" />
                 </div>
+              </td>
+              <td
+                className={`w-40 truncate pr-2 text-[12px] ${result.artist?.trim() && result.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
+                title={result.artist && result.artist !== '—' ? result.artist : undefined}
+              >
+                {result.artist && result.artist !== '—' ? result.artist : '—'}
               </td>
               <td onClick={(event) => event.stopPropagation()}>
                 <Select

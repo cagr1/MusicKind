@@ -523,6 +523,9 @@ export function Bpm() {
                   <SortableHeader sort={sort} sortKey="track" onSort={toggleSort}>
                     {t('bpm.tableTrack')}
                   </SortableHeader>
+                  <SortableHeader className="w-40" sort={sort} sortKey="artist" onSort={toggleSort}>
+                    {t('common.artist')}
+                  </SortableHeader>
                   <SortableHeader className="w-24" sort={sort} sortKey="bpm" onSort={toggleSort}>
                     {t('bpm.tableBpm')}
                   </SortableHeader>
@@ -676,10 +679,15 @@ function BpmRow({
           <TrackArtwork camelotKey={track.key} path={track.file} size={30} />
           <div className="min-w-0">
             <p className="truncate text-[12px] text-zinc-200">{track.title}</p>
-            <p className="truncate text-[11px] text-zinc-500">{track.artist || '—'}</p>
           </div>
           <MiniWaveform path={track.file} isSelected={selected} />
         </div>
+      </td>
+      <td
+        className={`w-40 truncate pr-2 text-[12px] ${track.artist?.trim() && track.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
+        title={track.artist && track.artist !== '—' ? track.artist : undefined}
+      >
+        {track.artist && track.artist !== '—' ? track.artist : '—'}
       </td>
       {track.pending ? (
         <>

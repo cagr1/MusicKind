@@ -178,6 +178,8 @@ export function Converter() {
       sortRows(items, sort, {
         file: (item) =>
           results.find((result) => result.input === item.path)?.title || fileName(item.path),
+        artist: (item) =>
+          titles[item.path]?.artist || results.find((result) => result.input === item.path)?.artist,
         origin: (item) => sourceFormat(item.path),
         outputFormat: (item) => item.format ?? format,
         size: (item) => results.find((result) => result.input === item.path)?.sizeIn,
@@ -743,6 +745,9 @@ function ResultsTable({
             <SortableHeader sort={sort} sortKey="file" onSort={toggleSort}>
               {t('converter.file')}
             </SortableHeader>
+            <SortableHeader className="w-40" sort={sort} sortKey="artist" onSort={toggleSort}>
+              {t('common.artist')}
+            </SortableHeader>
             <SortableHeader className="w-20" sort={sort} sortKey="origin" onSort={toggleSort}>
               {t('converter.origin')}
             </SortableHeader>
@@ -798,10 +803,16 @@ function ResultsTable({
                           {result.title || fileName(result.input)}
                         </p>
                         <p className="truncate text-[11px] text-zinc-500">
-                          {result.artist || '—'} · {result.bpm ?? '—'} BPM · {result.key ?? '—'}
+                          {result.bpm ?? '—'} BPM · {result.key ?? '—'}
                         </p>
                       </div>
                     </div>
+                  </td>
+                  <td
+                    className={`w-40 truncate pr-2 text-[12px] ${result.artist?.trim() && result.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
+                    title={result.artist && result.artist !== '—' ? result.artist : undefined}
+                  >
+                    {result.artist && result.artist !== '—' ? result.artist : '—'}
                   </td>
                   <td className="font-mono text-[11px] text-zinc-300">
                     <span className="rounded bg-white/5 px-1.5 py-1 text-zinc-400">

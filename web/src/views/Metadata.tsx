@@ -590,6 +590,9 @@ export function Metadata() {
                   <SortableHeader sort={sort} sortKey="track" onSort={toggleSort}>
                     {t('metadata.tableTrack')}
                   </SortableHeader>
+                  <SortableHeader className="w-40" sort={sort} sortKey="artist" onSort={toggleSort}>
+                    {t('common.artist')}
+                  </SortableHeader>
                   <SortableHeader className="w-32" sort={sort} sortKey="album" onSort={toggleSort}>
                     {t('metadata.tableAlbum')}
                   </SortableHeader>
@@ -761,9 +764,14 @@ function MetadataRowView({
             <p className="truncate text-[12px] text-zinc-200">
               {display(row.metadata.title) === '—' ? row.name : display(row.metadata.title)}
             </p>
-            <p className="truncate text-[11px] text-zinc-500">{display(row.metadata.artist)}</p>
           </div>
         </div>
+      </td>
+      <td
+        className={`w-40 truncate pr-2 text-[12px] ${row.metadata.artist?.trim() ? 'text-zinc-300' : 'text-zinc-600'}`}
+        title={row.metadata.artist?.trim() || undefined}
+      >
+        {display(row.metadata.artist)}
       </td>
       <td className="truncate text-[12px] text-zinc-300">{display(row.metadata.album)}</td>
       <td className="font-mono text-[12px] text-zinc-400">{display(row.metadata.year)}</td>

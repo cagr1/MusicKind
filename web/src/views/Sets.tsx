@@ -154,6 +154,7 @@ export function Sets() {
   const sortAccessors = React.useMemo(
     () => ({
       track: (track: SetResult) => track.title || fileName(track.file),
+      artist: (track: SetResult) => track.artist,
       bpm: (track: SetResult) => track.bpm,
       key: (track: SetResult) => track.camelot,
       section: (track: SetResult) => bestScore(track),
@@ -532,6 +533,17 @@ export function Sets() {
                     {t('sets.track')}
                   </SortableHeader>
                   <SortableHeader
+                    className="w-40"
+                    sort={sort}
+                    sortKey="artist"
+                    onSort={(key) => {
+                      setSequence(null)
+                      toggleSort(key)
+                    }}
+                  >
+                    {t('common.artist')}
+                  </SortableHeader>
+                  <SortableHeader
                     className="w-20"
                     sort={sort}
                     sortKey="bpm"
@@ -571,7 +583,7 @@ export function Sets() {
                 {groups.map((group) => (
                   <React.Fragment key={group.key}>
                     <tr className="sticky top-8 z-[1] h-7 border-y border-line bg-surface-panel text-[10px] font-mono uppercase text-zinc-300">
-                      <td colSpan={sequence ? 7 : 6} className="px-3">
+                      <td colSpan={sequence ? 8 : 7} className="px-3">
                         {t(`sets.${group.key}`)} {group.tracks.length}
                         {group.key !== 'review' && (
                           <>
@@ -719,9 +731,14 @@ function SetRow({
             <p className="truncate text-[12px] text-zinc-200">
               {track.title?.trim() || fileName(track.file)}
             </p>
-            <p className="truncate text-[11px] text-zinc-500">{track.artist?.trim() || '—'}</p>
           </div>
         </div>
+      </td>
+      <td
+        className={`w-40 truncate pr-2 text-[12px] ${track.artist?.trim() ? 'text-zinc-300' : 'text-zinc-600'}`}
+        title={track.artist?.trim() || undefined}
+      >
+        {track.artist?.trim() || '—'}
       </td>
       <td className="font-mono text-[12px] text-zinc-200">{track.bpm ?? '—'}</td>
       <td>

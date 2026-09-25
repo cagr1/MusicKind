@@ -9,6 +9,7 @@
     "settings": "Configuración"
   },
   "common": {
+    "artist": "Artista",
     "selected": "seleccionadas",
     "selectAll": "Seleccionar todo",
     "remove": "Quitar",

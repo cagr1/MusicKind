@@ -1289,3 +1289,15 @@ Objetivo: tras analizar, un botón propone el orden de mezcla dentro de cada sec
 
 **No tocar:** `src/style_analyzer.py`, `src/set-export.js`, otras vistas, `NEXT.md`, `plan.md`, specs. Sin commit.
 **Gate:** `node --test tests/*.test.js`, `npm --prefix web test`, `npm --prefix web run build`, `npm --prefix web run lint`, `npm --prefix web run format:check`.
+
+## U3 — Columna «Artista» en todas las tablas (2026-09-25, pedido de Carlos: como Serato/Rekordbox)
+
+Hoy el artista va como segunda línea gris bajo el título (`Bpm.tsx:679`, `Classifier.tsx:1217` y `:1573`, `Metadata.tsx:764`, `Sets.tsx:722`; Convertidor usa `artist` en `Converter.tsx:123`).
+- Añadir columna **Artista** justo después de Pista/Título en Clasificador (ambas tablas), Convertidor, Metadatos, BPM y Sets. Ordenable con U2 (`SortableHeader`, clave `artist`; mismo comparador de texto; vacíos al final).
+- La celda de pista muestra solo título (carátula y nombre de archivo de respaldo como hoy); quitar la segunda línea con el artista para no duplicar. Si una vista usa la segunda línea para otra cosa (ruta, estado), conservarla.
+- Artista vacío → `—` atenuado. Truncar con `title` (tooltip nativo) para nombres largos con varios artistas.
+- Anchos: la columna Artista flexible junto a Pista (p. ej. Pista ~40 % / Artista ~25 % del espacio flexible); el resto de columnas conserva su ancho. En la tabla virtualizada del Clasificador (grid `Classifier.tsx:1123`) añadir la pista de columna al `grid-cols` y a las filas. Sin scroll horizontal nuevo a 1300 px de ancho con el Inspector abierto.
+- En Metadatos, si el usuario edita el artista en el Inspector, la columna muestra el valor editado (mismo origen que hoy usa la segunda línea).
+- i18n `common.artist` o por vista, es/en. Sin hex.
+Tests: vitest donde ya hay tests por vista — accesor `artist` en orden (asc/desc, vacíos al final).
+No tocar: backend, `NEXT.md`, `plan.md`, specs. Sin commit. Gate: `npm --prefix web test`, `build`, `lint`, `format:check`.

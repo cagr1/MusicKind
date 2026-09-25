@@ -26,6 +26,21 @@ describe('sortRows', () => {
   it('uses numeric-aware text comparison', () => {
     expect(compareBy('text')('10', '9')).toBeGreaterThan(0)
   })
+  it('sorts artist names in both directions while keeping empty artists last', () => {
+    const tracks = [
+      { artist: 'The Avalanches' },
+      { artist: '' },
+      { artist: 'Bicep' },
+      { artist: null },
+    ]
+    const accessors = { artist: (track: (typeof tracks)[number]) => track.artist }
+    expect(
+      sortRows(tracks, { key: 'artist', direction: 'asc' }, accessors).map((t) => t.artist),
+    ).toEqual(['Bicep', 'The Avalanches', '', null])
+    expect(
+      sortRows(tracks, { key: 'artist', direction: 'desc' }, accessors).map((t) => t.artist),
+    ).toEqual(['The Avalanches', 'Bicep', '', null])
+  })
   it('sorts rows without changing section order or membership', () => {
     const groups = [
       { section: 'warmup', tracks: [{ score: 2 }, { score: 1 }] },
