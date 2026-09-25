@@ -1301,3 +1301,27 @@ Hoy el artista va como segunda línea gris bajo el título (`Bpm.tsx:679`, `Clas
 - i18n `common.artist` o por vista, es/en. Sin hex.
 Tests: vitest donde ya hay tests por vista — accesor `artist` en orden (asc/desc, vacíos al final).
 No tocar: backend, `NEXT.md`, `plan.md`, specs. Sin commit. Gate: `npm --prefix web test`, `build`, `lint`, `format:check`.
+
+## U4 — Detalles de Carlos (2026-09-25): responsive de tablas, quitar filas en Clasificador, Convertidor «General», Stems
+
+Captura del cerebro (Chrome headless, ventana 900 px, Inspector abierto): en Convertidor y Metadatos la columna Pista colapsa a ~0 px y el texto del Artista queda encima de la carátula; el encabezado «Pista/Artista» se superpone; en la cabecera de la vista «N archivos · N pendientes» se parte en 3 líneas. Regresión de U3 (columnas fijas `w-40` + `table-fixed`).
+
+**U4.1 Tablas responsive (todas: Clasificador ×2, Convertidor, Metadatos, BPM, Sets).**
+- La celda Pista nunca baja de ~180 px (carátula + título legible, truncado con `title`). Nada se superpone nunca.
+- Con poco ancho (contenedor de la tabla < ~720 px; usar container queries `@container` de Tailwind v4 o medir el contenedor, no el viewport, porque el Inspector ocupa ancho), ocultar la columna Artista y mostrar el artista como segunda línea gris bajo el título (como antes de U3). Con ancho suficiente, columna Artista como hoy. Las columnas de menor prioridad (Álbum, Año, Origen…) pueden ocultarse antes que Artista; ordenar por artista sigue disponible cuando la columna está visible.
+- Si aun así no cabe, scroll horizontal dentro del contenedor de la tabla, no de la página. El `thead` sigue fijo (U1).
+- Cabeceras de vista: el contador «N archivos · N pendientes» en una línea (`whitespace-nowrap`, truncar u ocultar «pendientes» en estrecho).
+
+**U4.2 Clasificador (método por etiquetas, tabla virtualizada ~`Classifier.tsx:1140`): quitar filas como en las otras pestañas.** Hoy hay checkboxes (`selectedPaths`) y «Cambiar seleccionadas», pero no quitar. Añadir el mismo control que las demás vistas (`SelectionControls` de `web/src/components/music/TableSelection.tsx`: botón «N seleccionadas · Quitar», botón limpiar tabla, toast con Deshacer). Quitar = sacar de la lista actual (no toca archivos); las filas quitadas no entran en mover/aplicar ni en playlists; `selectedPaths`, filtros, distribución, snapshot (`setResult('classifier-tags', …)`) y la pista seleccionada del Inspector se actualizan; Deshacer restaura todo. Shift-clic para rango como en las otras vistas si es sencillo con el helper existente.
+
+**U4.3 Convertidor: sin la palabra «General».** El selector por fila/Inspector (`Converter.tsx:613–660`) muestra hoy «General (WAV)». Mostrar solo los formatos (MP3/WAV/AIFF/FLAC) sin duplicados: una fila sin formato propio (`format: null`) muestra el formato global; elegir el mismo formato global deja `null` (sigue al global); elegir otro lo fija. Mantener cómo se distingue visualmente una fila con formato propio si ya existe; si no, no añadir nada. Quitar la clave i18n `converter.general` si queda sin uso.
+
+**U4.4 Stems (`web/src/views/Stems.tsx`).**
+- Cabecera (`:366`): quitar el nombre del archivo junto al título (duplicado; ya está en el Inspector).
+- Barra (`:427`): el botón de la izquierda muestra hoy el nombre del archivo; debe mostrar la **carpeta de destino** (`outputDir`, que viene de Configuración): icono + «Destino: <nombre de carpeta>» con la ruta completa en `title`; clic → `electron.showInFolder(outputDir)`. No añadir selector de destino (decisión: solo en Configuración). Para cambiar de archivo: botón de icono en la cabecera («Elegir otro archivo», `aria-label`), además del arrastre existente.
+- Transporte: quitar play/pausa y «00:00 / 06:25» de la barra (`:469–484`) y ponerlos en la zona de resultados, en la columna izquierda de la fila de la regla de tiempo (encima de los carriles Original/Voces/Instrumental, alineado con el ancho `w-44` de las etiquetas de carril). Botón perfectamente circular (`shrink-0`, tamaño fijo) y tiempo al lado. Mismo comportamiento de reproducción.
+- Nada se superpone a 900 px ni a 1300 px.
+
+Tests vitest donde haya lógica pura (quitar/deshacer en Clasificador; mapeo formato null ↔ global en Convertidor).
+**No tocar:** backend, `NEXT.md`, `plan.md`, specs. Sin commit. Sin hex.
+**Gate:** `npm --prefix web test`, `build`, `lint`, `format:check`. El cerebro verificará con capturas a 900 y 1300 px.
