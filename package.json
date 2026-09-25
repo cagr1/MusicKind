@@ -49,13 +49,13 @@
     "mac": {
       "extraResources": [
         {
-          "from": "vendor/keyfinder/darwin",
-          "to": "keyfinder",
-          "filter": ["keyfinder-cli"]
+          "from": "vendor/bin/darwin-${arch}",
+          "to": "bin",
+          "filter": ["ffmpeg", "ffprobe", "fpcalc", "keyfinder-cli"]
         },
         {
-          "from": "vendor/keyfinder/licenses",
-          "to": "keyfinder/licenses",
+          "from": "vendor/bin/licenses",
+          "to": "bin/licenses",
           "filter": ["*"]
         }
       ],

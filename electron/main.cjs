@@ -5,6 +5,7 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const { StringDecoder } = require('string_decoder');
 const http = require('http');
+const { buildRuntimePath } = require('./runtime-path.cjs');
 
 let mainWindow;
 let backendProcess = null;
@@ -16,6 +17,13 @@ const SERVER_ORIGIN = `http://127.0.0.1:${SERVER_PORT}`;
 const projectRoot = path.join(__dirname, '..');
 const appIconPath = path.join(__dirname, 'assets', 'icon.png');
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+process.env.PATH = buildRuntimePath({
+  currentPath: process.env.PATH,
+  packaged: app.isPackaged,
+  resourcesPath: process.resourcesPath,
+  platform: process.platform
+});
 
 async function checkPythonResult() {
   const candidates = process.platform === 'win32' ? ['python', 'python3'] : ['python3', 'python'];
@@ -148,7 +156,7 @@ function startBackendServer() {
       ELECTRON_RUN_AS_NODE: '1',
       MUSIC_KIND_DATA_DIR: app.getPath('userData'),
       ...(app.isPackaged && process.platform === 'darwin'
-        ? { MUSICKIND_KEYFINDER: path.join(process.resourcesPath, 'keyfinder', 'keyfinder-cli') }
+        ? { MUSICKIND_KEYFINDER: path.join(process.resourcesPath, 'bin', 'keyfinder-cli') }
         : {})
     },
     stdio: ['ignore', 'pipe', 'pipe']

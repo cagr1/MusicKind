@@ -53,3 +53,5 @@ guide.txt
 # Artefacto del plugin impeccable del entorno Codex
 .impeccable/
 config/app-keys.json
+vendor/bin/darwin-arm64/
+vendor/bin/darwin-x64/

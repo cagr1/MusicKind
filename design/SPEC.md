@@ -999,3 +999,35 @@ corrupto entró como `#EXTINF:-1,Desconocido - roto` (ffprobe no lo abre).
    Orden y `bpmMin`/`bpmMax` usan `bpmSort`; `tracks[].bpm` conserva el del tag y se añade `bpmSort`.
 3. UI: en la vista previa mostrar "N omitidas (ilegibles)" por sección si > 0.
 Tests: archivo ilegible omitido y listado; 79→158, 201→100.5, 128→128 y orden resultante. **Gate:** node/vitest/build/lint/format.
+
+## Punto final — App autosuficiente en Mac (2026-09-25)
+Decisiones de Carlos: sin firma de Apple (pasos de "Abrir igualmente" en README y en la página de la release); **dos `.dmg`**
+(arm64 y x64), publicados como GitHub Release (nunca en git); solo Mac (Windows después, en otra sesión). macOS mínimo 12.
+Python 3.11 (último con PyTorch 2.2.2 para Intel, necesario para demucs en x64).
+
+### P1 · Binarios incluidos y PATH propio
+1. `scripts/fetch-binaries.sh <arm64|x64>` (idempotente, caché en `.cache/build/bin/`, sha256 fijados en el script): descarga
+   ffmpeg + ffprobe **estáticos** para esa arquitectura (fuente con builds estáticos macOS arm64 y x64 y versión fijada; documentar la
+   URL y la licencia GPL en `THIRD_PARTY_NOTICES.md`) y `fpcalc` (Chromaprint 1.5.1, release oficial macOS). Deja en
+   `vendor/bin/darwin-<arch>/` `ffmpeg`, `ffprobe`, `fpcalc` (+ `keyfinder-cli` copiado de `vendor/keyfinder/darwin/`). Verificar con
+   `file`/`lipo -archs` que cada binario es de la arquitectura pedida y `otool -L` solo `/usr/lib` y `/System`. **Estos binarios NO se
+   commitean** (`.gitignore`): se generan antes de empaquetar. Licencias en `vendor/bin/licenses/`.
+2. `electron/main.cjs` (env del backend, ~:143): si `app.isPackaged`, `PATH = <resources>/bin + ':' + PATH + ':/opt/homebrew/bin:/usr/local/bin'`;
+   en desarrollo, `PATH + ':/opt/homebrew/bin:/usr/local/bin'` (la app abierta desde Finder no hereda el PATH de la terminal). Así
+   Node, Python y todos los hijos encuentran los binarios sin cambiar las llamadas existentes. Los chequeos de ffmpeg/fpcalc que hace
+   `main.cjs` en su propio proceso (~:25, ~:256, ~:422) usan el mismo PATH ampliado.
+3. `package.json` build: `mac.extraResources` copia `vendor/bin/darwin-${arch}` a `bin` (electron-builder `${arch}` = arm64/x64) y
+   `vendor/bin/licenses` a `bin/licenses`. `MUSICKIND_KEYFINDER` pasa a `<resources>/bin/keyfinder-cli`.
+4. Tests node: función pura que construye el PATH (empaquetado/desarrollo, sin duplicados).
+**Gate (cerebro):** `fetch-binaries.sh arm64` y `x64` → arquitecturas correctas (`lipo -archs`), dependencias solo del sistema,
+`ffmpeg -version` corre (x64 bajo Rosetta); node tests; con `env -i HOME=$HOME PATH=/usr/bin:/bin` + el PATH construido, el servidor
+responde `ffmpeg-status` ok y convierte un archivo.
+
+### P2 · Python propio con librosa/numpy (esbozo; spec detallada tras P1)
+python-build-standalone 3.11 por arquitectura + librosa/numpy/scipy/soundfile preinstalados (wheels de la arquitectura destino) en
+`Resources/python`; `resolvePython` lo prefiere (`MUSICKIND_PYTHON`); demucs se instala desde Configuración en `userData` (x64: torch
+2.2.2). Sin Python del sistema ni Xcode CLT.
+
+### P3 · Empaquetado y release (esbozo)
+`asarUnpack` de `src/**/*.py` y binarios; `npm run dist:mac` genera `MusicKind-<ver>-arm64.dmg` y `-x64.dmg`; prueba de humo del .app
+con PATH mínimo (BPM, tonalidad, convertir, identify); README con instalación y "Abrir igualmente"; release en GitHub **tras OK de Carlos**.
