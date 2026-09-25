@@ -1,3 +1,4 @@
 librosa>=0.10.0
+essentia
 numpy>=1.21.0
 demucs>=4.0.0

@@ -11,6 +11,7 @@ import os
 import numpy as np
 from pathlib import Path
 from key_detection import resolve_key
+from bpm_detection import resolve_bpm
 
 AUDIO_EXTENSIONS = {'.mp3', '.wav', '.aiff', '.aif', '.flac', '.m4a'}
 
@@ -34,7 +35,9 @@ def _extract_audio_features(file_path, duration=None, include_tonal=False):
     contrast = librosa.feature.spectral_contrast(y=y, sr=sr)
     zcr = librosa.feature.zero_crossing_rate(y)
     rms = librosa.feature.rms(y=y)
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    bpm_info = resolve_bpm(file_path, y, sr)
+    tempo = bpm_info["bpm"]
+    tempo_value = float(tempo) if tempo is not None else 0.0
     beat_strength = float(np.mean(librosa.onset.onset_strength(y=y, sr=sr)))
 
     vec = np.concatenate([
@@ -44,10 +47,10 @@ def _extract_audio_features(file_path, duration=None, include_tonal=False):
         np.mean(contrast, axis=1),                          # 7
         np.mean(zcr, axis=1), np.std(zcr, axis=1),        # 2
         np.mean(rms, axis=1), np.std(rms, axis=1),        # 2
-        [float(tempo)],                                     # 1
+        [tempo_value],                                      # 1
         [beat_strength]                                     # 1
     ])
-    return vec, float(tempo), resolve_key(file_path) if include_tonal else None
+    return vec, bpm_info, resolve_key(file_path) if include_tonal else None
 
 
 def extract_features(file_path, duration=None):
@@ -155,7 +158,7 @@ if __name__ == "__main__":
             print(f"[PROGRESS:{i+1}/{total}] Processing: {name}")
             sys.stdout.flush()
             try:
-                vec, tempo, key_info = _extract_audio_features(f, args.analysis_seconds, include_tonal=True)
+                vec, bpm_info, key_info = _extract_audio_features(f, args.analysis_seconds, include_tonal=True)
                 scores, best, review, ref_counts = score_sections(vec, ref_vectors_by_section)
                 results.append({
                     "file": f,
@@ -165,7 +168,8 @@ if __name__ == "__main__":
                     "best": best,
                     "review": review,
                     "refCounts": ref_counts,
-                    "bpm": round(tempo, 1),
+                    "bpm": bpm_info["bpm"],
+                    "bpmSource": bpm_info["bpmSource"],
                     "camelot": key_info["camelot"],
                     "keySource": key_info["keySource"]
                 })
@@ -215,14 +219,15 @@ if __name__ == "__main__":
             print(f"[PROGRESS:{i+1}/{total}] Processing: {name}")
             sys.stdout.flush()
             try:
-                vec, tempo, key_info = _extract_audio_features(f, args.analysis_seconds, include_tonal=True)
+                vec, bpm_info, key_info = _extract_audio_features(f, args.analysis_seconds, include_tonal=True)
                 scores, _, _, _ = score_sections(vec, ref_vectors_by_section)
                 score = scores["score"]
                 results.append({
                     "ok": True,
                     "file": f,
                     "score": score,
-                    "bpm": round(tempo, 1),
+                    "bpm": bpm_info["bpm"],
+                    "bpmSource": bpm_info["bpmSource"],
                     "camelot": key_info["camelot"],
                     "keySource": key_info["keySource"]
                 })

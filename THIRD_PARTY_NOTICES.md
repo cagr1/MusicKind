@@ -28,6 +28,7 @@ Official universal macOS `fpcalc` from [AcoustID's v1.5.1 release](https://githu
 
 - **Electron** — MIT License. Copyright © OpenJS Foundation and Electron contributors.
 - **librosa** — ISC License. Copyright © librosa contributors.
+- **Essentia** — AGPL-3.0-only. Copyright © Universitat Pompeu Fabra.
 - **NumPy** — BSD 3-Clause License. Copyright © NumPy developers.
 - **Demucs** — MIT License. Copyright © Alexandre Défossez and contributors.
 - **FFmpeg** — GPL-3.0-or-later for the bundled macOS builds above.

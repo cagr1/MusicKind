@@ -1,11 +1,15 @@
 import numpy as np
 import librosa
+from bpm_detection import resolve_bpm
 
 
 def extract_features(file_path, duration=None):
     y, sr = librosa.load(file_path, sr=None, mono=True, duration=duration)
 
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    bpm = resolve_bpm(file_path, y, sr)["bpm"]
+    if bpm is None:
+        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+        bpm = float(np.asarray(tempo).reshape(-1)[0])
 
     rms = librosa.feature.rms(y=y)[0]
     energy = float(np.mean(rms)) if rms.size else 0.0
@@ -26,7 +30,7 @@ def extract_features(file_path, duration=None):
     vocal_presence = float(harm_energy / (perc_energy + harm_energy + 1e-9))
 
     return {
-        "bpm": float(tempo),
+        "bpm": bpm,
         "energy": energy,
         "brightness": brightness,
         "bass_weight": bass_energy,

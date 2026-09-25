@@ -7,28 +7,28 @@ Extracts BPM and key from audio files using librosa
 import sys
 import json
 from key_detection import resolve_key
+from bpm_detection import resolve_bpm
 import librosa
-import numpy as np
 import os
 from pathlib import Path
 
 def extract_bpm_key(file_path, analysis_seconds=None):
     """Extract BPM and key from audio file"""
     try:
-        # Load audio (optionally limited duration for speed)
-        if analysis_seconds:
-            y, sr = librosa.load(file_path, sr=None, mono=True, duration=analysis_seconds)
-        else:
-            y, sr = librosa.load(file_path, sr=None, mono=True)
-        
-        # Get BPM using beat tracking
-        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-        bpm = float(tempo)
+        # The full-track Percival estimate ignores analysis_seconds; only the
+        # librosa fallback honors the legacy duration limit.
+        bpm_info = resolve_bpm(file_path, fallback_duration=analysis_seconds)
+        if bpm_info.get("error"):
+            return {
+                "ok": False,
+                "error": bpm_info["error"],
+                "file": file_path,
+            }
         
         key_info = resolve_key(file_path)
         return {
             "ok": True,
-            "bpm": round(bpm, 1),
+            **bpm_info,
             **key_info,
             "file": file_path
         }

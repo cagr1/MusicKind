@@ -1168,3 +1168,41 @@ Referencia de comportamiento: Convertidor (C2/C2.1).
 5. Tests vitest: `itemsFromPaths` (movido), BPM muestra pendientes antes de analizar, BPM/Metadatos suman varios y carpeta
    recursiva, Metadatos no pierde ediciones. i18n es/en.
 **Gate (cerebro):** vitest/build/lint/format + arrastre simulado: BPM y Metadatos 2 → 5 filas como el Convertidor; captura.
+
+### S3b · BPM confiable: tag → essentia Percival (pista entera) → librosa (2026-09-25)
+Base: S3a (`.cache/eval/bpm-report.md`): Percival pista entera 98,5 % ±0.5 (2,4 s/pista) vs librosa `beat_track` 10,3 %
+(70 % de pistas en 129.2). Hoy los 3 analizadores usan `beat_track`: `src/bpm_analyzer.py:25`, `src/style_analyzer.py:37`,
+`src/audio_features.py:8`.
+1. Nuevo `src/bpm_detection.py` (mismo estilo que `src/key_detection.py:189-228`):
+   - `parse_bpm(value)` → float redondeado a 0.1 si es numérico, finito y 20 ≤ bpm ≤ 300; si no, `None`.
+   - `read_tag_bpm(path)`: `ffprobe -show_entries format_tags:stream_tags -of json`, claves sin distinguir mayúsculas
+     `tbpm`, `bpm`, `tmpo`; primer valor que pase `parse_bpm`; `timeout=10`; cualquier fallo → `None`.
+   - `detect_bpm_essentia(path)`: decodificar con `ffmpeg` la **pista entera** a mono 44100 Hz `f32le` por pipe (como
+     `scripts/eval_bpm.py:56-67`, sin resample de librosa) → `essentia.standard.PercivalBpmEstimator(sampleRate=44100)`.
+     `import essentia.standard` perezoso dentro de la función.
+   - `detect_bpm_librosa(y, sr)`: el `beat_track` actual, `float(np.asarray(tempo).reshape(-1)[0])` (quita el warning de NumPy).
+   - `resolve_bpm(path, y=None, sr=None)` → `{"bpm": float|None, "bpmSource": "tag"|"analysis"|None}`: tag → Percival →
+     librosa (usa `y, sr` si vienen; si no, carga con librosa). Solo se usa librosa si Percival lanza excepción (essentia
+     ausente, ffmpeg falla) o devuelve algo que `parse_bpm` rechaza. Todo falla → `bpm: None, bpmSource: None`.
+   - Variable de entorno `MUSIC_KIND_BPM_ENGINE=librosa` fuerza saltar Percival (para tests y diagnóstico). Nada más.
+2. `src/bpm_analyzer.py`: sustituir `librosa.load` + `beat_track` por `resolve_bpm(file_path)`; **no** cargar audio con
+   librosa si hay tag o Percival funciona. Resultado añade `"bpmSource"`. `--analysis-seconds` se conserva en la CLI pero ya
+   no limita el BPM (Percival siempre pista entera; decisión S3a); solo aplica al respaldo librosa.
+3. `src/style_analyzer.py:27-50`: quitar `beat_track`; el tempo del vector (índice 51) y el `bpm` de salida salen de
+   `resolve_bpm(file_path, y, sr)` (referencias incluidas, para que el z-score compare lo mismo). Si `bpm` es `None`, usar
+   `0.0` en el vector y `null` en la salida. Salidas de ambos modos añaden `"bpmSource"`. `extract_features` conserva firma.
+4. `src/audio_features.py:8`: `bpm` sale de `resolve_bpm(file_path, y, sr)` (`None` → mantener `float(tempo)` de librosa
+   para no romper `run_classification.py:40`, que resta bpm).
+5. `requirements.txt`: añadir `essentia` (versión que ya está en el venv: `2.1b6.dev*`; verificar el nombre del paquete
+   pip con `pip show` en el venv). `THIRD_PARTY_NOTICES.md`: essentia — AGPL-3.0, Copyright © Universitat Pompeu Fabra
+   (mismo formato que la línea de librosa).
+6. Tests `tests/test_bpm_detection.py` (unittest, sin red, archivos en `tempfile`): `parse_bpm` ("128", "127.50", "0",
+   "abc", "301", None); WAV sintético de clicks a 124 BPM (30 s) → Percival dentro de ±1; mismo WAV con tag `bpm=100`
+   escrito por `ffmpeg -metadata` en FLAC → `resolve_bpm` da 100/`tag`; con `MUSIC_KIND_BPM_ENGINE=librosa` →
+   `bpmSource == "analysis"` y bpm numérico; essentia simulada rota (`unittest.mock.patch` de `detect_bpm_essentia`
+   lanzando) → cae a librosa.
+**No tocar:** `web/`, `src/server.js`, `src/key_detection.py`, `scripts/`, `NEXT.md`, `plan.md`, specs. No commitear.
+**Gate (cerebro):** unittest del venv (todas las suites), node, en vivo `/api/bpm/analyze` y `/api/set-analyze` (3099, copias
+de `2026`, algunas con tag BPM borrado): tag → `bpmSource: tag` idéntico al tag; sin tag → Percival cerca del tag original
+(±1 o mitad/doble); ya no hay valores repetidos 129.2 en masa. Re-medir `scripts/eval_sets.py` con caché nueva y comparar
+con 44,7 % (reportar si baja).
