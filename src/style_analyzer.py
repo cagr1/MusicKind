@@ -99,14 +99,13 @@ def score_sections(input_vec, ref_vectors_by_section):
     pooled = np.concatenate(list(distances.values()))
     query_distances = {name: float(np.linalg.norm(query - centroids[name])) for name in nonempty}
     scores = {}
-    for name, own_distances in distances.items():
-        distribution = own_distances if len(own_distances) >= 5 else pooled
-        scores[name] = round(float(np.mean(distribution >= query_distances[name])) * 100, 1)
+    for name in distances:
+        scores[name] = round(float(np.mean(pooled >= query_distances[name])) * 100, 1)
     ref_counts = {name: int(len(vectors)) for name, vectors in nonempty.items()}
-    highest = max(scores.values())
-    if highest == 0:
+    if all(score == 0 for score in scores.values()):
         return scores, None, "all-zero", ref_counts
-    leaders = [name for name, score in scores.items() if score == highest]
+    closest = min(query_distances.values())
+    leaders = [name for name, distance in query_distances.items() if distance == closest]
     if len(leaders) > 1:
         return scores, None, "tie", ref_counts
     return scores, leaders[0], None, ref_counts

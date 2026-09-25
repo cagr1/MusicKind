@@ -1252,3 +1252,17 @@ Arreglo: sin padding superior en el contenedor de scroll (mantener `px-*` y, si 
 
 **No tocar:** backend (`src/`), `NEXT.md`, `plan.md`, specs. Sin commit. Sin hex en tsx; i18n `es/en` para textos nuevos (p.ej. `common.sortAsc/sortDesc`).
 **Gate:** `npm --prefix web test`, `npm --prefix web run build`, `npm --prefix web run lint`, `npm --prefix web run format:check`.
+
+## S1.2 — Puntaje de Sets con escala común (2026-09-25)
+
+Bug verificado (prueba real de Carlos, `NEXT.md` 1c): `score_sections` (`src/style_analyzer.py:80`) calcula el percentil de cada sección contra la dispersión de **su propia** carpeta (`distribution = own_distances if len(own_distances) >= 5 else pooled`, línea ~101). La carpeta más compacta (peak) casi nunca gana: 0/117 pistas a peak; validación cruzada con las carpetas de Carlos (15 refs/sección, 10 semillas): actual 31,3 % (azar 33 %), escala común 53,3 %.
+Arreglo: usar **siempre** `pooled` (distancias de todas las referencias a su propio centro) como distribución para todas las secciones. Todo lo demás igual (z-score conjunto, centros, `all-zero`, `tie`, `ref_counts`, contrato de 4 valores, salida JSON).
+Tests (`tests/test_style_analyzer*.py` existente o nuevo, unittest): con una sección compacta y otra dispersa, una consulta en el centro de la compacta gana la compacta (hoy falla); una consulta igual de lejos de ambas no favorece a la dispersa; contrato de retorno intacto.
+No tocar: resto de `src/`, `web/`, `NEXT.md`, `plan.md`, specs. Sin commit.
+Gate: `"$HOME/Library/Application Support/MusicKind/python-venv/bin/python" -m unittest discover -s tests -p "test_*.py"` y `node --test tests/*.test.js`.
+
+### S1.3 — Ganador por centro más cercano (corrige S1.2)
+
+S1.2 medido por el cerebro: la escala común arregla peak pero dispara «Por revisar» (empates y ceros): `2026` 30,6 % por revisar, acierto 31,8 % (antes 43,5 %). Variante medida (scratchpad, mismas cachés): **ganador = sección con menor `query_distances` (distancia z al centro)**; `review='all-zero'` y `best=None` solo si todos los puntajes (escala común de S1.2) son 0; `tie` solo si las dos menores distancias son exactamente iguales. Resultado: Carlos CV 51,3 % (vs 31,3 %), `2026` 43,5 % con 11,8 % por revisar.
+Cambio en `score_sections` (`src/style_analyzer.py:80`): conservar los `scores` de S1.2 (lo que muestra la UI) y el contrato de 4 valores; cambiar solo cómo se eligen `best`/`review`. Ajustar/añadir tests en `tests/test_style_scoring.py`: el ganador es el centro más cercano aunque dos puntajes empaten; todo 0 → `all-zero`; distancias idénticas → `tie`.
+No tocar: resto de `src/`, `web/`, `NEXT.md`, `plan.md`, specs. Sin commit. Gate: igual que S1.2.

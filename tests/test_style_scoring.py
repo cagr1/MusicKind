@@ -44,6 +44,27 @@ class StyleScoringTests(unittest.TestCase):
         expected = round(float(np.mean(np.linalg.norm(z - center, axis=1) >= np.linalg.norm((np.array([0.5]) - mean) / sd - center))) * 100, 1)
         self.assertEqual(scores["small"], expected)
 
+    def test_nearer_center_wins_even_when_percentile_scores_tie(self):
+        left = np.array([[-6.0], [0.0], [6.0]])
+        right = np.array([[4.0], [10.0], [16.0]])
+        scores, best, review, counts = score_sections(
+            np.array([4.9]), {"left": left, "right": right}
+        )
+        self.assertEqual(scores["left"], scores["right"])
+        self.assertEqual(best, "left")
+        self.assertIsNone(review)
+        self.assertEqual(counts, {"left": 3, "right": 3})
+
+    def test_equal_distance_to_centers_is_tie(self):
+        left = np.array([[-5.0], [-2.0], [1.0]])
+        right = np.array([[-1.0], [2.0], [5.0]])
+        scores, best, review, _ = score_sections(
+            np.array([0.0]), {"left": left, "right": right}
+        )
+        self.assertEqual(scores["left"], scores["right"])
+        self.assertIsNone(best)
+        self.assertEqual(review, "tie")
+
     def test_equal_top_scores_are_marked_for_review(self):
         section = np.array([[0.0], [1.0], [2.0], [3.0], [4.0]])
         refs = {"left": section, "right": section.copy()}
