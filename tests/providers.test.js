@@ -78,6 +78,54 @@ test('Deezer retries an empty advanced search with cleaned free text and checks 
   assert.equal(await wrongArtist.search('Fisher', 'Losing It'), null);
 });
 
+test('splitArtists handles supported separators and keeps ampersands inside names', async () => {
+  const { splitArtists } = await import('../src/providers/http.js');
+  assert.deepEqual(splitArtists('&ME, Black Coffee & Jimi Jules feat. Carlita ft. X x Y vs Z y Q'), [
+    '&ME', 'Black Coffee', 'Jimi Jules', 'Carlita', 'X', 'Y', 'Z', 'Q',
+  ]);
+});
+
+test('Deezer tries each requested artist, checks exact title version, and searches title last', async () => {
+  const urls = [];
+  const responses = [
+    { data: [] },
+    { data: [{ id: 1, title: 'The Rapture Pt.II', artist: { name: '&ME' } }] },
+    { data: [{ id: 2, title: 'The Rapture Pt.III', artist: { name: 'Black Coffee' } }] },
+    { bpm: 122 },
+  ];
+  const client = new DeezerClient({ fetcher: async url => { urls.push(new URL(url)); return responses.shift(); } });
+  const result = await client.search('&ME, Black Coffee, Keinemusik', 'The Rapture Pt.III (Original Mix)');
+  assert.equal(result.artist, 'Black Coffee');
+  assert.equal(result.title, 'The Rapture Pt.III');
+  assert.equal(urls.length, 4);
+  assert.match(urls[1].searchParams.get('q'), /^&ME /);
+  assert.match(urls[2].searchParams.get('q'), /^Black Coffee /);
+});
+
+test('Deezer title-only final attempt rejects unrelated artists and limits attempts to six', async () => {
+  const urls = [];
+  const client = new DeezerClient({ fetcher: async url => {
+    urls.push(new URL(url));
+    return { data: [{ title: 'Trippy Yeah', artist: { name: 'Someone Else' } }] };
+  } });
+  assert.equal(await client.search('Black Coffee, Jimi Jules, A, B, C', 'Trippy Yeah (Original Mix)'), null);
+  assert.equal(urls.length, 6);
+  assert.equal(urls[5].searchParams.get('q'), 'Trippy Yeah');
+});
+
+test('Deezer requires an explicitly requested remix descriptor', async () => {
+  const bare = new DeezerClient({ fetcher: async () => ({ data: [
+    { id: 1, title: 'Losing It', artist: { name: 'Fisher' } },
+  ] }) });
+  assert.equal(await bare.search('Fisher', 'Losing It (Chris Lake Remix)'), null);
+
+  const remix = new DeezerClient({ fetcher: async url => new URL(url).pathname.endsWith('/1')
+    ? { bpm: 124 }
+    : { data: [{ id: 1, title: 'Losing It (Chris Lake Remix)', artist: { name: 'Fisher' } }] } });
+  const result = await remix.search('Fisher', 'Losing It (Chris Lake Remix)');
+  assert.equal(result.title, 'Losing It (Chris Lake Remix)');
+});
+
 test('provider HTTP honors Retry-After on 429', async () => {
   const { fetchJson } = await import('../src/providers/http.js');
   let attempts = 0;

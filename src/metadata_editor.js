@@ -12,6 +12,7 @@ import { spawn } from "child_process";
 import { StringDecoder } from "string_decoder";
 import { fileURLToPath } from "url";
 import { getAudioExtensions, discoverAudioFiles } from "./services/audio-discovery.js";
+import { normalizeArtistName, splitArtists } from "./providers/http.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -270,10 +271,20 @@ export async function identifyAndTag(
   const mbRelease = recording?.releases?.[0];
   const mbYear = mbRelease?.date ? Number(String(mbRelease.date).slice(0, 4)) || null : null;
 
+  const currentArtist = currentMeta.artist || currentData.file.name.replace(/\.[^.]+$/, '').split(' - ').slice(0, -1).join(' - ');
+  const currentArtists = splitArtists(currentArtist);
+  const deezerArtist = deezerTrack?.artist || '';
+  const preserveArtistCredit = currentArtists.length > 1 && currentArtists.some(value =>
+    normalizeArtistName(value) === normalizeArtistName(deezerArtist)
+  );
+  const currentTitle = currentMeta.title || currentData.file.name.replace(/\.[^.]+$/, '').split(' - ').slice(-1)[0];
+  const preserveMixTitle = Boolean(deezerTrack?.title && /\((?:[^)]*\b(?:mix|remix)\b[^)]*)\)/i.test(currentTitle) &&
+    currentTitle.toLowerCase().includes(deezerTrack.title.toLowerCase()));
+
   // 3. Build final metadata.
   const newMetadata = {
-    title: deezerTrack?.title || identifyResult?.title || recording?.title || currentMeta.title,
-    artist: deezerTrack?.artist || identifyResult?.artist || mbArtist || currentMeta.artist,
+    title: (preserveMixTitle ? currentTitle : deezerTrack?.title) || identifyResult?.title || recording?.title || currentMeta.title,
+    artist: (preserveArtistCredit ? currentArtist : deezerTrack?.artist) || identifyResult?.artist || mbArtist || currentMeta.artist,
     album: deezerTrack?.album || identifyResult?.album || mbRelease?.title || currentMeta.album,
     year: deezerTrack?.releaseDate
       ? Number(String(deezerTrack.releaseDate).slice(0, 4)) || currentMeta.year

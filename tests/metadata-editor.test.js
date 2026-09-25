@@ -230,3 +230,19 @@ test("identifyAndTag preview no escribe ni renombra el archivo", { skip: !ffmpeg
   assert.ok(fs.existsSync(filePath));
   assert.equal(fs.existsSync(path.join(dir, "Bicep - Glue.mp3")), false);
 });
+
+test("identifyAndTag conserva varios artistas y el sufijo remix del crédito actual", { skip: !ffmpegAvailable() }, async () => {
+  const dir = makeTempDir();
+  const filePath = makeToneFile(dir);
+  await writeMetadata(filePath, { artist: "Chocolate Spread, Oscar P", title: "Chocolate Spread (Extended Remix)" });
+  const deezer = {
+    async search() {
+      return { artist: "Chocolate Spread", title: "Chocolate Spread", album: "Single", releaseDate: "2024-01-01" };
+    },
+  };
+
+  const result = await identifyAndTag(filePath, deezer, null, { preview: true });
+  assert.equal(result.metadata.artist, "Chocolate Spread, Oscar P");
+  assert.equal(result.metadata.title, "Chocolate Spread (Extended Remix)");
+  assert.equal(fs.existsSync(filePath), true);
+});

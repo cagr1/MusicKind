@@ -33,3 +33,10 @@ export function cleanTrackTitle(title = '') {
 export function normalizeArtistName(name = '') {
   return String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim();
 }
+
+export function splitArtists(text = '') {
+  return String(text)
+    .split(/\s*,\s*|\s+&\s+|\s+feat\.\s+|\s+ft\.\s+|\s+x\s+|\s+vs\s+|\s+y\s+/i)
+    .map(artist => artist.trim())
+    .filter(Boolean);
+}

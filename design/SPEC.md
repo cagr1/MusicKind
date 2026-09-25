@@ -876,3 +876,32 @@ puntaje **discrimine y signifique algo**, no una precisión alta.
 **Gate (cerebro):** tests nuevos + `test_basic` en verde con el venv; en el reporte, % ≥ 90 cae claramente y la desviación sube frente
 al coseno viejo, con acierto de `best` ≥ al viejo; corrida real de `/api/set-analyze` (servidor en 3099, copias) devuelve puntajes
 repartidos.
+
+### Back 4.5 · Deezer con varios artistas + no perder créditos (2026-09-24)
+Probado en vivo: `artist:"&ME" track:"The Rapture Pt.III"` → 0 resultados; texto libre `&ME The Rapture Pt.III` → correcto; texto
+libre con los tres artistas juntos → falla. Además `identify` cambia "Chocolate Spread, Oscar P" por "Chocolate Spread": Deezer da
+solo el artista principal y pisa el crédito completo.
+1. `src/providers/http.js`: `splitArtists(text)` separa por `,`, ` & ` (con espacios; "&ME" no se parte), ` feat. `, ` ft. `, ` x `,
+   ` vs `, ` y `, sin distinguir mayúsculas; recorta y quita vacíos.
+2. `src/providers/deezer.js` `search(artist, title)`: título limpio con `cleanTrackTitle`. Intentos en orden hasta el primero válido:
+   búsqueda avanzada con el crédito completo; por cada artista de `splitArtists` (máx. 4): texto libre `"<artista> <título>"`;
+   por último texto libre solo con el título. Revisar hasta 5 resultados por intento. **Válido** = el artista del resultado coincide
+   (normalizado, igualdad o contención) con alguno de los artistas pedidos **y** el título normalizado del resultado sin paréntesis /
+   corchetes es igual al pedido sin paréntesis / corchetes ("The Rapture Pt.II" ≠ "The Rapture Pt.III"). Clave de caché nueva
+   (`deezer:v2:…`). Máximo de llamadas por `search`: 6.
+3. `src/metadata_editor.js:276`: si el crédito actual (tag o nombre de archivo) tiene más artistas que el de Deezer y el de Deezer
+   es uno de ellos, conservar el crédito actual. Igual para el título: si el actual contiene el de Deezer más un paréntesis de mezcla
+   o remix, conservar el actual.
+4. Tests en `tests/providers.test.js` y `tests/metadata-editor.test.js` con `fetcher` falso: varios artistas encuentra por el 2.º
+   intento; Pt.II no se acepta por Pt.III; "&ME" no se parte; crédito "Chocolate Spread, Oscar P" se conserva; artista sin relación
+   → null.
+No tocar `web/`. **Gate (cerebro):** node tests en verde; en vivo (red real) `search("&ME, Black Coffee, Keinemusik", "The Rapture
+Pt.III (Original Mix)")` → `&ME | The Rapture Pt.III`, y `search("Black Coffee, Jimi Jules", "Trippy Yeah (Original Mix)")` no
+devuelve otra canción.
+
+### Back 4.5.1 · Remix explícito + sin duplicar (revisión del cerebro)
+1. `src/providers/deezer.js`: si el título pedido tiene un paréntesis/corchete con `remix`, `edit`, `dub`, `rework`, `bootleg` o un
+   `mix` que no sea `original`/`extended`, el candidato solo es válido si ese texto (normalizado) aparece también en su título.
+   Test: pedir "Losing It (Chris Lake Remix)" no acepta "Losing It"; sí acepta "Losing It (Chris Lake Remix)".
+2. `src/metadata_editor.js`: usar `splitArtists` y `normalizeArtistName` de `src/providers/http.js` en vez de repetir la regex y
+   la normalización. Sin cambio de comportamiento. **Gate:** node tests en verde.
