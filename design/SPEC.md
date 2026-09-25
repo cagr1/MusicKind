@@ -680,6 +680,16 @@ Motivo: el análisis actual (`src/key_detection.py`, librosa + Krumhansl) aciert
 **Gate (cerebro):** reporte con los 3 motores (o el error de instalación), segunda corrida desde caché con los mismos números.
 Decisión posterior (fase aparte): integrar el ganador en `resolve_key` como motor de respaldo; el tag sigue mandando.
 
+### Back 1b.1 · Correcciones del reporte (revisión del cerebro, 2026-09-24)
+Solo `scripts/eval_key.py`. No tocar `src/`, `web/`, `/Volumes`.
+1. **Confusiones:** en el bucle de `main()` registrar en `confusions` solo si `pred` es `None` o `pred["camelot"] != truth["camelot"]`.
+   Hoy lista aciertos ("6A → 6A").
+2. **Cuentas que suman 100 %:** añadir al informe columnas `Sin predicción` (pred `None`) y `Fallos` (excepción) por motor/ventana.
+   `N` = filas totales del motor (pistas con tag); porcentajes sobre `N`, de modo que exacto + error menor + error mayor + sin predicción
+   + fallos = 100 %. Mostrar en la sección de errores los 3 mensajes de excepción más frecuentes por motor.
+**Gate (cerebro):** dos corridas seguidas con el venv de la app dan tablas idénticas; la 2.ª con `Cache hits` = N − fallos en todos
+los motores; ninguna fila de confusiones con verdad = predicción.
+
 ### Back 4 · Quitar Spotify; Discogs + Last.fm + Deezer + MusicBrainz con claves de la app (2026-09-24)
 Motivo: desde feb-2026 Spotify no entrega `genres` a apps en modo desarrollo y exige Premium al dueño. Decisión de Carlos: quitar
 Spotify y que el usuario **no tenga que crear claves**.
