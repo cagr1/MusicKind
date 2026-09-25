@@ -17,6 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from key_detection import (  # noqa: E402
     CAMELOT_BY_PITCH_AND_MODE,
     detect_key,
+    detect_key_keyfinder,
+    keyfinder_binary_path,
     parse_key,
     resolve_key,
 )
@@ -125,6 +127,47 @@ class KeyDetectionTests(unittest.TestCase):
             tagged = resolve_key(flac)
             self.assertEqual(tagged["keySource"], "tag")
             self.assertEqual(tagged["camelot"], "8A")
+
+    def test_keyfinder_binary_when_available(self):
+        binary = keyfinder_binary_path()
+        if not binary or not Path(binary).is_file() or not os.access(binary, os.X_OK):
+            self.skipTest("binario libkeyfinder no compilado")
+        if not shutil.which("ffmpeg"):
+            self.skipTest("ffmpeg no disponible")
+        with tempfile.TemporaryDirectory() as directory:
+            wav = Path(directory) / "synthetic.wav"
+            import soundfile as sf
+            sf.write(wav, triad(9, "minor"), SR)
+            self.assertEqual(detect_key_keyfinder(wav)["camelot"], "8A")
+
+    def test_keyfinder_failure_falls_back_and_tag_still_wins(self):
+        if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+            self.skipTest("ffmpeg/ffprobe no disponible")
+        old_binary = os.environ.get("MUSICKIND_KEYFINDER")
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                wav = Path(directory) / "synthetic.wav"
+                flac = Path(directory) / "tagged.flac"
+                import soundfile as sf
+                sf.write(wav, triad(9, "minor"), SR)
+                os.environ["MUSICKIND_KEYFINDER"] = str(Path(directory) / "missing-keyfinder")
+                fallback = resolve_key(wav)
+                self.assertEqual(fallback["keySource"], "analysis")
+                self.assertEqual(fallback["camelot"], "8A")
+
+                subprocess.run(
+                    ["ffmpeg", "-y", "-v", "error", "-i", str(wav),
+                     "-metadata", "initialkey=C", str(flac)],
+                    check=True,
+                )
+                tagged = resolve_key(flac)
+                self.assertEqual(tagged["keySource"], "tag")
+                self.assertEqual(tagged["camelot"], "8B")
+        finally:
+            if old_binary is None:
+                os.environ.pop("MUSICKIND_KEYFINDER", None)
+            else:
+                os.environ["MUSICKIND_KEYFINDER"] = old_binary
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 import tempfile
+from pathlib import Path
 
 # The bundled venv may be installed read-only; keep librosa/numba's generated
 # caches out of site-packages so librosa can initialize reliably.
@@ -90,6 +91,41 @@ def detect_key_from_file(path) -> dict[str, str]:
         duration=120,
     )
     return detect_key(y, sr)
+
+
+def keyfinder_binary_path():
+    """Return the configured or bundled macOS libkeyfinder CLI path."""
+    configured = os.environ.get("MUSICKIND_KEYFINDER")
+    if configured:
+        return configured
+    if os.sys.platform == "darwin":
+        return str(Path(__file__).resolve().parents[1] / "vendor/keyfinder/darwin/keyfinder-cli")
+    return None
+
+
+def detect_key_keyfinder(path) -> dict[str, str]:
+    """Analyze an entire track using the bundled libkeyfinder CLI."""
+    binary = keyfinder_binary_path()
+    if not binary:
+        raise FileNotFoundError("libkeyfinder no está disponible en esta plataforma")
+    decoded = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:a:0", "-vn",
+         "-ac", "1", "-ar", "44100", "-f", "f32le", "pipe:1"],
+        capture_output=True,
+        timeout=120,
+        check=True,
+    )
+    if not decoded.stdout:
+        raise ValueError("ffmpeg devolvió audio vacío")
+    result = subprocess.run(
+        [binary], input=decoded.stdout, capture_output=True,
+        timeout=120, check=True,
+    )
+    payload = json.loads(result.stdout)
+    parsed = parse_key(payload.get("key"))
+    if not parsed:
+        raise ValueError("libkeyfinder devolvió una tonalidad inválida")
+    return parsed
 
 
 _PITCH_CLASSES = {
@@ -178,12 +214,15 @@ def read_tag_key(path):
 
 
 def resolve_key(path):
-    """Resolve a key from metadata first, then from audio analysis."""
+    """Resolve a key from metadata, libkeyfinder, then librosa analysis."""
     tagged = parse_key(read_tag_key(path))
     if tagged:
         return {**tagged, "keySource": "tag"}
     try:
-        analyzed = detect_key_from_file(path)
+        try:
+            analyzed = detect_key_keyfinder(path)
+        except Exception:
+            analyzed = detect_key_from_file(path)
         return {**analyzed, "keySource": "analysis"}
     except Exception:
         return {"key": None, "mode": None, "camelot": None, "keySource": None}

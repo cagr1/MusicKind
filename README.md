@@ -17,6 +17,13 @@ MusicKind es una app desktop-first para DJs. Corre sobre Electron y reúne en un
 - FFmpeg
 - `demucs` para el módulo Stem Separator
 
+## Licencia
+
+MusicKind se distribuye bajo GPL-3.0-or-later. La app incluye libkeyfinder y FFTW;
+consulta [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) para sus licencias y avisos.
+Gracias al proyecto Mixxx y a quienes mantienen libkeyfinder por hacer disponible
+este motor de análisis de tonalidad.
+
 ## Instalación
 ```bash
 npm install

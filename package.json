@@ -2,6 +2,7 @@
   "name": "musickind",
   "version": "1.0.0",
   "description": "DJ tool for music classification and set creation with desktop app support",
+  "license": "GPL-3.0-or-later",
   "author": "MusicKind Team",
   "type": "module",
   "main": "electron/main.cjs",
@@ -41,9 +42,23 @@
       "ui/**/*",
       "web/dist/**/*",
       "src/**/*",
-      "config/**/*"
+      "config/**/*",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md"
     ],
     "mac": {
+      "extraResources": [
+        {
+          "from": "vendor/keyfinder/darwin",
+          "to": "keyfinder",
+          "filter": ["keyfinder-cli"]
+        },
+        {
+          "from": "vendor/keyfinder/licenses",
+          "to": "keyfinder/licenses",
+          "filter": ["*"]
+        }
+      ],
       "category": "public.app-category.music",
       "icon": "electron/assets/icon.icns",
       "target": [

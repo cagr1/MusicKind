@@ -146,7 +146,10 @@ function startBackendServer() {
       ...process.env,
       PORT: String(SERVER_PORT),
       ELECTRON_RUN_AS_NODE: '1',
-      MUSIC_KIND_DATA_DIR: app.getPath('userData')
+      MUSIC_KIND_DATA_DIR: app.getPath('userData'),
+      ...(app.isPackaged && process.platform === 'darwin'
+        ? { MUSICKIND_KEYFINDER: path.join(process.resourcesPath, 'keyfinder', 'keyfinder-cli') }
+        : {})
     },
     stdio: ['ignore', 'pipe', 'pipe']
   });

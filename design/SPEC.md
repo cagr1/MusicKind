@@ -690,6 +690,36 @@ Solo `scripts/eval_key.py`. No tocar `src/`, `web/`, `/Volumes`.
 **Gate (cerebro):** dos corridas seguidas con el venv de la app dan tablas idénticas; la 2.ª con `Cache hits` = N − fallos en todos
 los motores; ninguna fila de confusiones con verdad = predicción.
 
+### Back 1c · libkeyfinder incluido como motor de respaldo (2026-09-24)
+Decisiones de Carlos: pista entera (no 120 s); binario incluido en la app (el usuario no instala nada); MusicKind es gratis → **GPL-3.0-or-later**.
+Medición que lo justifica: Back 1b (76,3% exacto vs 45,4% librosa sobre 194 pistas). La UI no cambia.
+1. **Binario universal** — `scripts/build-keyfinder.sh` (bash, idempotente, trabaja en `.cache/build/keyfinder/`):
+   descarga fuentes fijadas con sha256 (`fftw-3.3.11.tar.gz` de fftw.org, `libkeyfinder` tag `2.2.8` de github.com/mixxxdj),
+   compila **estáticos** fftw (precisión doble, la que usa libkeyfinder) y libkeyfinder para `arm64` y `x86_64` por separado
+   (`MACOSX_DEPLOYMENT_TARGET=12.0`), compila `tools/keyfinder-cli/keyfinder-cli.cpp` (mover aquí el fuente que hoy genera
+   `scripts/eval_key.py`, mismo protocolo: f32le mono 44100 por stdin → `{"key":"Am"}`) enlazando los estáticos, y une con `lipo`
+   en `vendor/keyfinder/darwin/keyfinder-cli`. Herramientas de compilación (`cmake`) se pueden instalar con brew; el binario final
+   no puede depender de `/opt/homebrew` ni `/usr/local`. El binario **sí se commitea** (el usuario no compila).
+   `scripts/eval_key.py` usa ese binario en vez de compilar el suyo.
+2. **`src/key_detection.py`**: `detect_key_keyfinder(path)` — decodifica la pista entera con `ffmpeg -v error -i <path> -map 0:a:0 -vn
+   -ac 1 -ar 44100 -f f32le pipe:1`, la pasa al binario (timeout 120 s), `parse_key` del resultado. Ruta del binario: env
+   `MUSICKIND_KEYFINDER` si existe, si no `<raíz del repo>/vendor/keyfinder/darwin/keyfinder-cli` (solo en `darwin`).
+   `resolve_key`: tag → keyfinder → librosa (`detect_key_from_file` actual) → nulos. Cualquier fallo de keyfinder (binario ausente,
+   no ejecutable, salida inválida, timeout) cae a librosa sin traza en stdout. `keySource` sigue siendo `"analysis"`; contrato igual.
+3. **Empaquetado:** `package.json` → `"license": "GPL-3.0-or-later"`, `build.extraResources` copia `vendor/keyfinder/darwin` a
+   `keyfinder/` (solo mac). `electron/main.cjs:143` (env del backend): si `app.isPackaged`, añadir
+   `MUSICKIND_KEYFINDER = path.join(process.resourcesPath, 'keyfinder', 'keyfinder-cli')`. El servidor ya hereda `process.env` a Python.
+4. **Licencias:** `LICENSE` en la raíz con el texto íntegro de la GPL-3 (de gnu.org); `THIRD_PARTY_NOTICES.md` con libkeyfinder
+   (GPL-3, © Ibrahim Sha'ath y colaboradores de Mixxx, enlace al tag 2.2.8), fftw (GPL-2+, © MIT/Frigo-Johnson, enlace 3.3.11),
+   Electron (MIT), librosa (ISC), numpy (BSD-3), demucs (MIT), FFmpeg (LGPL/GPL, lo instala el usuario). Copiar `COPYING` de
+   libkeyfinder y fftw a `vendor/keyfinder/licenses/`. README: sección "Licencia" y agradecimiento al proyecto Mixxx.
+5. **Tests** (`tests/test_key_detection.py`): keyfinder se usa cuando el binario existe (tríada sintética escrita a WAV temporal →
+   tonalidad correcta); con `MUSICKIND_KEYFINDER` apuntando a un archivo inexistente cae a librosa y devuelve resultado; tag sigue mandando.
+No tocar `web/`, UI, ni otros motores. Sin commit.
+**Gate (cerebro):** `lipo -archs` = `x86_64 arm64`; `otool -L` solo `/usr/lib/*`; `vtool -show-build` minos 12.0; la rebanada x86_64
+bajo Rosetta (`arch -x86_64`) da la misma tonalidad que arm64 en 20 pistas de `2026`; tests de tonalidad en verde con el venv;
+`resolve_key` sobre 20 pistas **sin tag** (copias en el scratchpad) devuelve tonalidad por keyfinder; node test suite sin regresiones.
+
 ### Back 4 · Quitar Spotify; Discogs + Last.fm + Deezer + MusicBrainz con claves de la app (2026-09-24)
 Motivo: desde feb-2026 Spotify no entrega `genres` a apps en modo desarrollo y exige Premium al dueño. Decisión de Carlos: quitar
 Spotify y que el usuario **no tenga que crear claves**.
@@ -816,3 +846,8 @@ distribución ocupando media vista abajo (solo 2 filas visibles), encabezado "Or
 
 P1/P2 del clasificador (motor, manifiesto, deshacer) · contrato seguro de escritura de tags por formato (F3 de `plan.md`)
 · corte `ui/` → `web/dist` (F9).
+
+### Back 1c.1 · Licencias dentro del paquete (revisión del cerebro)
+`package.json` `build.mac.extraResources` hoy copia solo `keyfinder-cli`; la GPL exige que la licencia viaje con el binario.
+Copiar también `vendor/keyfinder/licenses/*` a `keyfinder/licenses/`, y añadir `LICENSE` y `THIRD_PARTY_NOTICES.md` a `build.files`
+(todas las plataformas). Solo `package.json`. **Gate:** `node -e` que lea el JSON y muestre ambas entradas; node tests sin regresión.

@@ -21,6 +21,8 @@ from key_detection import (  # noqa: E402
     CAMELOT_BY_PITCH_AND_MODE,
     detect_key,
     detect_key_from_file,
+    detect_key_keyfinder,
+    keyfinder_binary_path,
     parse_key,
 )
 
@@ -64,6 +66,8 @@ def load_audio(path: Path, window: str):
 
 
 def detect(engine, path, window, essentia_extractors=None):
+    if engine == "libkeyfinder":
+        return detect_key_keyfinder(str(path))
     if engine == "librosa" and window == "center120":
         return detect_key_from_file(str(path))
     audio = load_audio(path, window)
@@ -77,11 +81,6 @@ def detect(engine, path, window, essentia_extractors=None):
         profile = engine.split(":", 1)[1]
         key, scale, _strength = essentia_extractors[profile](audio.astype(np.float32))
         return normalize_key(key, scale)
-    if engine == "libkeyfinder":
-        proc = subprocess.run([".cache/tools/keyfinder-cli"], input=audio.astype("<f4").tobytes(),
-                              capture_output=True, check=True)
-        payload = json.loads(proc.stdout.decode())
-        return normalize_key(payload.get("key"))
     raise ValueError(f"Motor desconocido: {engine}")
 
 
@@ -95,48 +94,11 @@ def engine_setup():
         engines.extend(f"essentia:{p}" for p in essentia_extractors)
     except Exception as exc:
         errors["essentia"] = f"{type(exc).__name__}: {exc}"
-    # Build a tiny stdin->key JSON adapter; all audio decoding remains ffmpeg->pipe.
-    try:
-        tools_dir = Path(".cache/tools")
-        tools_dir.mkdir(parents=True, exist_ok=True)
-        source = tools_dir / "keyfinder-cli.cpp"
-        binary = tools_dir / "keyfinder-cli"
-        source.write_text(r'''#include <keyfinder/keyfinder.h>
-#include <iostream>
-#include <iterator>
-#include <vector>
-int main() {
-  std::vector<char> samples((std::istreambuf_iterator<char>(std::cin)), {});
-  const size_t count = samples.size() / sizeof(float);
-  if (!count) return 2;
-  KeyFinder::AudioData audio;
-  audio.setChannels(1);
-  audio.setFrameRate(44100);
-  audio.addToSampleCount(static_cast<unsigned int>(count));
-  audio.addToFrameCount(static_cast<unsigned int>(count));
-  for (size_t i = 0; i < count; ++i) {
-    float value;
-    std::memcpy(&value, samples.data() + i * sizeof(float), sizeof(float));
-    audio.setSample(static_cast<unsigned int>(i), value);
-  }
-  KeyFinder::KeyFinder finder;
-  const char* names[] = {"A", "Am", "Bb", "Bbm", "B", "Bm", "C", "Cm", "Db", "Dbm", "D", "Dm",
-    "Eb", "Ebm", "E", "Em", "F", "Fm", "Gb", "Gbm", "G", "Gm", "Ab", "Abm"};
-  const auto key = finder.keyOfAudio(audio);
-  if (key < KeyFinder::A_MAJOR || key > KeyFinder::A_FLAT_MINOR) return 3;
-  std::cout << "{\"key\":\"" << names[key] << "\"}";
-  return 0;
-}''')
-        # The CLI source uses memcpy for portable binary float input.
-        source.write_text(source.read_text().replace("#include <iostream>", "#include <iostream>\n#include <cstring>"))
-        if shutil.which("pkg-config"):
-            flags = subprocess.run(["pkg-config", "--cflags", "--libs", "libkeyfinder"], capture_output=True, text=True, check=True).stdout.split()
-        else:
-            flags = ["-I/opt/homebrew/include", "-L/opt/homebrew/lib", "-Wl,-rpath,/opt/homebrew/lib", "-lkeyfinder"]
-        subprocess.run(["clang++", "-std=c++11", str(source), "-o", str(binary), *flags], capture_output=True, text=True, check=True)
+    binary = keyfinder_binary_path()
+    if binary and os.path.isfile(binary) and os.access(binary, os.X_OK):
         engines.append("libkeyfinder")
-    except Exception as exc:
-        errors["libkeyfinder"] = f"{type(exc).__name__}: {exc}"
+    else:
+        errors["libkeyfinder"] = "Binario incluido no disponible"
     return engines, errors, essentia_extractors
 
 
