@@ -248,6 +248,31 @@ test("identifyAndTag conserva varios artistas y el sufijo remix del crédito act
   assert.equal(fs.existsSync(filePath), true);
 });
 
+for (const version of ["Extended Mix", "Original Mix"]) {
+  test(`identifyAndTag conserva (${version}) y normaliza espacios`, { skip: !ffmpegAvailable() }, async () => {
+    const dir = makeTempDir();
+    const filePath = path.join(dir, "track.aiff");
+    spawnSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-loglevel", "error", filePath]);
+    await writeMetadata(filePath, { title: `Excuse Me  (${version})`, artist: "Italobros" });
+    const result = await identifyAndTag(filePath, { async search() {
+      return { title: "Excuse Me", artist: "Italobros", album: "Single" };
+    } }, null, { preview: true });
+    assert.equal(result.metadata.title, `Excuse Me (${version})`);
+    assert.equal(result.newFilename, `Italobros - Excuse Me (${version}).aiff`);
+  });
+}
+
+test("identifyAndTag uses the provider title when the source has no version descriptor", { skip: !ffmpegAvailable() }, async () => {
+  const dir = makeTempDir();
+  const filePath = path.join(dir, "track.mp3");
+  spawnSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-loglevel", "error", filePath]);
+  await writeMetadata(filePath, { title: "Excuse Me", artist: "Italobros" });
+  const result = await identifyAndTag(filePath, { async search() {
+    return { title: "Excuse Me (Radio Edit)", artist: "Italobros", album: "Single" };
+  } }, null, { preview: true });
+  assert.equal(result.metadata.title, "Excuse Me (Radio Edit)");
+});
+
 test("identifyAndTag sugiere la original sin cambiar el título del edit", { skip: !ffmpegAvailable() }, async () => {
   const dir = makeTempDir();
   const filePath = path.join(dir, "RUN DMC, Jason Nevins - It's Like That (Raxon Edit) Unrelease.mp3");

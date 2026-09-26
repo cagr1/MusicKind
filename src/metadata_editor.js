@@ -268,7 +268,10 @@ export async function identifyAndTag(
     }
   }
 
-  const requestedTitle = cleanTrackTitle(currentMeta.title || fileTitle);
+  // Keep a display title separate from the cleaned title used for lookup.
+  // Version descriptors are meaningful metadata; only remove promotional noise.
+  const sourceTitle = currentMeta.title || (filenameParts.length >= 2 ? filenameParts.at(-1) : filename);
+  const requestedTitle = cleanTrackTitle(sourceTitle);
   let originalTrack = null;
   if (!deezerTrack && deezerClient && explicitVersion(requestedTitle)) {
     try { originalTrack = await deezerClient.search(currentMeta.artist || fileArtist, withoutExplicitVersion(requestedTitle)); }
@@ -287,9 +290,17 @@ export async function identifyAndTag(
   const preserveArtistCredit = currentArtists.length > 1 && currentArtists.some(value =>
     normalizeArtistName(value) === normalizeArtistName(deezerArtist)
   );
-  const currentTitle = requestedTitle;
-  const preserveMixTitle = Boolean(originalTrack || (deezerTrack?.title && explicitVersion(currentTitle) &&
-    currentTitle.toLowerCase().includes(deezerTrack.title.toLowerCase())));
+  const currentTitle = String(sourceTitle)
+    .replace(/\[[^\]]*\]/g, (descriptor) => /\b(?:remix|edit|mix|dub|rework|bootleg|version)\b/i.test(descriptor) ? ` ${descriptor} ` : ' ')
+    .replace(/\b(?:free\s+download|free\s+dl|unreleased|unrelease|promo|snippet)\b/gi, ' ')
+    .replace(/[([]\s*[)\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const normalizedCurrentTitle = cleanTrackTitle(currentTitle).toLocaleLowerCase();
+  const normalizedFoundTitle = cleanTrackTitle(deezerTrack?.title || '').toLocaleLowerCase();
+  const hasVersionDescriptor = /[([][^)\]]*\b(?:original|extended|radio|club|remix|edit|mix|dub|rework|bootleg|version)\b[^)\]]*[)\]]/i.test(currentTitle);
+  const preserveMixTitle = Boolean(originalTrack || (deezerTrack?.title && hasVersionDescriptor &&
+    normalizedCurrentTitle.includes(normalizedFoundTitle)));
 
   // 3. Build final metadata.
   const newMetadata = {

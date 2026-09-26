@@ -115,6 +115,90 @@ export function metadataNeedsRename(row: MetadataRow): boolean {
   return row.newFilename !== row.name
 }
 
+export function metadataHasUnsavedChanges(row: MetadataRow): boolean {
+  return (
+    metadataNeedsRename(row) ||
+    (['title', 'artist', 'album', 'year', 'genre', 'track'] as const).some(
+      (field) => row.metadata[field] !== row.original[field],
+    )
+  )
+}
+
+export function metadataRowsToSave(rows: MetadataRow[], editedIds: string[] = []): MetadataRow[] {
+  const edited = new Set(editedIds)
+  return rows.filter(
+    (row) => metadataHasUnsavedChanges(row) && (row.matchType !== 'original' || edited.has(row.id)),
+  )
+}
+
+export function metadataRowsToReview(rows: MetadataRow[], editedIds: string[] = []): MetadataRow[] {
+  const edited = new Set(editedIds)
+  return rows.filter(
+    (row) => metadataHasUnsavedChanges(row) && row.matchType === 'original' && !edited.has(row.id),
+  )
+}
+
+export function savedMetadataRow(
+  row: MetadataRow,
+  metadata = row.metadata,
+  newPath = row.path,
+): MetadataRow {
+  const name = fileName(newPath)
+  return {
+    ...row,
+    path: newPath,
+    name,
+    metadata: { ...metadata },
+    original: { ...metadata },
+    originalName: name,
+    newFilename: name,
+    identifyError: undefined,
+    matchType: undefined,
+  }
+}
+
+export async function saveMetadataBatch(
+  rows: MetadataRow[],
+  saveRow: (row: MetadataRow) => Promise<MetadataRow>,
+  onSaved: (row: MetadataRow) => void,
+  onError: (row: MetadataRow, error: string) => void,
+  editedIds: string[] = [],
+): Promise<{ saved: number; errors: number }> {
+  let saved = 0
+  let errors = 0
+  for (const row of metadataRowsToSave(rows, editedIds)) {
+    try {
+      onSaved(await saveRow(row))
+      saved += 1
+    } catch (error) {
+      onError(row, error instanceof Error ? error.message : String(error))
+      errors += 1
+    }
+  }
+  return { saved, errors }
+}
+
+async function writeAndRenameRow(row: MetadataRow, metadata: MetadataFields): Promise<MetadataRow> {
+  await postJson('/api/metadata/write', {
+    filePath: row.path,
+    metadata: {
+      ...metadata,
+      year: metadata.year ? Number(metadata.year) : null,
+      track: metadata.track ? Number(metadata.track) : null,
+    },
+  })
+  let nextPath = row.path
+  const requestedName = metadata.newFilename ?? row.newFilename
+  if (requestedName && requestedName !== row.name) {
+    const renamed = await postJson<{ newPath: string }>('/api/metadata/rename', {
+      filePath: row.path,
+      newName: requestedName,
+    })
+    nextPath = renamed.newPath
+  }
+  return savedMetadataRow(row, metadata, nextPath)
+}
+
 export function mergeMetadataRows(current: MetadataRow[], incoming: MetadataRow[]) {
   const existingPaths = new Set(current.map((row) => row.path))
   return appendResults(
@@ -148,6 +232,8 @@ export function Metadata() {
   const [error, setError] = React.useState<string | null>(null)
   const [busy, setBusy] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
+  const [rowErrors, setRowErrors] = React.useState<Record<string, string>>({})
+  const [editedIds, setEditedIds] = React.useState<string[]>([])
   const [progress, setProgress] = React.useState({ current: 0, total: 0, file: '' })
   const [identified, setIdentified] = React.useState<string[]>(() =>
     (savedRows ?? []).map((row) => row.path),
@@ -443,6 +529,7 @@ export function Metadata() {
 
   const updateForm = (key: keyof MetadataFields, value: string) => {
     setForm((current) => ({ ...current, [key]: value }))
+    if (selected) setEditedIds((current) => mergeUnique(current, [selected.id], (id) => id))
   }
 
   const save = async (event: React.FormEvent) => {
@@ -450,33 +537,7 @@ export function Metadata() {
     if (!selected || saving) return
     setSaving(true)
     try {
-      await postJson('/api/metadata/write', {
-        filePath: selected.path,
-        metadata: {
-          ...form,
-          year: form.year ? Number(form.year) : null,
-          track: form.track ? Number(form.track) : null,
-        },
-      })
-      let nextPath = selected.path
-      if (form.newFilename && form.newFilename !== selected.name) {
-        const renamed = await postJson<{ newPath: string }>('/api/metadata/rename', {
-          filePath: selected.path,
-          newName: form.newFilename,
-        })
-        nextPath = renamed.newPath
-      }
-      const saved: MetadataRow = {
-        ...selected,
-        path: nextPath,
-        name: fileName(nextPath),
-        metadata: { ...form },
-        original: { ...form },
-        originalName: fileName(nextPath),
-        newFilename: fileName(nextPath),
-        bpm: selected.bpm,
-        key: selected.key,
-      }
+      const saved = await writeAndRenameRow(selected, form)
       setRows((current) => {
         const updated = current.map((row) => (row.id === selected.id ? saved : row))
         setResult('metadata', updated)
@@ -484,6 +545,12 @@ export function Metadata() {
       })
       setSelectedId(saved.id)
       setForm(saved.metadata)
+      setEditedIds((current) => current.filter((id) => id !== selected.id))
+      setRowErrors((current) => {
+        const next = { ...current }
+        delete next[selected.id]
+        return next
+      })
       toast.success(t('metadata.saved'))
     } catch (saveError) {
       const message = saveError instanceof Error ? saveError.message : String(saveError)
@@ -491,6 +558,45 @@ export function Metadata() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const saveAll = async () => {
+    if (saving || busy) return
+    const rowsToSave = rows.map((row) =>
+      row.id === selected?.id
+        ? { ...row, metadata: { ...form }, newFilename: form.newFilename ?? row.newFilename }
+        : row,
+    )
+    const targets = metadataRowsToSave(rowsToSave, editedIds)
+    const reviewCount = metadataRowsToReview(rowsToSave, editedIds).length
+    if (!targets.length) return
+    setSaving(true)
+    const summary = await saveMetadataBatch(
+      rowsToSave,
+      (row) => writeAndRenameRow(row, row.metadata),
+      (saved) => {
+        setRows((current) => {
+          const updated = current.map((item) => (item.id === saved.id ? saved : item))
+          setResult('metadata', updated)
+          return updated
+        })
+        setRowErrors((current) => {
+          const next = { ...current }
+          delete next[saved.id]
+          return next
+        })
+        setEditedIds((current) => current.filter((id) => id !== saved.id))
+      },
+      (failed, message) => setRowErrors((current) => ({ ...current, [failed.id]: message })),
+      editedIds,
+    )
+    setSaving(false)
+    toast.success(
+      t('metadata.saveSummary')
+        .replace('{saved}', String(summary.saved))
+        .replace('{errors}', String(summary.errors))
+        .replace('{review}', String(reviewCount)),
+    )
   }
 
   const cancelForm = () => setForm(metadataFormValues(selected))
@@ -502,6 +608,12 @@ export function Metadata() {
     (row) => row.path,
     (path) => path,
   )
+  const rowsWithDraft = rows.map((row) =>
+    row.id === selected?.id
+      ? { ...row, metadata: { ...form }, newFilename: form.newFilename ?? row.newFilename }
+      : row,
+  )
+  const saveableRows = metadataRowsToSave(rowsWithDraft, editedIds)
 
   return (
     <div
@@ -529,6 +641,12 @@ export function Metadata() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {!busy && !saving && saveableRows.length > 0 && (
+              <Button size="sm" onClick={() => void saveAll()}>
+                <Save />
+                {t('metadata.saveChanges').replace('{count}', String(saveableRows.length))}
+              </Button>
+            )}
             <InspectorToggle />
             <SelectionControls selection={selection} t={t} hasRows={rows.length > 0} />
             <TooltipProvider>
@@ -689,6 +807,8 @@ export function Metadata() {
                     onCheck={(shiftKey) => selection.toggle(row.id, shiftKey)}
                     identifyLabel={t('metadata.notIdentified')}
                     originalLabel={t('metadata.originalMatchShort')}
+                    unsavedLabel={t('metadata.unsaved')}
+                    rowError={rowErrors[row.id]}
                   />
                 ))}
               </tbody>
@@ -702,6 +822,18 @@ export function Metadata() {
             {selected.identifyError && (
               <p role="status" className="text-[11px] text-amber-400">
                 {t('metadata.notIdentified')}: {selected.identifyError}
+              </p>
+            )}
+            {rowErrors[selected.id] && (
+              <p role="alert" className="text-[11px] text-red-300">
+                {rowErrors[selected.id]}
+              </p>
+            )}
+            {metadataHasUnsavedChanges(
+              rowsWithDraft.find((row) => row.id === selected.id) ?? selected,
+            ) && (
+              <p role="status" className="text-[11px] text-amber-400">
+                {t('metadata.unsaved')}
               </p>
             )}
             {selected.matchType === 'original' && (
@@ -761,7 +893,7 @@ export function Metadata() {
               label={t('metadata.filenameField')}
               original={selected.originalName}
               value={form.newFilename ?? selected.newFilename}
-              onChange={(value) => setForm((current) => ({ ...current, newFilename: value }))}
+              onChange={(value) => updateForm('newFilename', value)}
             />
             <div className="flex gap-2 pt-2">
               <Button type="submit" size="sm" className="flex-1" disabled={saving}>
@@ -820,6 +952,8 @@ function MetadataRowView({
   onCheck,
   identifyLabel,
   originalLabel,
+  unsavedLabel,
+  rowError,
 }: {
   row: MetadataRow
   index: number
@@ -833,6 +967,8 @@ function MetadataRowView({
   onCheck: (shiftKey: boolean) => void
   identifyLabel: string
   originalLabel: string
+  unsavedLabel: string
+  rowError?: string
 }) {
   return (
     <tr
@@ -862,12 +998,20 @@ function MetadataRowView({
             >
               {display(row.metadata.title) === '—' ? row.name : display(row.metadata.title)}
             </p>
-            {(row.identifyError || row.matchType === 'original') && (
+            {(row.identifyError ||
+              row.matchType === 'original' ||
+              metadataHasUnsavedChanges(row) ||
+              rowError) && (
               <p
-                className={`truncate text-[10px] ${row.identifyError ? 'text-amber-400' : 'text-brand'}`}
-                title={row.identifyError || undefined}
+                className={`truncate text-[10px] ${row.identifyError || rowError || metadataHasUnsavedChanges(row) ? 'text-amber-400' : 'text-brand'}`}
+                title={rowError || row.identifyError || undefined}
               >
-                {row.identifyError ? `${identifyLabel}: ${row.identifyError}` : originalLabel}
+                {rowError ||
+                  (row.identifyError
+                    ? `${identifyLabel}: ${row.identifyError}`
+                    : row.matchType === 'original'
+                      ? originalLabel
+                      : unsavedLabel)}
               </p>
             )}
             <p className="hidden truncate text-[11px] text-zinc-500 @max-[600px]:block">
