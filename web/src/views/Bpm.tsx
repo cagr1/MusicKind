@@ -34,10 +34,26 @@ interface BpmResult extends InspectorTrack {
   ok: boolean
   mode?: string | null
   camelot?: string | null
+  bpmSource?: 'tag' | 'analysis' | null
   keySource?: 'tag' | 'analysis' | null
   musicalKey?: string | null
   pending?: boolean
   index: number
+}
+
+export function originalFromResult(result: BpmResult): { bpm: number | null; key: string | null } {
+  return {
+    bpm: result.bpmSource === 'tag' ? (result.bpm ?? null) : null,
+    key: result.keySource === 'tag' ? (result.camelot ?? result.key ?? null) : null,
+  }
+}
+
+export function isPendingSave(
+  result: Pick<BpmResult, 'id' | 'bpm' | 'key'>,
+  originals: Record<string, { bpm: number | null; key: string | null }>,
+): boolean {
+  const original = originals[result.id]
+  return Boolean(original && (original.bpm !== result.bpm || original.key !== result.key))
 }
 
 export function isValidBpmInput(value: string): boolean {
@@ -115,7 +131,7 @@ export function Bpm() {
     )
     setSelectedId((current) => current ?? stored[0]?.id ?? null)
     setOriginal((current) => ({
-      ...Object.fromEntries(stored.map((track) => [track.id, { bpm: track.bpm, key: track.key }])),
+      ...Object.fromEntries(stored.map((track) => [track.id, originalFromResult(track)])),
       ...current,
     }))
   }, [savedResults, view])
@@ -167,7 +183,7 @@ export function Bpm() {
     })
     setOriginal((current) => ({
       ...current,
-      ...Object.fromEntries(next.map((track) => [track.id, { bpm: track.bpm, key: track.key }])),
+      ...Object.fromEntries(next.map((track) => [track.id, originalFromResult(track)])),
     }))
     setSelectedId((current) => current ?? next[0]?.id ?? null)
     void readTrackMetadata(next, (id, metadata) => {
@@ -210,11 +226,7 @@ export function Bpm() {
       ),
     [setQueue, visibleTracks],
   )
-  const changed = tracks.filter(
-    (track) =>
-      original[track.id] &&
-      (original[track.id].bpm !== track.bpm || original[track.id].key !== track.key),
-  )
+  const changed = tracks.filter((track) => isPendingSave(track, original))
   const isBusy = state.status === 'running' || state.status === 'paused'
   const processingKey = state.progress?.file
   const selection = useRowSelection({
@@ -340,10 +352,20 @@ export function Bpm() {
               key: track.musicalKey ?? track.key,
             },
           })
+          const savedBpm = track.bpm === null ? null : Math.round(track.bpm)
           setOriginal((current) => ({
             ...current,
-            [track.id]: { bpm: track.bpm, key: track.key },
+            [track.id]: { bpm: savedBpm, key: track.key },
           }))
+          setTracks((current) => {
+            const updated = current.map((item) =>
+              item.id === track.id
+                ? { ...item, bpm: savedBpm, bpmSource: 'tag' as const, keySource: 'tag' as const }
+                : item,
+            )
+            setResult(view, updated)
+            return updated
+          })
         } catch (error) {
           toast.error(
             `${fileName(track.file)}: ${error instanceof Error ? error.message : String(error)}`,
@@ -395,9 +417,6 @@ export function Bpm() {
         <header className="relative flex h-12 shrink-0 items-center justify-between border-b border-line px-6">
           <div className="flex items-center gap-3">
             <h1 className="text-[15px] font-semibold">{t('bpm.title')}</h1>
-            <span className="max-w-[35vw] truncate whitespace-nowrap font-mono text-[11px] text-zinc-500">
-              {files.length} {t('bpm.tracks')} · {pending.length} {t('bpm.pending')}
-            </span>
           </div>
           <div className="flex items-center gap-2">
             <InspectorToggle />
@@ -477,6 +496,7 @@ export function Bpm() {
               <FolderOpen className="size-3.5" />
               <span className="truncate font-mono text-zinc-300">
                 {files.length} {t('bpm.files')}
+                {pending.length > 0 && ` · ${pending.length} ${t('bpm.pending')}`}
               </span>
             </span>
           ) : (
@@ -517,10 +537,10 @@ export function Bpm() {
           />
         ) : (
           <div className="@container min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
-            <table className="w-full min-w-[760px] table-fixed text-left">
+            <table className="w-full table-fixed text-left">
               <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
                 <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
-                  <th className="w-10 text-center">
+                  <th className="w-8 text-center">
                     <Checkbox
                       checked={
                         selection.checked ? true : selection.indeterminate ? 'indeterminate' : false
@@ -529,25 +549,40 @@ export function Bpm() {
                       aria-label={t('common.selectAll')}
                     />
                   </th>
-                  <th className="w-10 text-center">#</th>
-                  <SortableHeader sort={sort} sortKey="track" onSort={toggleSort}>
+                  <th className="w-8 text-center">#</th>
+                  <SortableHeader
+                    className="min-w-[220px]"
+                    sort={sort}
+                    sortKey="track"
+                    onSort={toggleSort}
+                  >
                     {t('bpm.tableTrack')}
                   </SortableHeader>
                   <SortableHeader
-                    className="w-40 @max-[600px]:hidden"
+                    className="w-40 @max-[700px]:hidden"
                     sort={sort}
                     sortKey="artist"
                     onSort={toggleSort}
                   >
                     {t('common.artist')}
                   </SortableHeader>
-                  <SortableHeader className="w-24" sort={sort} sortKey="bpm" onSort={toggleSort}>
+                  <SortableHeader
+                    className="w-16 @max-[600px]:w-14"
+                    sort={sort}
+                    sortKey="bpm"
+                    onSort={toggleSort}
+                  >
                     {t('bpm.tableBpm')}
                   </SortableHeader>
-                  <SortableHeader className="w-24" sort={sort} sortKey="key" onSort={toggleSort}>
+                  <SortableHeader
+                    className="w-16 @max-[600px]:w-14"
+                    sort={sort}
+                    sortKey="key"
+                    onSort={toggleSort}
+                  >
                     {t('bpm.tableKey')}
                   </SortableHeader>
-                  <th className="w-24 text-right">{t('bpm.tableActions')}</th>
+                  <th className="w-32 text-right @max-[600px]:w-12">{t('bpm.tableActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -559,11 +594,7 @@ export function Bpm() {
                     isPlaying={track.file === playingPath}
                     selected={track.id === selectedId}
                     processing={state.progress?.file === track.file && isBusy}
-                    changed={Boolean(
-                      original[track.id] &&
-                      (original[track.id].bpm !== track.bpm ||
-                        original[track.id].key !== track.key),
-                    )}
+                    changed={isPendingSave(track, original)}
                     onSelect={() => setSelectedId(track.id)}
                     onPlay={() => {
                       setSelectedId(track.id)
@@ -704,7 +735,7 @@ function BpmRow({
         </div>
       </td>
       <td
-        className={`w-40 truncate pr-2 text-[12px] @max-[600px]:hidden ${track.artist?.trim() && track.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
+        className={`w-40 truncate pr-2 text-[12px] @max-[700px]:hidden ${track.artist?.trim() && track.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
         title={track.artist && track.artist !== '—' ? track.artist : undefined}
       >
         {track.artist && track.artist !== '—' ? track.artist : '—'}
@@ -759,21 +790,30 @@ function BpmRow({
               </Popover.Portal>
             </Popover.Root>
           </td>
-          <td className="pr-2 text-right">
+          <td className="w-32 pr-2 text-right @max-[600px]:w-12 @max-[600px]:pr-0">
             {changed ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onSave()
-                }}
-              >
-                <Save />
-                {t('bpm.saveOne')}
-              </Button>
+              <div className="flex items-center justify-end gap-2">
+                <span
+                  className="size-2 rounded-full bg-amber-400"
+                  aria-label={t('bpm.statusUnsaved')}
+                  title={t('bpm.statusUnsaved')}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label={t('bpm.saveOne')}
+                  title={t('bpm.saveOne')}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    onSave()
+                  }}
+                >
+                  <Save />
+                  <span className="@max-[600px]:hidden">{t('bpm.saveOne')}</span>
+                </Button>
+              </div>
             ) : (
-              <Check className="ml-auto size-3.5 text-zinc-600" />
+              <Check className="ml-auto size-3.5 text-zinc-600" aria-label={t('bpm.saved')} />
             )}
           </td>
         </>

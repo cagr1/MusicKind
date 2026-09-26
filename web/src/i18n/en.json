@@ -89,7 +89,6 @@
   },
   "bpm": {
     "title": "BPM analyzer",
-    "tracks": "tracks",
     "files": "files",
     "pending": "pending",
     "addFiles": "Add files",
@@ -97,6 +96,7 @@
     "dropToAdd": "Drop to add",
     "analyze": "Analyze",
     "statusPending": "Pending",
+    "statusUnsaved": "Unsaved",
     "chooseFolder": "Drop a folder",
     "chooseFolderHint": "or click to choose a folder",
     "selectFolder": "Choose folder",

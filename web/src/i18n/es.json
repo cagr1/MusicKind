@@ -89,7 +89,6 @@
   },
   "bpm": {
     "title": "Analizador BPM",
-    "tracks": "pistas",
     "files": "archivos",
     "pending": "pendientes",
     "addFiles": "Agregar archivos",
@@ -97,6 +96,7 @@
     "dropToAdd": "Soltar para agregar",
     "analyze": "Analizar",
     "statusPending": "Pendiente",
+    "statusUnsaved": "Sin guardar",
     "chooseFolder": "Soltar carpeta",
     "chooseFolderHint": "o hacer clic para elegir una carpeta",
     "selectFolder": "Elegir carpeta",

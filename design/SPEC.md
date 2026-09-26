@@ -1363,3 +1363,20 @@ Caso real (copia): `RUN DMC, Jason Nevins - It's Like That  (Raxon Edit) Unrelea
 Tests: `tests/metadata-editor.test.js` (y nuevo `tests/deezer.test.js` si conviene, con `fetcher` falso): `RUN DMC` casa con `Run-DMC`; «Unrelease» eliminado; versión no encontrada → original con `matchType: 'original'` y título conservado; error con motivos; clave de caché v3. Vitest: lote continúa tras un fallo y cuenta resultados.
 **No tocar:** clasificador, otras vistas, `NEXT.md`, `plan.md`, specs. Sin commit.
 **Gate:** `node --test tests/*.test.js`, `npm --prefix web test`, `build`, `lint`, `format:check`.
+
+## B1 — BPM: lo analizado queda pendiente de guardar (2026-09-26, pedido de Carlos)
+
+Bug: en `web/src/views/Bpm.tsx:168` el resultado del análisis se registra como `original` (lo que «tiene el archivo»), así que `changed` (`:213`) solo ve ediciones manuales. Si el BPM/tonalidad vino del **análisis** (archivo sin tag), no aparece «Guardar» y la fila muestra ✓ (parece guardado) aunque el archivo no se escribió. El backend ya informa la fuente: `bpmSource` y `keySource` (`'tag'` | `'analysis'`…) en cada resultado (`src/bpm_analyzer.py:29–33`).
+- `original` debe reflejar **lo que hay en el archivo**: si `bpmSource === 'tag'` usar ese BPM, si no `null`; igual con `keySource` para la tonalidad. Así, una pista analizada sin tag queda «pendiente» → botón «Guardar cambios N» en cabecera y «Guardar» por fila (ya existen), sin ✓.
+- Añadir `bpmSource` al tipo `BpmResult` y conservarlo. En la fila, un punto/estado «sin guardar» (tokens existentes, i18n) cuando difiere del archivo; ✓ solo cuando lo mostrado coincide con el archivo.
+- Tras guardar con éxito: `original` = valores guardados y la fuente pasa a `tag` en memoria. Si falla, la fila sigue pendiente (ya hay toast de error).
+- Si el archivo ya tenía tag y el análisis no cambió nada: sin pendiente (no reescribir).
+- No escribir automáticamente al analizar (decisión existente: analizar no altera originales).
+Tests vitest (función pura exportada, p. ej. `originalFromResult` / `isPendingSave`): análisis sin tag → pendiente; tag → no pendiente; edición manual → pendiente; tras guardar → no pendiente.
+**No tocar:** backend, otras vistas, `NEXT.md`, `plan.md`, specs. Sin commit. **Gate:** `npm --prefix web test`, `build`, `lint`, `format:check`.
+
+### B1.1 — Columna de acciones del BPM cortada
+Captura a 1300 px (Inspector abierto): el encabezado de la última columna se ve «AC» y el botón de fila «Guardar» queda cortado («Gua»). La columna de acciones debe verse completa a 900/1100/1300 px (ancho fijo suficiente para icono + «Guardar», o solo icono con `aria-label`/`title` en estrecho), sin scroll horizontal; la Pista mantiene ≥ 220 px (misma técnica que U4.8: anchos fijos + `@container`). Solo `web/src/views/Bpm.tsx`. Gate web.
+
+### B1.2 — BPM: un solo contador
+Pedido de Carlos: la cabecera muestra «N pistas · N pendientes» (`web/src/views/Bpm.tsx:421`) y la barra repite «N archivos» junto al icono de carpeta (`:501`). Quitar el contador de la cabecera; dejar solo el de la barra junto al icono. Si «pendientes» aporta (hay archivos sin analizar), mostrarlo en ese mismo texto de la barra: «N archivos · M pendientes» solo cuando M > 0. Quitar claves i18n que queden sin uso. Solo `Bpm.tsx` + i18n. Gate web.

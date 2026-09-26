@@ -2,7 +2,7 @@ import { act, createElement, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '@/i18n/I18nProvider'
-import { Bpm, isValidBpmInput } from './Bpm'
+import { Bpm, isPendingSave, isValidBpmInput, originalFromResult } from './Bpm'
 
 const {
   toastMock,
@@ -86,6 +86,46 @@ describe('BPM input validation', () => {
 
   it('accepts 128', () => {
     expect(isValidBpmInput('128')).toBe(true)
+  })
+})
+
+describe('BPM save state', () => {
+  const result = (values: Record<string, unknown> = {}) =>
+    ({
+      id: '/music/one.mp3',
+      file: '/music/one.mp3',
+      path: '/music/one.mp3',
+      bpm: 120,
+      key: '8A',
+      camelot: '8A',
+      ok: true,
+      title: 'One',
+      artist: 'Artist',
+      ...values,
+    }) as Parameters<typeof originalFromResult>[0]
+
+  it('marks analyzed BPM and key as absent from the file', () => {
+    const track = result({ bpmSource: 'analysis', keySource: 'analysis' })
+    const original = originalFromResult(track)
+    expect(original).toEqual({ bpm: null, key: null })
+    expect(isPendingSave(track, { [track.id]: original })).toBe(true)
+  })
+
+  it('does not mark unchanged tags as pending', () => {
+    const track = result({ bpmSource: 'tag', keySource: 'tag' })
+    expect(isPendingSave(track, { [track.id]: originalFromResult(track) })).toBe(false)
+  })
+
+  it('marks a manual edit as pending', () => {
+    const track = result({ bpmSource: 'tag', keySource: 'tag' })
+    expect(isPendingSave({ ...track, bpm: 124 }, { [track.id]: originalFromResult(track) })).toBe(
+      true,
+    )
+  })
+
+  it('clears pending state after saved values become tags', () => {
+    const saved = result({ bpmSource: 'tag', keySource: 'tag' })
+    expect(isPendingSave(saved, { [saved.id]: originalFromResult(saved) })).toBe(false)
   })
 })
 
