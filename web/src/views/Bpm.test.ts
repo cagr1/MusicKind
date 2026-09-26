@@ -59,6 +59,7 @@ vi.mock('@/lib/process', () => ({
 }))
 vi.mock('@/components/music/MiniWaveform', () => ({ MiniWaveform: () => null }))
 vi.mock('@/components/music/TrackInspector', () => ({
+  InspectorToggle: () => null,
   TrackInspector: ({ children }: { children: ReactNode }) => children,
 }))
 

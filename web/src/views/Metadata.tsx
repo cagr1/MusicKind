@@ -4,7 +4,11 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { TrackArtwork } from '@/components/music/TrackArtwork'
-import { TrackInspector, type InspectorTrack } from '@/components/music/TrackInspector'
+import {
+  InspectorToggle,
+  TrackInspector,
+  type InspectorTrack,
+} from '@/components/music/TrackInspector'
 import { useT } from '@/i18n/I18nProvider'
 import { getJson, postJson } from '@/lib/api'
 import { electron, resolveDroppedFiles } from '@/lib/electron'
@@ -476,11 +480,12 @@ export function Metadata() {
         <header className="relative flex h-12 shrink-0 items-center justify-between border-b border-line px-6">
           <div className="flex items-center gap-3">
             <h1 className="text-[15px] font-semibold">{t('metadata.title')}</h1>
-            <span className="font-mono text-[11px] text-zinc-500">
+            <span className="whitespace-nowrap truncate font-mono text-[11px] text-zinc-500">
               {rows.length} {t('metadata.files')} · {pending.length} {t('metadata.pending')}
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <InspectorToggle />
             <SelectionControls selection={selection} t={t} hasRows={rows.length > 0} />
             <TooltipProvider>
               <Tooltip>
@@ -516,7 +521,12 @@ export function Metadata() {
                 {t('metadata.cancel')}
               </Button>
             )}
-            <Button size="sm" onClick={() => void identify()} disabled={busy || !pending.length}>
+            <Button
+              className="max-[1099px]:size-8 max-[1099px]:gap-0 max-[1099px]:px-2 max-[1099px]:text-[0px] [&_svg]:size-4"
+              size="sm"
+              onClick={() => void identify()}
+              disabled={busy || !pending.length}
+            >
               <ScanSearch />
               {t('metadata.identify')}
             </Button>
@@ -573,8 +583,8 @@ export function Metadata() {
             onDrop={onDrop}
           />
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
-            <table className="w-full table-fixed text-left">
+          <div className="@container min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
+            <table className="w-full min-w-[760px] table-fixed text-left">
               <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
                 <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
                   <th className="w-10 text-center">
@@ -590,13 +600,28 @@ export function Metadata() {
                   <SortableHeader sort={sort} sortKey="track" onSort={toggleSort}>
                     {t('metadata.tableTrack')}
                   </SortableHeader>
-                  <SortableHeader className="w-40" sort={sort} sortKey="artist" onSort={toggleSort}>
+                  <SortableHeader
+                    className="w-40 @max-[600px]:hidden"
+                    sort={sort}
+                    sortKey="artist"
+                    onSort={toggleSort}
+                  >
                     {t('common.artist')}
                   </SortableHeader>
-                  <SortableHeader className="w-32" sort={sort} sortKey="album" onSort={toggleSort}>
+                  <SortableHeader
+                    className="w-32 @max-[680px]:hidden"
+                    sort={sort}
+                    sortKey="album"
+                    onSort={toggleSort}
+                  >
                     {t('metadata.tableAlbum')}
                   </SortableHeader>
-                  <SortableHeader className="w-20" sort={sort} sortKey="year" onSort={toggleSort}>
+                  <SortableHeader
+                    className="w-20 @max-[680px]:hidden"
+                    sort={sort}
+                    sortKey="year"
+                    onSort={toggleSort}
+                  >
                     {t('metadata.tableYear')}
                   </SortableHeader>
                 </tr>
@@ -761,20 +786,30 @@ function MetadataRowView({
         <div className="flex items-center gap-3">
           <TrackArtwork camelotKey={row.key} path={row.path} size={30} />
           <div className="min-w-0">
-            <p className="truncate text-[12px] text-zinc-200">
+            <p
+              className="truncate text-[12px] text-zinc-200"
+              title={display(row.metadata.title) === '—' ? row.name : display(row.metadata.title)}
+            >
               {display(row.metadata.title) === '—' ? row.name : display(row.metadata.title)}
+            </p>
+            <p className="hidden truncate text-[11px] text-zinc-500 @max-[600px]:block">
+              {display(row.metadata.artist)}
             </p>
           </div>
         </div>
       </td>
       <td
-        className={`w-40 truncate pr-2 text-[12px] ${row.metadata.artist?.trim() ? 'text-zinc-300' : 'text-zinc-600'}`}
+        className={`w-40 truncate pr-2 text-[12px] @max-[600px]:hidden ${row.metadata.artist?.trim() ? 'text-zinc-300' : 'text-zinc-600'}`}
         title={row.metadata.artist?.trim() || undefined}
       >
         {display(row.metadata.artist)}
       </td>
-      <td className="truncate text-[12px] text-zinc-300">{display(row.metadata.album)}</td>
-      <td className="font-mono text-[12px] text-zinc-400">{display(row.metadata.year)}</td>
+      <td className="truncate text-[12px] text-zinc-300 @max-[680px]:hidden">
+        {display(row.metadata.album)}
+      </td>
+      <td className="font-mono text-[12px] text-zinc-400 @max-[680px]:hidden">
+        {display(row.metadata.year)}
+      </td>
     </tr>
   )
 }

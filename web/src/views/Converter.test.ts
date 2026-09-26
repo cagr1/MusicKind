@@ -10,6 +10,7 @@ import {
 import {
   effectiveFormat,
   overrideFormat,
+  selectFormat,
   shouldSkipConversion,
   type ConversionItem,
 } from './converter-model'
@@ -72,6 +73,10 @@ describe('per-item conversion formats', () => {
     expect(effectiveFormat(items[0], 'aiff')).toBe('aiff')
     expect(effectiveFormat(items[1], 'aiff')).toBe('flac')
     expect(effectiveFormat(items[0], 'mp3')).toBe('mp3')
+  })
+  it('returns to the global format when its format is selected', () => {
+    expect(selectFormat('wav', 'wav')).toBeNull()
+    expect(selectFormat('flac', 'wav')).toBe('flac')
   })
   it('skips matching formats and treats aif as aiff', () => {
     expect(shouldSkipConversion({ path: '/music/a.wav', root: null, format: null }, 'wav')).toBe(

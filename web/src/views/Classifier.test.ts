@@ -8,6 +8,7 @@ import { Classifier, genreDistribution, sourceLabelKey, type ClassifierResult } 
 
 vi.mock('@/lib/player', () => ({ usePlayer: () => ({ setQueue: vi.fn(), toggle: vi.fn() }) }))
 vi.mock('@/components/music/TrackInspector', () => ({
+  InspectorToggle: () => null,
   TrackInspector: ({
     track,
     children,

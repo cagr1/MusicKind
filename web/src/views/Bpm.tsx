@@ -7,7 +7,11 @@ import { CamelotBadge } from '@/components/music/CamelotBadge'
 import { CamelotWheel } from '@/components/music/CamelotWheel'
 import { MiniWaveform } from '@/components/music/MiniWaveform'
 import { TrackArtwork } from '@/components/music/TrackArtwork'
-import { TrackInspector, type InspectorTrack } from '@/components/music/TrackInspector'
+import {
+  InspectorToggle,
+  TrackInspector,
+  type InspectorTrack,
+} from '@/components/music/TrackInspector'
 import { useT } from '@/i18n/I18nProvider'
 import { getJson, postJson, useProcessStream } from '@/lib/api'
 import { electron, resolveDroppedFiles } from '@/lib/electron'
@@ -391,11 +395,12 @@ export function Bpm() {
         <header className="relative flex h-12 shrink-0 items-center justify-between border-b border-line px-6">
           <div className="flex items-center gap-3">
             <h1 className="text-[15px] font-semibold">{t('bpm.title')}</h1>
-            <span className="font-mono text-[11px] text-zinc-500">
+            <span className="max-w-[35vw] truncate whitespace-nowrap font-mono text-[11px] text-zinc-500">
               {files.length} {t('bpm.tracks')} · {pending.length} {t('bpm.pending')}
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <InspectorToggle />
             <SelectionControls selection={selection} t={t} hasRows={tracks.length > 0} />
             <TooltipProvider>
               <Tooltip>
@@ -447,7 +452,12 @@ export function Bpm() {
                 {t('bpm.saveChanges')} {changed.length}
               </Button>
             )}
-            <Button size="sm" onClick={() => void start()} disabled={isBusy || !pending.length}>
+            <Button
+              className="max-[1099px]:size-8 max-[1099px]:gap-0 max-[1099px]:px-2 max-[1099px]:text-[0px] [&_svg]:size-4"
+              size="sm"
+              onClick={() => void start()}
+              disabled={isBusy || !pending.length}
+            >
               <Activity />
               {t('bpm.analyze')} {pending.length}
             </Button>
@@ -506,8 +516,8 @@ export function Bpm() {
             onDrop={onDrop}
           />
         ) : (
-          <div className="min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
-            <table className="w-full table-fixed text-left">
+          <div className="@container min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
+            <table className="w-full min-w-[760px] table-fixed text-left">
               <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
                 <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
                   <th className="w-10 text-center">
@@ -523,7 +533,12 @@ export function Bpm() {
                   <SortableHeader sort={sort} sortKey="track" onSort={toggleSort}>
                     {t('bpm.tableTrack')}
                   </SortableHeader>
-                  <SortableHeader className="w-40" sort={sort} sortKey="artist" onSort={toggleSort}>
+                  <SortableHeader
+                    className="w-40 @max-[600px]:hidden"
+                    sort={sort}
+                    sortKey="artist"
+                    onSort={toggleSort}
+                  >
                     {t('common.artist')}
                   </SortableHeader>
                   <SortableHeader className="w-24" sort={sort} sortKey="bpm" onSort={toggleSort}>
@@ -678,13 +693,18 @@ function BpmRow({
         <div className="flex items-center gap-3">
           <TrackArtwork camelotKey={track.key} path={track.file} size={30} />
           <div className="min-w-0">
-            <p className="truncate text-[12px] text-zinc-200">{track.title}</p>
+            <p className="truncate text-[12px] text-zinc-200" title={track.title}>
+              {track.title}
+            </p>
+            <p className="hidden truncate text-[11px] text-zinc-500 @max-[600px]:block">
+              {track.artist || '—'}
+            </p>
           </div>
           <MiniWaveform path={track.file} isSelected={selected} />
         </div>
       </td>
       <td
-        className={`w-40 truncate pr-2 text-[12px] ${track.artist?.trim() && track.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
+        className={`w-40 truncate pr-2 text-[12px] @max-[600px]:hidden ${track.artist?.trim() && track.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
         title={track.artist && track.artist !== '—' ? track.artist : undefined}
       >
         {track.artist && track.artist !== '—' ? track.artist : '—'}

@@ -10,6 +10,7 @@ import {
   Play,
   Settings as SettingsIcon,
   Split,
+  FileAudio,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -21,7 +22,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
-import { TrackInspector, type InspectorTrack } from '@/components/music/TrackInspector'
+import {
+  InspectorToggle,
+  TrackInspector,
+  type InspectorTrack,
+} from '@/components/music/TrackInspector'
 import { getJson, useProcessStream } from '@/lib/api'
 import { electron, resolveDroppedFiles } from '@/lib/electron'
 import { useProcess } from '@/lib/process'
@@ -366,13 +371,18 @@ export function Stems() {
         <header className="relative flex h-12 shrink-0 items-center justify-between border-b border-line px-6">
           <div className="flex items-center gap-3">
             <h1 className="text-[15px] font-semibold">{t('stems.title')}</h1>
-            {input ? (
-              <span className="max-w-60 truncate font-mono text-[11px] text-zinc-500">
-                {fileName(input)}
-              </span>
-            ) : null}
           </div>
           <div className="flex items-center gap-2">
+            <InspectorToggle />
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              aria-label={t('stems.chooseOther')}
+              title={t('stems.chooseOther')}
+              onClick={() => void chooseFile()}
+            >
+              <FileAudio />
+            </Button>
             {isBusy ? (
               <>
                 <Button
@@ -424,14 +434,16 @@ export function Stems() {
           />
         ) : (
           <>
-            <div className="flex shrink-0 items-center justify-between border-b border-line px-6 py-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line px-6 py-3">
               <button
                 type="button"
-                onClick={chooseFile}
-                className="flex min-w-0 items-center gap-2 text-left text-[11px] text-zinc-400 hover:text-zinc-200"
+                onClick={() => outputDir && void electron.showInFolder(outputDir)}
+                title={outputDir ?? undefined}
+                className="flex min-w-0 max-w-full flex-1 items-center gap-2 text-left text-[11px] text-zinc-400 hover:text-zinc-200"
               >
                 <FolderOpen className="size-4" />
-                <span className="truncate font-mono">{input ? fileName(input) : '—'}</span>
+                <span className="whitespace-nowrap">{t('stems.destination')}:</span>
+                <span className="truncate font-mono">{outputDir ? fileName(outputDir) : '—'}</span>
               </button>
               <div className="flex items-center gap-3 text-[11px] text-zinc-500">
                 <span>{t('stems.format')}</span>
@@ -466,22 +478,6 @@ export function Stems() {
                     </button>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void togglePlay()}
-                  disabled={!audioReady}
-                  className="flex size-8 items-center justify-center rounded-full border border-line bg-surface-panel text-zinc-100 hover:border-brand hover:text-brand disabled:opacity-40"
-                  aria-label={playing ? t('music.pause') : t('music.play')}
-                >
-                  {playing ? (
-                    <Pause className="size-3.5 fill-current" />
-                  ) : (
-                    <Play className="ml-0.5 size-3.5 fill-current" />
-                  )}
-                </button>
-                <span className="font-mono tabular-nums text-zinc-300">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </span>
               </div>
             </div>
             {isBusy ? (
@@ -501,10 +497,30 @@ export function Stems() {
               </div>
             ) : null}
             <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
-              <div className="mb-2 ml-44 flex justify-between font-mono text-[10px] text-zinc-500">
-                <span>00:00</span>
-                <span>{formatTime(duration / 2)}</span>
-                <span>{formatTime(duration)}</span>
+              <div className="mb-2 flex items-center">
+                <div className="flex w-44 shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void togglePlay()}
+                    disabled={!audioReady}
+                    className="flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-panel text-zinc-100 hover:border-brand hover:text-brand disabled:opacity-40"
+                    aria-label={playing ? t('music.pause') : t('music.play')}
+                  >
+                    {playing ? (
+                      <Pause className="size-3.5 fill-current" />
+                    ) : (
+                      <Play className="ml-0.5 size-3.5 fill-current" />
+                    )}
+                  </button>
+                  <span className="whitespace-nowrap font-mono text-[10px] tabular-nums text-zinc-300">
+                    {formatTime(currentTime)} / {formatTime(duration)}
+                  </span>
+                </div>
+                <div className="flex min-w-0 flex-1 justify-between font-mono text-[10px] text-zinc-500">
+                  <span>00:00</span>
+                  <span>{formatTime(duration / 2)}</span>
+                  <span>{formatTime(duration)}</span>
+                </div>
               </div>
               <div className="space-y-2">
                 {laneItems

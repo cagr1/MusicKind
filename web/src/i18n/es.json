@@ -19,6 +19,7 @@
     "undo": "Deshacer",
     "close": "Cerrar",
     "toggleSidebar": "Alternar barra lateral",
+    "toggleInspector": "Alternar inspector de pista",
     "sidebar": "Barra lateral",
     "sidebarDescription": "Muestra la barra lateral en móvil",
     "language": "Idioma",
@@ -298,7 +299,6 @@
     "original": "Original",
     "target": "Destino",
     "output": "Salida",
-    "general": "General",
     "skip": "ya es {format} · se omite",
     "outputFormat": "Formato de salida",
     "applyFormat": "Aplicar formato",
@@ -373,6 +373,8 @@
     "installDone": "Dependencia instalada"
   },
   "stems": {
+    "destination": "Destino",
+    "chooseOther": "Elegir otro archivo",
     "title": "Separador de stems",
     "chooseFile": "Elige una pista para separar",
     "selectFile": "Elegir archivo de audio",

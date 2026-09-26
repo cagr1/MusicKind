@@ -1325,3 +1325,27 @@ Captura del cerebro (Chrome headless, ventana 900 px, Inspector abierto): en Con
 Tests vitest donde haya lógica pura (quitar/deshacer en Clasificador; mapeo formato null ↔ global en Convertidor).
 **No tocar:** backend, `NEXT.md`, `plan.md`, specs. Sin commit. Sin hex.
 **Gate:** `npm --prefix web test`, `build`, `lint`, `format:check`. El cerebro verificará con capturas a 900 y 1300 px.
+
+### U4.5 — Correcciones tras la verificación de U4 (capturas del cerebro a 900/1300 px)
+
+Hallado: (a) a 900 px de ventana, barra lateral 220 + Inspector 340 dejan ~340 px a la vista; el contenido (columnas Origen/Formato/Tamaño, botones de cabecera «Convertir», «Identificar», «+») queda **debajo/encima del Inspector**. (b) a 1300 px Metadatos ya no muestra la columna Artista (umbral U4.1 demasiado alto; el contenedor mide ~716 px). (c) Stems a 900: en la barra «Destino:» se superpone con «Formato»; la regla de tiempo quedó desalineada de la onda (el `gap-3` nuevo corre la regla 12 px respecto al inicio de la onda).
+- **Inspector responsive** (una sola vez en `web/src/components/music/TrackInspector.tsx`, sirve a todas las vistas): con ventana < 1100 px el Inspector sale del flujo y se muestra como panel lateral superpuesto (`web/src/components/ui/sheet.tsx`) cerrado por defecto; botón de icono (lucide `PanelRight`, `aria-label` i18n) en la cabecera de cada vista que usa Inspector para abrir/cerrar. ≥ 1100 px: igual que hoy. Nada del contenido principal queda nunca debajo del Inspector.
+- **Cabeceras de vista**: los botones nunca se salen de su columna; en estrecho se quedan solo con icono (texto oculto, `aria-label` conservado) y el contador se trunca.
+- **Umbral de la columna Artista**: visible cuando el contenedor de la tabla ≥ 600 px. Prioridad al faltar espacio: primero se ocultan Álbum/Año/Origen/Tamaño/Etiqueta original (las de menor valor en cada vista), después Artista (pasa a segunda línea). A 1300 px con Inspector, Metadatos debe mostrar Pista + Artista + Álbum (+ Año si cabe).
+- **Stems**: la barra se ajusta en varias líneas (`flex-wrap`) sin superponer; la regla de tiempo empieza exactamente en la x donde empieza la onda de los carriles (misma anchura de columna izquierda y sin separación extra).
+Gate igual que U4. El cerebro verificará capturas a 900, 1100 y 1300 px.
+
+### U4.6 — Convertidor sin scroll horizontal a 1100 px
+Verificado a 1100 px (Inspector en línea, contenedor ~540 px): la tabla tiene `min-w-[900px]` (`Converter.tsx:743`) → «Formato de salida» queda cortado y hay que desplazar. Quitar ese mínimo fijo; con el contenedor estrecho ocultar primero Tamaño y Origen (container queries, como Metadatos), después Artista (segunda línea). «Formato de salida» y Pista siempre visibles y completos. Sin scroll horizontal a 900, 1100 y 1300 px. Gate igual que U4.
+
+### U4.7 — Convertidor: la Pista no se aplasta
+Verificado a 1300 px (contenedor ~716 px): la columna Archivo/Pista queda en ~50 px («Red …», «— BP…») mientras Artista, Origen y Estado ocupan el resto. Regla: la columna Pista nunca < 220 px (título legible). Umbrales por ancho del contenedor elegidos para respetarlo: con ~716 px debe verse Pista (≥220) + Artista + Formato de salida + Estado; Origen solo si queda sitio; Tamaño el primero en ocultarse. Calcula los umbrales sumando anchos reales de columnas (checkbox, #, Formato ~140, Estado ~90…), no a ojo. Sin scroll horizontal a 900/1100/1300 px. Solo `web/src/views/Converter.tsx`. Gate igual que U4.
+
+### U4.8 — Convertidor: umbrales exactos (U4.7 verificado y falla)
+Capturas: a 1300 px el artista no aparece en ningún sitio; a 1100 px la Pista mide ~90 px. Causas en `web/src/views/Converter.tsx`: columna Artista oculta con `@max-[700px]` (`:759`, `:848`) pero la segunda línea solo con `@max-[600px]` (`:838`) → entre 600 y 700 px no hay artista; `min-w-[220px]` en el `<th>` (`:751`) no tiene efecto con `table-fixed`.
+Cambios exactos (el `@container` mide el contenido, sin `px-6`):
+- Anchos fijos: checkbox `w-8`, `#` `w-8`, Formato de salida `w-28`, Estado `w-24`, Artista `w-32`, Origen `w-16`, Tamaño `w-40`. Pista sin ancho (se queda con el resto). Quitar `min-w-[220px]`.
+- Artista columna visible con contenedor ≥ 620 px (`@max-[620px]:hidden` en th y td); **la segunda línea con el artista bajo el título usa exactamente el umbral complementario** (`hidden @max-[620px]:block`). Nunca ambos ni ninguno.
+- Origen oculto `@max-[690px]`; Tamaño oculto `@max-[860px]`.
+- Con eso la Pista ≥ 220 px desde un contenedor de ~492 px (1100 px de ventana con Inspector).
+Solo `Converter.tsx`. Gate web. No commitear.

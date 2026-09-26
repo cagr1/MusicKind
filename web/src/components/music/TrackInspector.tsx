@@ -1,5 +1,8 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { PanelRight } from 'lucide-react'
 import { useT } from '@/i18n/I18nProvider'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { CAMELOT_MAP, getHarmonicMatches, normalizeCamelot } from '@/lib/camelot'
 import { CamelotWheel } from './CamelotWheel'
 import { LargeWaveform } from './LargeWaveform'
@@ -30,17 +33,82 @@ export function TrackInspector({
   className = '',
 }: TrackInspectorProps) {
   const t = useT()
+  const [compact, setCompact] = useState(() => window.matchMedia('(max-width: 1099px)').matches)
+  const [open, setOpen] = useState(false)
 
-  if (!track) {
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1099px)')
+    const update = () => {
+      setCompact(media.matches)
+      if (!media.matches) setOpen(false)
+    }
+    const toggle = () => setOpen((value) => !value)
+    media.addEventListener('change', update)
+    window.addEventListener('music-kind:toggle-inspector', toggle)
+    return () => {
+      media.removeEventListener('change', update)
+      window.removeEventListener('music-kind:toggle-inspector', toggle)
+    }
+  }, [])
+
+  const content = !track ? (
+    <aside
+      className={`flex h-full w-[340px] shrink-0 items-center justify-center border-l border-line bg-surface-app p-6 text-center text-[13px] text-zinc-500 ${className}`}
+    >
+      {t('music.noTrackSelected')}
+    </aside>
+  ) : (
+    <InspectorContent
+      track={track}
+      onKeyChange={onKeyChange}
+      children={children}
+      className={className}
+      t={t}
+    />
+  )
+
+  if (compact) {
     return (
-      <aside
-        className={`flex h-full w-[340px] shrink-0 items-center justify-center border-l
-          border-line bg-surface-app p-6 text-center text-[13px] text-zinc-500 ${className}`}
-      >
-        {t('music.noTrackSelected')}
-      </aside>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent
+          side="right"
+          showCloseButton
+          className="w-[340px] max-w-[90vw] gap-0 border-line bg-surface-app p-0"
+        >
+          <SheetTitle className="sr-only">{track?.title ?? t('music.noTrackSelected')}</SheetTitle>
+          {content}
+        </SheetContent>
+      </Sheet>
     )
   }
+
+  return content
+}
+
+export function InspectorToggle() {
+  const t = useT()
+  return (
+    <Button
+      className="min-[1100px]:hidden"
+      variant="ghost"
+      size="icon-xs"
+      aria-label={t('common.toggleInspector')}
+      title={t('common.toggleInspector')}
+      onClick={() => window.dispatchEvent(new Event('music-kind:toggle-inspector'))}
+    >
+      <PanelRight />
+    </Button>
+  )
+}
+
+function InspectorContent({
+  track,
+  onKeyChange,
+  children,
+  className,
+  t,
+}: TrackInspectorProps & { t: ReturnType<typeof useT> }) {
+  if (!track) return null
 
   const camelot = normalizeCamelot(track.key)
   const musicalKey = camelot ? CAMELOT_MAP[camelot].musicalKey : null

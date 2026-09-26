@@ -9,6 +9,13 @@ export function effectiveFormat(item: ConversionItem, general: ConversionFormat)
   return item.format ?? general
 }
 
+export function selectFormat(
+  selected: ConversionFormat,
+  general: ConversionFormat,
+): ConversionFormat | null {
+  return selected === general ? null : selected
+}
+
 export function sourceExtension(path: string): string {
   return path.split(/[\\/]/).pop()?.split('.').pop()?.toLowerCase() ?? ''
 }

@@ -20,7 +20,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { TrackInspector, type InspectorTrack } from '@/components/music/TrackInspector'
+import {
+  InspectorToggle,
+  TrackInspector,
+  type InspectorTrack,
+} from '@/components/music/TrackInspector'
 import { TrackArtwork } from '@/components/music/TrackArtwork'
 import { useT } from '@/i18n/I18nProvider'
 import { getJson, useProcessStream } from '@/lib/api'
@@ -38,6 +42,7 @@ import { SortableHeader } from '@/components/music/SortableHeader'
 import {
   effectiveFormat,
   overrideFormat,
+  selectFormat,
   shouldSkipConversion,
   type ConversionItem,
 } from './converter-model'
@@ -439,7 +444,7 @@ export function Converter() {
         <header className="relative flex h-12 shrink-0 items-center justify-between border-b border-line px-6">
           <div className="flex items-center gap-3">
             <h1 className="text-[15px] font-semibold">{t('converter.title')}</h1>
-            <span className="font-mono text-[11px] text-zinc-500">
+            <span className="whitespace-nowrap truncate font-mono text-[11px] text-zinc-500">
               {items.length} {t('converter.files')} · {pending.length}{' '}
               {pending.length === 1 ? t('converter.pendingOne') : t('converter.pending')}
             </span>
@@ -453,6 +458,7 @@ export function Converter() {
             </div>
           )}
           <div className="flex items-center gap-2">
+            <InspectorToggle />
             <SelectionControls selection={selection} t={t} hasRows={items.length > 0} />
             <TooltipProvider>
               <Tooltip>
@@ -475,7 +481,12 @@ export function Converter() {
                 {t('converter.cancel')}
               </Button>
             )}
-            <Button size="sm" onClick={() => void start()} disabled={isBusy || !pending.length}>
+            <Button
+              className="max-[1099px]:size-8 max-[1099px]:gap-0 max-[1099px]:px-2 max-[1099px]:text-[0px] [&_svg]:size-4"
+              size="sm"
+              onClick={() => void start()}
+              disabled={isBusy || !pending.length}
+            >
               <ArrowRightLeft />
               {t('converter.convert')} {pending.length}
             </Button>
@@ -610,7 +621,7 @@ export function Converter() {
                   overrideFormat(
                     current,
                     selection.selected,
-                    value === 'general' ? null : (value as ConversionFormat),
+                    selectFormat(value as ConversionFormat, format),
                   ),
                 )
               }
@@ -619,9 +630,6 @@ export function Converter() {
                 <SelectValue placeholder={t('converter.applyFormat')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="general">
-                  {t('converter.general')} ({format.toUpperCase()})
-                </SelectItem>
                 <SelectItem value="mp3">MP3</SelectItem>
                 <SelectItem value="wav">WAV</SelectItem>
                 <SelectItem value="aiff">AIFF</SelectItem>
@@ -635,7 +643,7 @@ export function Converter() {
             <label className="flex items-center justify-between gap-2 text-[11px] text-zinc-400">
               <span>{t('converter.outputFormat')}</span>
               <Select
-                value={selectedItem?.format ?? 'general'}
+                value={selectedItem ? effectiveFormat(selectedItem, format) : format}
                 onValueChange={(value) =>
                   selectedItem &&
                   setItems((current) =>
@@ -643,7 +651,7 @@ export function Converter() {
                       item.path === selectedItem.path
                         ? {
                             ...item,
-                            format: value === 'general' ? null : (value as ConversionFormat),
+                            format: selectFormat(value as ConversionFormat, format),
                           }
                         : item,
                     ),
@@ -654,9 +662,6 @@ export function Converter() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="general">
-                    {t('converter.general')} ({format.toUpperCase()})
-                  </SelectItem>
                   <SelectItem value="mp3">MP3</SelectItem>
                   <SelectItem value="wav">WAV</SelectItem>
                   <SelectItem value="aiff">AIFF</SelectItem>
@@ -734,31 +739,51 @@ function ResultsTable({
   selection: ReturnType<typeof useRowSelection<ConversionItem>>
 }) {
   return (
-    <div className="min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
+    <div className="@container min-h-0 flex-1 overflow-auto px-6 pt-0 pb-2">
       <table className="w-full table-fixed text-left">
         <thead className="sticky top-0 z-10 border-b border-line bg-surface-app">
           <tr className="h-8 text-[10px] uppercase tracking-wider text-zinc-500">
-            <th className="w-10 text-center">
+            <th className="w-8 text-center">
               <CheckboxHeader selection={selection} t={t} />
             </th>
-            <th className="w-10 text-center">#</th>
+            <th className="w-8 text-center">#</th>
             <SortableHeader sort={sort} sortKey="file" onSort={toggleSort}>
               {t('converter.file')}
             </SortableHeader>
-            <SortableHeader className="w-40" sort={sort} sortKey="artist" onSort={toggleSort}>
+            <SortableHeader
+              className="w-32 @max-[620px]:hidden"
+              sort={sort}
+              sortKey="artist"
+              onSort={toggleSort}
+            >
               {t('common.artist')}
             </SortableHeader>
-            <SortableHeader className="w-20" sort={sort} sortKey="origin" onSort={toggleSort}>
+            <SortableHeader
+              className="w-16 @max-[690px]:hidden"
+              sort={sort}
+              sortKey="origin"
+              onSort={toggleSort}
+            >
               {t('converter.origin')}
             </SortableHeader>
-            <SortableHeader className="w-36" sort={sort} sortKey="outputFormat" onSort={toggleSort}>
+            <SortableHeader
+              className="w-28 whitespace-nowrap"
+              sort={sort}
+              sortKey="outputFormat"
+              onSort={toggleSort}
+            >
               {t('converter.outputFormat')}
             </SortableHeader>
-            <SortableHeader className="w-40" sort={sort} sortKey="size" onSort={toggleSort}>
+            <SortableHeader
+              className="w-40 @max-[860px]:hidden"
+              sort={sort}
+              sortKey="size"
+              onSort={toggleSort}
+            >
               {t('converter.size')}
             </SortableHeader>
             <SortableHeader
-              className="w-32 text-right"
+              className="w-24 text-right"
               sort={sort}
               sortKey="status"
               onSort={toggleSort}
@@ -780,7 +805,7 @@ function ResultsTable({
                     selected?.input === result.input ? 'bg-white/[0.06]' : 'hover:bg-white/[0.04]'
                   }`}
                 >
-                  <td className="text-center font-mono text-[11px] text-zinc-500">
+                  <td className="w-8 text-center font-mono text-[11px] text-zinc-500">
                     <RowCheckbox
                       checked={selection.selected.includes(item.path)}
                       disabled={selection.available.includes(item.path) === false}
@@ -788,19 +813,25 @@ function ResultsTable({
                       onClick={(shiftKey) => selection.toggle(item.path, shiftKey)}
                     />
                   </td>
-                  <td className="text-center font-mono text-[11px] text-zinc-500">
+                  <td className="w-8 text-center font-mono text-[11px] text-zinc-500">
                     {result.output === playingPath ? (
                       <AudioLines className="mx-auto size-4 text-brand" />
                     ) : (
                       String(index + 1).padStart(2, '0')
                     )}
                   </td>
-                  <td className="min-w-0 pr-4">
+                  <td className="pr-4">
                     <div className="flex min-w-0 items-center gap-3">
                       <TrackArtwork camelotKey={result.key} path={result.input} size={32} />
                       <div className="min-w-0">
-                        <p className="truncate text-[13px] text-zinc-200">
+                        <p
+                          className="truncate text-[13px] text-zinc-200"
+                          title={result.title || fileName(result.input)}
+                        >
                           {result.title || fileName(result.input)}
+                        </p>
+                        <p className="hidden truncate text-[11px] text-zinc-500 @max-[620px]:block">
+                          {result.artist || '—'}
                         </p>
                         <p className="truncate text-[11px] text-zinc-500">
                           {result.bpm ?? '—'} BPM · {result.key ?? '—'}
@@ -809,24 +840,21 @@ function ResultsTable({
                     </div>
                   </td>
                   <td
-                    className={`w-40 truncate pr-2 text-[12px] ${result.artist?.trim() && result.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
+                    className={`w-32 truncate pr-2 text-[12px] @max-[620px]:hidden ${result.artist?.trim() && result.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
                     title={result.artist && result.artist !== '—' ? result.artist : undefined}
                   >
                     {result.artist && result.artist !== '—' ? result.artist : '—'}
                   </td>
-                  <td className="font-mono text-[11px] text-zinc-300">
+                  <td className="w-16 font-mono text-[11px] text-zinc-300 @max-[690px]:hidden">
                     <span className="rounded bg-white/5 px-1.5 py-1 text-zinc-400">
                       {sourceFormat(result.input)}
                     </span>
                   </td>
-                  <td className="font-mono text-[11px] text-zinc-300">
+                  <td className="w-28 font-mono text-[11px] text-zinc-300">
                     <Select
-                      value={item.format ?? 'general'}
+                      value={effectiveFormat(item, generalFormat)}
                       onValueChange={(value) =>
-                        onFormat(
-                          item.path,
-                          value === 'general' ? null : (value as ConversionFormat),
-                        )
+                        onFormat(item.path, selectFormat(value as ConversionFormat, generalFormat))
                       }
                     >
                       <SelectTrigger
@@ -835,9 +863,6 @@ function ResultsTable({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="general">
-                          {t('converter.general')} ({generalFormat.toUpperCase()})
-                        </SelectItem>
                         <SelectItem value="mp3">MP3</SelectItem>
                         <SelectItem value="wav">WAV</SelectItem>
                         <SelectItem value="aiff">AIFF</SelectItem>
@@ -845,11 +870,11 @@ function ResultsTable({
                       </SelectContent>
                     </Select>
                   </td>
-                  <td className="font-mono text-[11px] text-zinc-400">
+                  <td className="w-40 font-mono text-[11px] text-zinc-400 @max-[860px]:hidden">
                     {formatBytes(result.sizeIn)} <span className="text-zinc-600">→</span>{' '}
                     <span className="text-zinc-200">{formatBytes(result.sizeOut)}</span>
                   </td>
-                  <td className="text-right">
+                  <td className="w-24 text-right">
                     <div className="inline-flex items-center gap-2">
                       {result.error === 'skip' ? (
                         <span className="whitespace-nowrap text-[11px] text-zinc-500">

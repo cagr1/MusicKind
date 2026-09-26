@@ -19,6 +19,7 @@
     "undo": "Undo",
     "close": "Close",
     "toggleSidebar": "Toggle sidebar",
+    "toggleInspector": "Toggle track inspector",
     "sidebar": "Sidebar",
     "sidebarDescription": "Displays the mobile sidebar",
     "language": "Language",
@@ -298,7 +299,6 @@
     "original": "Original",
     "target": "Target",
     "output": "Output",
-    "general": "General",
     "skip": "already {format} · skipped",
     "outputFormat": "Output format",
     "applyFormat": "Apply format",
@@ -373,6 +373,8 @@
     "installDone": "Dependency installed"
   },
   "stems": {
+    "destination": "Destination",
+    "chooseOther": "Choose another file",
     "title": "Stem separator",
     "chooseFile": "Choose a track to separate",
     "selectFile": "Choose an audio file",

@@ -24,7 +24,11 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { CamelotBadge } from '@/components/music/CamelotBadge'
 import { TrackArtwork } from '@/components/music/TrackArtwork'
-import { TrackInspector, type InspectorTrack } from '@/components/music/TrackInspector'
+import {
+  InspectorToggle,
+  TrackInspector,
+  type InspectorTrack,
+} from '@/components/music/TrackInspector'
 import { useT, type TranslationKey } from '@/i18n/I18nProvider'
 import { getJson, postJson, useProcessStream } from '@/lib/api'
 import { electron, resolveDroppedFiles } from '@/lib/electron'
@@ -366,12 +370,13 @@ function LegacyClassifier({
           <div className="flex items-center gap-3">
             <h1 className="text-[15px] font-semibold">{t('classifier.title')}</h1>
             {results.length > 0 && (
-              <span className="font-mono text-[11px] text-zinc-500">
+              <span className="max-w-[35vw] truncate whitespace-nowrap font-mono text-[11px] text-zinc-500">
                 {results.length} {t('classifier.tracks')}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
+            <InspectorToggle />
             <Select value={method} onValueChange={onMethodChange}>
               <SelectTrigger className="h-8 w-56 text-[11px]" aria-label={t('classifier.method')}>
                 <SelectValue />
@@ -415,7 +420,12 @@ function LegacyClassifier({
                 <TooltipContent>{t('classifier.simulationHint')}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            <Button size="sm" onClick={() => void analyze()} disabled={isBusy || !folder}>
+            <Button
+              className="max-[1099px]:size-8 max-[1099px]:gap-0 max-[1099px]:px-2 max-[1099px]:text-[0px] [&_svg]:size-4"
+              size="sm"
+              onClick={() => void analyze()}
+              disabled={isBusy || !folder}
+            >
               <Activity /> {t('classifier.analyze')}
             </Button>
           </div>
@@ -641,6 +651,60 @@ function TagClassifier({
       }),
     [filtered, tagSort],
   )
+  const tagUndoSnapshot = React.useRef<TagClassifierSnapshot | null>(null)
+  const tagSelection = useRowSelection({
+    items: visibleFiltered,
+    getKey: (row) => row.path,
+    isProtected: () => isBusy,
+    onRemove: (paths) => {
+      tagUndoSnapshot.current = {
+        inputRoot,
+        inputPaths,
+        destRoot,
+        results,
+        selectedPath,
+        selectedPaths,
+        statusFilter,
+        genreFilter,
+      }
+      const removed = new Set(paths)
+      const next = results.filter((row) => !removed.has(row.path))
+      setResults(next)
+      setSelectedPaths((current) => current.filter((path) => !removed.has(path)))
+      setSelectedPath((current) =>
+        current && removed.has(current) ? (next[0]?.path ?? null) : current,
+      )
+    },
+    onClear: () => {
+      tagUndoSnapshot.current = {
+        inputRoot,
+        inputPaths,
+        destRoot,
+        results,
+        selectedPath,
+        selectedPaths,
+        statusFilter,
+        genreFilter,
+      }
+      setResults([])
+      setSelectedPaths([])
+      setSelectedPath(null)
+    },
+    onRestore: () => {
+      const snapshot = tagUndoSnapshot.current
+      if (!snapshot) return
+      setResults(snapshot.results)
+      setSelectedPaths(snapshot.selectedPaths)
+      tagSelection.setSelected(snapshot.selectedPaths)
+      setSelectedPath(snapshot.selectedPath)
+      setStatusFilter(snapshot.statusFilter)
+      setGenreFilter(snapshot.genreFilter)
+    },
+    removeLabel: t('common.removed'),
+    clearLabel: t('common.cleared'),
+    undoLabel: t('common.undo'),
+  })
+  React.useEffect(() => setSelectedPaths(tagSelection.selected), [tagSelection.selected])
   React.useEffect(() => {
     setResult('classifier-tags', {
       inputRoot,
@@ -1082,6 +1146,7 @@ function TagClassifier({
                   ))}
                 </SelectContent>
               </Select>
+              <SelectionControls selection={tagSelection} t={t} hasRows={results.length > 0} />
               <Select value={genreFilter} onValueChange={setGenreFilter}>
                 <SelectTrigger
                   className="h-7 w-44 text-[11px]"
@@ -1112,15 +1177,15 @@ function TagClassifier({
               </Select>
               <Select
                 value=""
-                onValueChange={(genre) => updateMany(selectedPaths, genre)}
-                disabled={!selectedPaths.length}
+                onValueChange={(genre) => updateMany(tagSelection.selected, genre)}
+                disabled={!tagSelection.selected.length}
               >
                 <SelectTrigger
                   className="h-7 w-52 text-[11px]"
                   aria-label={t('classifier.changeSelected')}
                 >
                   <SelectValue
-                    placeholder={`${t('classifier.changeSelected')} (${selectedPaths.length})`}
+                    placeholder={`${t('classifier.changeSelected')} (${tagSelection.selected.length})`}
                   />
                 </SelectTrigger>
                 <SelectContent>
@@ -1145,19 +1210,20 @@ function TagClassifier({
                 reviewLabel={t('classifier.review')}
               />
             )}
-            <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto px-5 pt-0 pb-2">
+            <div ref={scrollRef} className="@container min-h-0 flex-1 overflow-auto px-5 pt-0 pb-2">
               <table className="w-full min-w-[980px] text-left text-[11px]">
                 <thead className="sticky top-0 z-10 bg-surface-app text-zinc-500">
-                  <tr className="grid h-8 grid-cols-[32px_40px_minmax(200px,2fr)_minmax(130px,1fr)_140px_150px_130px_150px] items-center">
+                  <tr className="grid h-8 grid-cols-[32px_40px_minmax(200px,2fr)_minmax(130px,1fr)_140px_150px_130px_150px] items-center @max-[600px]:grid-cols-[32px_40px_minmax(180px,2fr)_140px_150px_130px_150px]">
                     <th>
                       <Checkbox
                         checked={
-                          selectedPaths.length === visibleFiltered.length &&
-                          visibleFiltered.length > 0
+                          tagSelection.checked
+                            ? true
+                            : tagSelection.indeterminate
+                              ? 'indeterminate'
+                              : false
                         }
-                        onCheckedChange={(checked) =>
-                          setSelectedPaths(checked ? visibleFiltered.map((row) => row.path) : [])
-                        }
+                        onCheckedChange={tagSelection.toggleAll}
                         aria-label={t('common.selectAll')}
                       />
                     </th>
@@ -1165,7 +1231,12 @@ function TagClassifier({
                     <SortableHeader sort={tagSort} sortKey="track" onSort={toggleTagSort}>
                       {t('classifier.track')}
                     </SortableHeader>
-                    <SortableHeader sort={tagSort} sortKey="artist" onSort={toggleTagSort}>
+                    <SortableHeader
+                      className="@max-[600px]:hidden"
+                      sort={tagSort}
+                      sortKey="artist"
+                      onSort={toggleTagSort}
+                    >
                       {t('common.artist')}
                     </SortableHeader>
                     <SortableHeader sort={tagSort} sortKey="originalTag" onSort={toggleTagSort}>
@@ -1190,18 +1261,14 @@ function TagClassifier({
                         key={row.path}
                         onClick={() => setSelectedPath(row.path)}
                         onDoubleClick={() => toggle(row.path)}
-                        className={`absolute left-0 grid h-[54px] w-full cursor-pointer grid-cols-[32px_40px_minmax(200px,2fr)_minmax(130px,1fr)_140px_150px_130px_150px] items-center border-b border-line/60 ${selected?.path === row.path ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'}`}
+                        className={`absolute left-0 grid h-[54px] w-full cursor-pointer grid-cols-[32px_40px_minmax(200px,2fr)_minmax(130px,1fr)_140px_150px_130px_150px] items-center border-b border-line/60 @max-[600px]:grid-cols-[32px_40px_minmax(180px,2fr)_140px_150px_130px] ${selected?.path === row.path ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'}`}
                         style={{ transform: `translateY(${item.start}px)` }}
                       >
                         <td>
-                          <Checkbox
-                            checked={selectedPaths.includes(row.path)}
-                            onCheckedChange={(v) =>
-                              setSelectedPaths((prev) =>
-                                v ? [...prev, row.path] : prev.filter((p) => p !== row.path),
-                              )
-                            }
-                            aria-label={`${t('common.selectAll')} ${row.title || fileName(row.path)}`}
+                          <RowCheckbox
+                            checked={tagSelection.selected.includes(row.path)}
+                            onClick={(shiftKey) => tagSelection.toggle(row.path, shiftKey)}
+                            label={`${t('common.selectAll')} ${row.title || fileName(row.path)}`}
                           />
                         </td>
                         <td className="text-center">
@@ -1215,14 +1282,20 @@ function TagClassifier({
                           <div className="flex items-center gap-2">
                             <TrackArtwork path={row.path} camelotKey={row.key} size={34} />
                             <div className="min-w-0">
-                              <p className="truncate text-zinc-200">
+                              <p
+                                className="truncate text-zinc-200"
+                                title={row.title || fileName(row.path)}
+                              >
                                 {row.title || fileName(row.path)}
+                              </p>
+                              <p className="hidden truncate text-[10px] text-zinc-500 @max-[600px]:block">
+                                {row.artist || '—'}
                               </p>
                             </div>
                           </div>
                         </td>
                         <td
-                          className={`truncate pr-2 ${row.artist?.trim() && row.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
+                          className={`truncate pr-2 @max-[600px]:hidden ${row.artist?.trim() && row.artist !== '—' ? 'text-zinc-300' : 'text-zinc-600'}`}
                           title={row.artist?.trim() && row.artist !== '—' ? row.artist : undefined}
                         >
                           {row.artist?.trim() || '—'}
