@@ -669,7 +669,8 @@ async function handleApi(req, res, url, { installHandler = installPythonDependen
       if (identifyResult?.recordingid) {
         try { identifyResult.musicbrainz = await musicbrainz.recording(identifyResult.recordingid); } catch {}
       }
-      const result = await identifyAndTag(filePath, deezer, identifyResult, { preview });
+      if (!acoustidApiKey && !identifyError) identifyError = "sin clave de AcoustID";
+      const result = await identifyAndTag(filePath, deezer, identifyResult, { preview, identifyError });
       return sendJson(res, result);
     } catch (error) {
       return sendJson(res, { ok: false, error: error.message }, 400);

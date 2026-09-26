@@ -25,13 +25,16 @@ export function cached(cache, key, fetcher) {
 export function cleanTrackTitle(title = '') {
   return String(title)
     .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\b(?:free\s+download|free\s+dl|unreleased|unrelease|promo|snippet)\b/gi, ' ')
+    .replace(/[([]\s*[)\]]/g, ' ')
     .replace(/\s*\((?:original|extended)\s+mix\)\s*/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
 export function normalizeArtistName(name = '') {
-  return String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim();
+  return String(name).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim().replace(/\s+/g, ' ');
 }
 
 export function splitArtists(text = '') {

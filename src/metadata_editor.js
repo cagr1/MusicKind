@@ -12,7 +12,8 @@ import { spawn } from "child_process";
 import { StringDecoder } from "string_decoder";
 import { fileURLToPath } from "url";
 import { getAudioExtensions, discoverAudioFiles } from "./services/audio-discovery.js";
-import { normalizeArtistName, splitArtists } from "./providers/http.js";
+import { cleanTrackTitle, normalizeArtistName, splitArtists } from "./providers/http.js";
+import { explicitVersion, withoutExplicitVersion } from "./providers/deezer.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -222,12 +223,17 @@ export async function identifyAndTag(
   filePath,
   deezerClient,
   identifyResult = null,
-  { preview = false } = {}
+  { preview = false, identifyError = null } = {}
 ) {
   const currentData = await readMetadata(filePath);
   const currentMeta = currentData.metadata;
 
   let deezerTrack = null;
+  let matchType = identifyResult ? 'fingerprint' : 'exact';
+  const filename = currentData.file.name.replace(/\.[^.]+$/, '');
+  const filenameParts = filename.split(' - ');
+  const fileArtist = filenameParts.length >= 2 ? filenameParts.slice(0, -1).join(' - ') : '';
+  const fileTitle = cleanTrackTitle(filenameParts.length >= 2 ? filenameParts.at(-1) : filename);
 
   // 1. If AcoustID already identified the song, enrich it with Deezer metadata.
   if (identifyResult && identifyResult.artist && identifyResult.title && deezerClient) {
@@ -252,18 +258,22 @@ export async function identifyAndTag(
     }
 
     if (!deezerTrack) {
-      const filename = currentData.file.name.replace(/\.[^.]+$/, "");
-      const parts = filename.split(" - ");
-      if (parts.length >= 2) {
-        const artistFromFile = parts.slice(0, -1).join(" - ");
-        const titleFromFile = parts[parts.length - 1];
+      if (fileArtist) {
         try {
-          deezerTrack = await deezerClient.search(artistFromFile, titleFromFile);
+          deezerTrack = await deezerClient.search(fileArtist, fileTitle);
         } catch (e) {
           console.log("Deezer search by filename failed:", e.message);
         }
       }
     }
+  }
+
+  const requestedTitle = cleanTrackTitle(currentMeta.title || fileTitle);
+  let originalTrack = null;
+  if (!deezerTrack && deezerClient && explicitVersion(requestedTitle)) {
+    try { originalTrack = await deezerClient.search(currentMeta.artist || fileArtist, withoutExplicitVersion(requestedTitle)); }
+    catch (e) { console.log("Deezer original search failed:", e.message); }
+    if (originalTrack) { deezerTrack = originalTrack; matchType = 'original'; }
   }
 
   const recording = identifyResult?.musicbrainz;
@@ -277,9 +287,9 @@ export async function identifyAndTag(
   const preserveArtistCredit = currentArtists.length > 1 && currentArtists.some(value =>
     normalizeArtistName(value) === normalizeArtistName(deezerArtist)
   );
-  const currentTitle = currentMeta.title || currentData.file.name.replace(/\.[^.]+$/, '').split(' - ').slice(-1)[0];
-  const preserveMixTitle = Boolean(deezerTrack?.title && /\((?:[^)]*\b(?:mix|remix)\b[^)]*)\)/i.test(currentTitle) &&
-    currentTitle.toLowerCase().includes(deezerTrack.title.toLowerCase()));
+  const currentTitle = requestedTitle;
+  const preserveMixTitle = Boolean(originalTrack || (deezerTrack?.title && explicitVersion(currentTitle) &&
+    currentTitle.toLowerCase().includes(deezerTrack.title.toLowerCase())));
 
   // 3. Build final metadata.
   const newMetadata = {
@@ -296,7 +306,7 @@ export async function identifyAndTag(
   // 4. If nothing was identified, fail explicitly.
   if (!newMetadata.artist && !newMetadata.title) {
     throw new Error(
-      "No se pudo identificar la canción. Revisa AcoustID o completa artista y título."
+      `No se encontró la canción. Huella de audio: ${identifyError || 'sin coincidencias en AcoustID'}. Tags del archivo: ${currentMeta.artist || currentMeta.title ? 'disponibles, sin coincidencia' : 'vacíos'}. Búsqueda por nombre en Deezer: «${[fileArtist, fileTitle].filter(Boolean).join(' – ')}» sin resultados${explicitVersion(requestedTitle) ? ' (tampoco la versión original)' : ''}. Completa artista y título y vuelve a intentar.`
     );
   }
 
@@ -307,7 +317,11 @@ export async function identifyAndTag(
       ok: true,
       original: currentData.file.name,
       metadata: newMetadata,
-      newFilename: proposedFilename
+      newFilename: proposedFilename,
+      matchType,
+      ...((deezerTrack?.cover || deezerTrack?.isrc) && {
+        identification: { cover: deezerTrack.cover || '', isrc: deezerTrack.isrc || '' }
+      })
     };
   }
 

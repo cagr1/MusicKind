@@ -44,6 +44,10 @@ export interface MetadataRow {
   newFilename: string
   bpm?: number | null
   key?: string | null
+  identifyError?: string
+  matchType?: 'exact' | 'fingerprint' | 'original'
+  identifyCover?: string
+  identifyIsrc?: string
 }
 
 interface MetadataResponse {
@@ -64,6 +68,8 @@ interface PreviewResponse {
   original: string
   metadata: MetadataResponse['metadata']
   newFilename: string
+  matchType?: 'exact' | 'fingerprint' | 'original'
+  identification?: { cover?: string; isrc?: string }
 }
 
 function fileName(filePath: string) {
@@ -344,19 +350,48 @@ export function Metadata() {
     setError(null)
     setProgress({ current: 0, total: pending.length, file: '' })
     updateProcess('running')
+    let identifiedCount = 0
+    let failedCount = 0
     try {
       for (let index = 0; index < pending.length; index += 1) {
         if (controller.signal.aborted) break
         const row = pending[index]
         setProgress({ current: index + 1, total: pending.length, file: row.name })
-        const response = await fetch('/api/metadata/identify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filePath: row.path, preview: true }),
-          signal: controller.signal,
-        })
-        const payload = (await response.json()) as PreviewResponse & { error?: string }
-        if (!response.ok) throw new Error(payload.error || t('metadata.identifyError'))
+        let response: Response
+        let payload: PreviewResponse & { error?: string }
+        try {
+          response = await fetch('/api/metadata/identify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filePath: row.path, preview: true }),
+            signal: controller.signal,
+          })
+          payload = (await response.json()) as PreviewResponse & { error?: string }
+        } catch (requestError) {
+          if (controller.signal.aborted) break
+          const reason = requestError instanceof Error ? requestError.message : String(requestError)
+          failedCount += 1
+          setRows((current) => {
+            const updated = current.map((item) =>
+              item.id === row.id ? { ...item, identifyError: reason } : item,
+            )
+            setResult('metadata', updated)
+            return updated
+          })
+          continue
+        }
+        if (!response.ok) {
+          const reason = payload.error || t('metadata.identifyError')
+          failedCount += 1
+          setRows((current) => {
+            const updated = current.map((item) =>
+              item.id === row.id ? { ...item, identifyError: reason } : item,
+            )
+            setResult('metadata', updated)
+            return updated
+          })
+          continue
+        }
         const metadata = fieldsFromMetadata(payload.metadata)
         setRows((current) => {
           const updated = current.map((item) =>
@@ -365,6 +400,10 @@ export function Metadata() {
                   ...item,
                   metadata,
                   newFilename: payload.newFilename || item.name,
+                  identifyError: undefined,
+                  matchType: payload.matchType || 'exact',
+                  identifyCover: payload.identification?.cover || undefined,
+                  identifyIsrc: payload.identification?.isrc || undefined,
                 }
               : item,
           )
@@ -372,10 +411,15 @@ export function Metadata() {
           return updated
         })
         setIdentified((current) => mergeUnique(current, [row.path], (path) => path))
+        identifiedCount += 1
       }
       if (!controller.signal.aborted) {
-        toast.success(t('metadata.identifyDone'))
-        updateProcess('done')
+        toast.success(
+          t('metadata.identifySummary')
+            .replace('{identified}', String(identifiedCount))
+            .replace('{failed}', String(failedCount)),
+        )
+        updateProcess(failedCount ? 'error' : 'done')
       }
     } catch (identifyError) {
       if (!controller.signal.aborted) {
@@ -643,6 +687,8 @@ export function Metadata() {
                     checked={selection.selected.includes(row.id)}
                     disabled={busy && progress.file === row.name}
                     onCheck={(shiftKey) => selection.toggle(row.id, shiftKey)}
+                    identifyLabel={t('metadata.notIdentified')}
+                    originalLabel={t('metadata.originalMatchShort')}
                   />
                 ))}
               </tbody>
@@ -653,6 +699,26 @@ export function Metadata() {
       <TrackInspector track={selected ? asInspectorTrack(selected) : null}>
         {selected && (
           <form onSubmit={save} className="space-y-3 pt-2">
+            {selected.identifyError && (
+              <p role="status" className="text-[11px] text-amber-400">
+                {t('metadata.notIdentified')}: {selected.identifyError}
+              </p>
+            )}
+            {selected.matchType === 'original' && (
+              <p role="status" className="text-[11px] text-brand">
+                {t('metadata.originalMatch')}
+              </p>
+            )}
+            {selected.identifyCover && (
+              <img
+                src={selected.identifyCover}
+                alt={t('metadata.originalArtwork')}
+                className="size-20 rounded border border-line object-cover"
+              />
+            )}
+            {selected.identifyIsrc && (
+              <p className="text-[11px] text-zinc-400">ISRC: {selected.identifyIsrc}</p>
+            )}
             <MetadataField
               label={t('metadata.titleField')}
               original={selected.original.title}
@@ -752,6 +818,8 @@ function MetadataRowView({
   checked,
   disabled,
   onCheck,
+  identifyLabel,
+  originalLabel,
 }: {
   row: MetadataRow
   index: number
@@ -763,6 +831,8 @@ function MetadataRowView({
   checked: boolean
   disabled: boolean
   onCheck: (shiftKey: boolean) => void
+  identifyLabel: string
+  originalLabel: string
 }) {
   return (
     <tr
@@ -792,6 +862,14 @@ function MetadataRowView({
             >
               {display(row.metadata.title) === '—' ? row.name : display(row.metadata.title)}
             </p>
+            {(row.identifyError || row.matchType === 'original') && (
+              <p
+                className={`truncate text-[10px] ${row.identifyError ? 'text-amber-400' : 'text-brand'}`}
+                title={row.identifyError || undefined}
+              >
+                {row.identifyError ? `${identifyLabel}: ${row.identifyError}` : originalLabel}
+              </p>
+            )}
             <p className="hidden truncate text-[11px] text-zinc-500 @max-[600px]:block">
               {display(row.metadata.artist)}
             </p>

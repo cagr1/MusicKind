@@ -7,7 +7,7 @@ function normalizedTitle(title = '') {
     .toLocaleLowerCase().replace(/\s+/g, ' ').trim();
 }
 
-function explicitVersion(title = '') {
+export function explicitVersion(title = '') {
   const descriptors = String(title).matchAll(/[([]([^\])]+)[)\]]/g);
   const descriptor = [...descriptors].map(match => match[1]).find(value =>
     /\b(?:remix|edit|dub|rework|bootleg)\b/i.test(value) ||
@@ -16,6 +16,13 @@ function explicitVersion(title = '') {
   if (!descriptor) return '';
   return descriptor.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+export function withoutExplicitVersion(title = '') {
+  const descriptor = String(title).match(/[([]([^\])]+)[)\]]/g)?.find(value =>
+    /\b(?:remix|edit|dub|rework|bootleg)\b|\bmix\b/i.test(value) && !/\b(?:original|extended)\b/i.test(value)
+  );
+  return cleanTrackTitle(descriptor ? String(title).replace(descriptor, ' ') : title);
 }
 
 function matchesRequestedArtist(resultArtist, requestedArtists) {
@@ -32,7 +39,7 @@ export class DeezerClient {
   async search(artist, title) {
     const cleanTitle = cleanTrackTitle(title);
     const requestedVersion = explicitVersion(title);
-    const cacheKey = `deezer:v2:${JSON.stringify([artist || '', cleanTitle])}`;
+    const cacheKey = `deezer:v3:${JSON.stringify([artist || '', cleanTitle])}`;
     return cached(this.cache, cacheKey, async () => {
       const requestedArtists = splitArtists(artist);
       const attempts = [];

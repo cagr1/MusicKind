@@ -225,6 +225,7 @@ test("identifyAndTag preview no escribe ni renombra el archivo", { skip: !ffmpeg
       track: null,
     },
     newFilename: "Bicep - Glue.mp3",
+    matchType: "fingerprint",
   });
   assert.equal(after.mtimeMs, before.mtimeMs);
   assert.ok(fs.existsSync(filePath));
@@ -245,4 +246,39 @@ test("identifyAndTag conserva varios artistas y el sufijo remix del crédito act
   assert.equal(result.metadata.artist, "Chocolate Spread, Oscar P");
   assert.equal(result.metadata.title, "Chocolate Spread (Extended Remix)");
   assert.equal(fs.existsSync(filePath), true);
+});
+
+test("identifyAndTag sugiere la original sin cambiar el título del edit", { skip: !ffmpegAvailable() }, async () => {
+  const dir = makeTempDir();
+  const filePath = path.join(dir, "RUN DMC, Jason Nevins - It's Like That (Raxon Edit) Unrelease.mp3");
+  spawnSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-loglevel", "error", filePath]);
+  const calls = [];
+  const deezer = { async search(artist, title) {
+    calls.push([artist, title]);
+    return calls.length === 1 ? null : { artist: "Run-DMC", title: "It's Like That", album: "Best Of", releaseDate: "2003-01-01", isrc: "X" };
+  } };
+  const result = await identifyAndTag(filePath, deezer, null, { preview: true });
+  assert.deepEqual(calls, [["RUN DMC, Jason Nevins", "It's Like That (Raxon Edit)"], ["RUN DMC, Jason Nevins", "It's Like That"]]);
+  assert.equal(result.metadata.artist, "RUN DMC, Jason Nevins");
+  assert.equal(result.metadata.title, "It's Like That (Raxon Edit)");
+  assert.equal(result.metadata.album, "Best Of");
+  assert.equal(result.matchType, "original");
+  assert.deepEqual(result.identification, { cover: "", isrc: "X" });
+});
+
+test("identifyAndTag explica los motivos cuando no encuentra coincidencias", { skip: !ffmpegAvailable() }, async () => {
+  const dir = makeTempDir();
+  const filePath = path.join(dir, "Unknown Artist - Unknown Edit (Raxon Remix).mp3");
+  spawnSync("ffmpeg", ["-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-loglevel", "error", filePath]);
+  const deezer = { async search() { return null; } };
+  await assert.rejects(
+    identifyAndTag(filePath, deezer, null, { preview: true, identifyError: "Tiempo agotado en AcoustID" }),
+    (error) => {
+      assert.match(error.message, /Tiempo agotado en AcoustID/);
+      assert.match(error.message, /Tags del archivo: vacíos/);
+      assert.match(error.message, /búsqueda por nombre en Deezer/i);
+      assert.match(error.message, /tampoco la versión original/);
+      return true;
+    },
+  );
 });
